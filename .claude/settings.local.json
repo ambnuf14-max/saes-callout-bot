@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(if exist node_modules rmdir /s /q node_modules)",
+      "Bash(npm run build:*)",
+      "Bash(npm run migrate:*)",
+      "Bash(dir:*)"
+    ]
+  }
+}
