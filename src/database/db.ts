@@ -1,5 +1,4 @@
 import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import config from '../config/config';
@@ -38,13 +37,20 @@ class DatabaseConnection {
           });
           reject(err);
         } else {
-          logger.info('Connected to database', { path: this.dbPath });
-          resolve();
+          // Включаем foreign keys после успешного подключения
+          this.db!.run('PRAGMA foreign_keys = ON', (pragmaErr) => {
+            if (pragmaErr) {
+              logger.error('Failed to enable foreign keys', {
+                error: pragmaErr.message,
+              });
+              reject(pragmaErr);
+            } else {
+              logger.info('Connected to database', { path: this.dbPath });
+              resolve();
+            }
+          });
         }
       });
-
-      // Включаем foreign keys
-      this.db.run('PRAGMA foreign_keys = ON');
     });
   }
 

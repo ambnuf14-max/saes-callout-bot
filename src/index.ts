@@ -1,15 +1,10 @@
-import dotenv from 'dotenv';
 import logger from './utils/logger';
 import database from './database/db';
 import { runMigrations, checkTables } from './database/migrations';
 
-// Загрузка переменных окружения
-dotenv.config();
-
 async function main() {
   try {
     logger.info('Starting SAES Callout Bot...');
-    logger.info('Environment loaded');
 
     // Инициализация базы данных
     logger.info('Connecting to database...');
@@ -42,8 +37,8 @@ async function main() {
 }
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  logger.info('Received SIGINT, shutting down gracefully...');
+async function shutdown(signal: string) {
+  logger.info(`Received ${signal}, shutting down gracefully...`);
 
   try {
     const discordBot = (await import('./discord/bot')).default;
@@ -56,22 +51,9 @@ process.on('SIGINT', async () => {
   }
 
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM, shutting down gracefully...');
-
-  try {
-    const discordBot = (await import('./discord/bot')).default;
-    const vkBot = (await import('./vk/bot')).default;
-    await discordBot.stop();
-    await vkBot.stop();
-    await database.close();
-  } catch (error) {
-    logger.error('Error during shutdown', { error });
-  }
-
-  process.exit(0);
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 main();

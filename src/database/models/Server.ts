@@ -125,6 +125,20 @@ export class ServerModel {
     const leaderRoles = this.getLeaderRoleIds(server);
     return leaderRoles.includes(roleId);
   }
+
+  /**
+   * Получить ID ролей которые могут создавать каллауты
+   */
+  static getCalloutAllowedRoleIds(server: Server): string[] {
+    if (!server.callout_allowed_role_ids) {
+      return [];
+    }
+    try {
+      return JSON.parse(server.callout_allowed_role_ids);
+    } catch {
+      return [];
+    }
+  }
 }
 
 export default ServerModel;

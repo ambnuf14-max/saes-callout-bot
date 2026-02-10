@@ -149,10 +149,10 @@ async function applyColumnMigrations(): Promise<void> {
 export async function checkTables(): Promise<boolean> {
   try {
     const tables = await database.all<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'callouts', 'callout_responses')`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'callouts', 'callout_responses', 'callout_rate_limits')`
     );
 
-    return tables.length === 4;
+    return tables.length === 5;
   } catch (error) {
     logger.error('Failed to check tables', { error });
     return false;
@@ -166,6 +166,7 @@ export async function clearAllTables(): Promise<void> {
   logger.warn('Clearing all tables - this should only be used in development!');
 
   try {
+    await database.run('DELETE FROM callout_rate_limits');
     await database.run('DELETE FROM callout_responses');
     await database.run('DELETE FROM callouts');
     await database.run('DELETE FROM departments');

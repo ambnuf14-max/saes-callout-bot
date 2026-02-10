@@ -9,6 +9,7 @@ import { Command } from '../types';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import DepartmentService from '../../services/department.service';
+import { UpdateDepartmentDTO } from '../../types/database.types';
 import { isLeader } from '../utils/permission-checker';
 import { EMOJI, COLORS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
@@ -332,7 +333,7 @@ async function handleEdit(
   }
 
   // Подготовить данные для обновления
-  const updateData: any = {};
+  const updateData: UpdateDepartmentDTO = {};
   const changes: string[] = [];
 
   if (role) {

@@ -4,7 +4,6 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  StringSelectMenuBuilder,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
@@ -59,18 +58,6 @@ export async function handleCreateCalloutButton(
       .setCustomId('callout_modal')
       .setTitle(MESSAGES.CALLOUT.MODAL_TITLE);
 
-    // Select Menu для выбора департамента
-    const departmentSelect = new StringSelectMenuBuilder()
-      .setCustomId('department_select')
-      .setPlaceholder(MESSAGES.CALLOUT.MODAL_DEPT_PLACEHOLDER)
-      .addOptions(
-        departments.map((dept) => ({
-          label: dept.name,
-          value: dept.id.toString(),
-          description: dept.description || `Департамент ${dept.name}`,
-        }))
-      );
-
     // Text Input для описания
     const descriptionInput = new TextInputBuilder()
       .setCustomId('description_input')
@@ -80,13 +67,6 @@ export async function handleCreateCalloutButton(
       .setMinLength(LIMITS.DESCRIPTION_MIN)
       .setMaxLength(LIMITS.DESCRIPTION_MAX)
       .setRequired(true);
-
-    // ВАЖНО: В Discord.js модальные окна не поддерживают Select Menu напрямую!
-    // Нужно использовать только TextInput. Для департамента используем текстовое поле
-    // или отдельное сообщение со Select Menu перед модальным окном.
-
-    // Вместо этого, создадим два TextInput: один для департамента, другой для описания
-    // Пользователь введет название департамента
 
     const departmentInput = new TextInputBuilder()
       .setCustomId('department_input')

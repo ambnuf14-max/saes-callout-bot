@@ -9,6 +9,7 @@ import {
 import { Command } from '../types';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
+import { Server } from '../../types/database.types';
 import { isAdministrator } from '../utils/permission-checker';
 import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
@@ -320,11 +321,11 @@ async function handleListLeaders(
 /**
  * Обработка /settings info
  */
-async function handleInfo(interaction: ChatInputCommandInteraction, server: any) {
+async function handleInfo(interaction: ChatInputCommandInteraction, server: Server) {
   await interaction.deferReply({ ephemeral: true });
 
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-  const calloutRoleIds = getCalloutRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
 
   const embed = new EmbedBuilder()
     .setTitle(`${EMOJI.INFO} Настройки сервера`)
@@ -445,7 +446,7 @@ async function handleAddCalloutRole(
     throw new CalloutError('Сервер не найден', 'SERVER_NOT_FOUND', 404);
   }
 
-  const calloutRoleIds = getCalloutRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
 
   // Проверить, не добавлена ли уже эта роль
   if (calloutRoleIds.includes(role.id)) {
@@ -489,7 +490,7 @@ async function handleRemoveCalloutRole(
     throw new CalloutError('Сервер не найден', 'SERVER_NOT_FOUND', 404);
   }
 
-  const calloutRoleIds = getCalloutRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
 
   // Проверить, есть ли эта роль в списке
   if (!calloutRoleIds.includes(role.id)) {
@@ -531,7 +532,7 @@ async function handleListCalloutRoles(
     throw new CalloutError('Сервер не найден', 'SERVER_NOT_FOUND', 404);
   }
 
-  const calloutRoleIds = getCalloutRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
 
   if (calloutRoleIds.length === 0) {
     await interaction.editReply({
@@ -559,21 +560,6 @@ async function handleListCalloutRoles(
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
-}
-
-/**
- * Получить список ID ролей которые могут создавать каллауты
- */
-function getCalloutRoleIds(server: any): string[] {
-  if (!server.callout_allowed_role_ids) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(server.callout_allowed_role_ids);
-  } catch {
-    return [];
-  }
 }
 
 export default settingsCommand;

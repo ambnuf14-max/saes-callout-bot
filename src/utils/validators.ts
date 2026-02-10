@@ -114,14 +114,6 @@ export const validators = {
   isNotEmpty(value: string): boolean {
     return value !== null && value !== undefined && value.trim().length > 0;
   },
-
-  /**
-   * Проверка email (опционально для будущего)
-   */
-  isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  },
 };
 
 export default validators;

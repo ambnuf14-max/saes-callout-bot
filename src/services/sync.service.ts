@@ -6,7 +6,7 @@ import {
   DepartmentModel,
   CalloutResponseModel,
 } from '../database/models';
-import { CalloutResponse } from '../types/database.types';
+import { Callout, CalloutResponse, Department } from '../types/database.types';
 import { CalloutResponsePayload } from '../vk/utils/keyboard-builder';
 import { EMOJI, CALLOUT_STATUS } from '../config/constants';
 import { CalloutError } from '../utils/error-handler';
@@ -118,8 +118,8 @@ export class SyncService {
    */
   static async notifyDiscordAboutResponse(
     response: CalloutResponse,
-    callout: any,
-    department: any
+    callout: Callout,
+    department: Department
   ): Promise<void> {
     if (!callout.discord_channel_id) {
       logger.warn('No Discord channel for callout', {
@@ -180,7 +180,7 @@ export class SyncService {
    */
   private static formatResponseMessage(
     response: CalloutResponse,
-    department: any
+    department: Department
   ): string {
     const timestamp = new Date(response.created_at).toLocaleString('ru-RU', {
       timeZone: 'Europe/Moscow',

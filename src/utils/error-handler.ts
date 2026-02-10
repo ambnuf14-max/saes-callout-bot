@@ -1,4 +1,4 @@
-import { Interaction, Message } from 'discord.js';
+import { Interaction } from 'discord.js';
 import logger from './logger';
 import { EMOJI } from '../config/constants';
 

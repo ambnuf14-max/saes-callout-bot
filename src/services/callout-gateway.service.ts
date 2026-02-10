@@ -73,7 +73,7 @@ export class CalloutGatewayService {
     }
 
     // Получить разрешенные роли
-    const allowedRoleIds = this.getAllowedRoleIds(server);
+    const allowedRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
 
     // Если разрешенные роли не настроены, разрешаем всем
     if (allowedRoleIds.length === 0) {
@@ -141,24 +141,14 @@ export class CalloutGatewayService {
     try {
       const now = new Date().toISOString();
 
-      const existing = await this.getRateLimit(userId, serverId);
-
-      if (existing) {
-        // Обновить существующую запись
-        await database.run(
-          `UPDATE callout_rate_limits
-           SET last_callout_at = ?, updated_at = ?
-           WHERE user_id = ? AND server_id = ?`,
-          [now, now, userId, serverId]
-        );
-      } else {
-        // Создать новую запись
-        await database.run(
-          `INSERT INTO callout_rate_limits (user_id, server_id, last_callout_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [userId, serverId, now, now, now]
-        );
-      }
+      await database.run(
+        `INSERT INTO callout_rate_limits (user_id, server_id, last_callout_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, server_id) DO UPDATE SET
+           last_callout_at = excluded.last_callout_at,
+           updated_at = excluded.updated_at`,
+        [userId, serverId, now, now, now]
+      );
 
       logger.debug('Callout creation recorded', { userId, serverId });
     } catch (error) {
@@ -167,7 +157,6 @@ export class CalloutGatewayService {
         userId,
         serverId,
       });
-      // Не бросаем ошибку, так как это не критично
     }
   }
 
@@ -191,25 +180,6 @@ export class CalloutGatewayService {
         serverId,
       });
       return undefined;
-    }
-  }
-
-  /**
-   * Получить разрешенные роли из настроек сервера
-   */
-  private static getAllowedRoleIds(server: any): string[] {
-    if (!server.callout_allowed_role_ids) {
-      return [];
-    }
-
-    try {
-      return JSON.parse(server.callout_allowed_role_ids);
-    } catch (error) {
-      logger.error('Failed to parse callout_allowed_role_ids', {
-        error: error instanceof Error ? error.message : error,
-        serverId: server.id,
-      });
-      return [];
     }
   }
 

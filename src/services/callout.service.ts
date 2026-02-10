@@ -68,22 +68,18 @@ export class CalloutService {
       // 2. Создать канал для инцидента
       const channel = await createIncidentChannel(guild, callout, department);
 
-      // 3. Обновить каллаут с ID канала
-      await CalloutModel.update(callout.id, {
-        discord_channel_id: channel.id,
-      });
-
-      // 4. Создать Embed сообщение
+      // 3. Создать Embed сообщение
       const embed = buildCalloutEmbed(callout, department);
 
-      // 5. Отправить Embed в канал с mention роли
+      // 4. Отправить Embed в канал с mention роли
       const message = await channel.send({
         content: `<@&${department.discord_role_id}> - новый каллаут!`,
         embeds: [embed],
       });
 
-      // 6. Обновить каллаут с ID сообщения
+      // 5. Обновить каллаут с ID канала и сообщения одним запросом
       await CalloutModel.update(callout.id, {
+        discord_channel_id: channel.id,
         discord_message_id: message.id,
       });
 

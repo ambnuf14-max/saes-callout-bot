@@ -198,6 +198,7 @@ export async function updateChannelPermissions(
 
     const textChannel = channel as TextChannel;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const permissions: any = {};
     if (allow.length > 0) {
       permissions.allow = allow;
