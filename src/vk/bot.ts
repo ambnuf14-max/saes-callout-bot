@@ -48,12 +48,37 @@ class VkBot {
    */
   async start() {
     try {
-      logger.info('Starting VK bot...');
+      logger.info('Starting VK bot...', {
+        groupId: config.vk.groupId,
+        tokenPrefix: config.vk.token.substring(0, 10) + '...',
+      });
 
       // Проверка подключения к VK API
-      const group = await this.vk.api.groups.getById({
-        group_id: config.vk.groupId,
-      });
+      let group;
+      try {
+        group = await this.vk.api.groups.getById({
+          group_id: config.vk.groupId,
+        });
+
+        logger.info('VK API response received', {
+          responseType: typeof group,
+          isArray: Array.isArray(group),
+          length: Array.isArray(group) ? group.length : 'N/A',
+          response: JSON.stringify(group),
+        });
+      } catch (apiError) {
+        logger.error('VK API groups.getById failed', {
+          error: apiError instanceof Error ? apiError.message : apiError,
+          stack: apiError instanceof Error ? apiError.stack : undefined,
+        });
+        throw apiError;
+      }
+
+      if (!group || !Array.isArray(group) || group.length === 0) {
+        throw new Error(
+          `Invalid VK API response: group data is empty or invalid. Response: ${JSON.stringify(group)}`
+        );
+      }
 
       logger.info('VK API connection successful', {
         groupId: group[0].id,
@@ -73,6 +98,7 @@ class VkBot {
     } catch (error) {
       logger.error('Failed to start VK bot', {
         error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
       });
 
       // VK бот не критичен для работы системы, логируем но не останавливаем приложение
