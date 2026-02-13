@@ -19,6 +19,19 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
+    // Консоль (всегда, для Docker logs)
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(({ timestamp, level, message, ...meta }) => {
+          let log = `[${timestamp}] ${level}: ${message}`;
+          if (Object.keys(meta).length > 0) {
+            log += ` ${JSON.stringify(meta)}`;
+          }
+          return log;
+        })
+      ),
+    }),
     // Файл для всех логов
     new winston.transports.File({
       filename: logFile,
@@ -34,23 +47,5 @@ const logger = winston.createLogger({
     }),
   ],
 });
-
-// Добавляем вывод в консоль только в режиме разработки
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          let log = `[${timestamp}] ${level}: ${message}`;
-          if (Object.keys(meta).length > 0) {
-            log += ` ${JSON.stringify(meta)}`;
-          }
-          return log;
-        })
-      ),
-    })
-  );
-}
 
 export default logger;
