@@ -30,9 +30,10 @@ export function buildCalloutKeyboard(calloutId: number, departmentId: number): s
       payload: JSON.stringify(payload),
       color: Keyboard.PRIMARY_COLOR,
     })
-    .inline();
+    .inline()
+    .toString();
 
-  return JSON.stringify(keyboard);
+  return keyboard;
 }
 
 /**
@@ -65,9 +66,10 @@ export function buildDetailedCalloutKeyboard(
       payload: JSON.stringify({ ...acknowledgedPayload, type: 'arrived' }),
       color: Keyboard.POSITIVE_COLOR,
     })
-    .inline();
+    .inline()
+    .toString();
 
-  return JSON.stringify(keyboard);
+  return keyboard;
 }
 
 export default {
