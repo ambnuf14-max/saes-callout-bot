@@ -6,6 +6,7 @@ import CalloutService from '../../services/callout.service';
 import CalloutGatewayService from '../../services/callout-gateway.service';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { isAdministrator } from '../utils/permission-checker';
 
 /**
  * Обработчик submit модального окна создания каллаута
@@ -49,7 +50,7 @@ export async function handleCalloutModalSubmit(
     // Получить роли пользователя
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const userRoles = member.roles.cache.map((role) => role.id);
-    const isAdmin = member.permissions.has('Administrator');
+    const isAdmin = isAdministrator(member);
 
     // Проверить права на создание каллаута (администраторы игнорируют проверки)
     const permissionCheck = await CalloutGatewayService.canUserCreateCallout(
