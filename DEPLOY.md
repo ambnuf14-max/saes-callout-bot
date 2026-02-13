@@ -1,4 +1,4 @@
-# 🚀 Инструкция по деплою на Ubuntu через Docker
+# 🚀 Инструкция по деплою на Ubuntu через Docker (от root)
 
 ## Предварительные требования
 
@@ -10,16 +10,12 @@
 
 ```bash
 # Обновляем систему
-sudo apt update && sudo apt upgrade -y
+apt update && apt upgrade -y
 
 # Устанавливаем Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+sh get-docker.sh
 
-# Добавляем пользователя в группу docker (чтобы не использовать sudo)
-sudo usermod -aG docker $USER
-
-# Перелогиньтесь после этого!
 # Проверка установки
 docker --version
 docker-compose --version
@@ -187,6 +183,14 @@ docker system prune -a
 df -h
 ```
 
+### Проблемы с правами доступа
+```bash
+# Если работаете от root и возникают проблемы с файлами
+chown -R root:root .
+chmod -R 755 .
+chmod 600 .env
+```
+
 ---
 
 ## Структура файлов на сервере
@@ -207,9 +211,10 @@ saes-callout-bot/
 ## Безопасность
 
 1. **Никогда не коммитьте .env файл!** (уже в .gitignore)
-2. Используйте файрвол на сервере
-3. Регулярно обновляйте систему: `sudo apt update && sudo apt upgrade`
-4. Ограничьте доступ по SSH (используйте ключи вместо паролей)
+2. Ограничьте права на .env файл: `chmod 600 .env`
+3. Используйте файрвол на сервере: `ufw allow 22 && ufw enable`
+4. Регулярно обновляйте систему: `apt update && apt upgrade`
+5. Ограничьте доступ по SSH (используйте ключи вместо паролей)
 
 ---
 
