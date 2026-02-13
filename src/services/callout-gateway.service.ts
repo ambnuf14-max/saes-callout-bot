@@ -27,9 +27,16 @@ export class CalloutGatewayService {
   static async canUserCreateCallout(
     userId: string,
     userRoles: string[],
-    serverId: number
+    serverId: number,
+    isAdmin: boolean = false
   ): Promise<CalloutPermissionCheck> {
     try {
+      // Администраторы игнорируют все проверки
+      if (isAdmin) {
+        logger.debug('Admin bypassing callout checks', { userId });
+        return { allowed: true };
+      }
+
       // 1. Проверка роли
       const roleCheck = await this.checkRolePermission(userRoles, serverId);
       if (!roleCheck.allowed) {
@@ -137,7 +144,17 @@ export class CalloutGatewayService {
   /**
    * Записать время создания каллаута
    */
-  static async recordCalloutCreation(userId: string, serverId: number): Promise<void> {
+  static async recordCalloutCreation(
+    userId: string,
+    serverId: number,
+    isAdmin: boolean = false
+  ): Promise<void> {
+    // Не записываем rate limit для администраторов
+    if (isAdmin) {
+      logger.debug('Skipping rate limit recording for admin', { userId });
+      return;
+    }
+
     try {
       const now = new Date().toISOString();
 

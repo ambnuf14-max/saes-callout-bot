@@ -49,12 +49,14 @@ export async function handleCalloutModalSubmit(
     // Получить роли пользователя
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const userRoles = member.roles.cache.map((role) => role.id);
+    const isAdmin = member.permissions.has('Administrator');
 
-    // Проверить права на создание каллаута
+    // Проверить права на создание каллаута (администраторы игнорируют проверки)
     const permissionCheck = await CalloutGatewayService.canUserCreateCallout(
       interaction.user.id,
       userRoles,
-      server.id
+      server.id,
+      isAdmin
     );
 
     if (!permissionCheck.allowed) {
@@ -109,8 +111,8 @@ export async function handleCalloutModalSubmit(
       departmentId: department.id,
     });
 
-    // Записать время создания каллаута для rate limiting
-    await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id);
+    // Записать время создания каллаута для rate limiting (администраторы не учитываются)
+    await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id, isAdmin);
 
     // Отправить подтверждение пользователю
     await interaction.editReply({
