@@ -54,17 +54,20 @@ class VkBot {
       });
 
       // Проверка подключения к VK API
-      let group;
+      let groupData;
       try {
-        group = await this.vk.api.groups.getById({
+        const response = await this.vk.api.groups.getById({
           group_id: config.vk.groupId,
         });
 
+        // VK API может вернуть либо массив, либо объект {groups: [...]}
+        groupData = Array.isArray(response) ? response : (response as any).groups;
+
         logger.info('VK API response received', {
-          responseType: typeof group,
-          isArray: Array.isArray(group),
-          length: Array.isArray(group) ? group.length : 'N/A',
-          response: JSON.stringify(group),
+          responseType: typeof response,
+          isArray: Array.isArray(response),
+          hasGroups: 'groups' in (response as any),
+          groupDataLength: Array.isArray(groupData) ? groupData.length : 'N/A',
         });
       } catch (apiError) {
         logger.error('VK API groups.getById failed', {
@@ -74,15 +77,15 @@ class VkBot {
         throw apiError;
       }
 
-      if (!group || !Array.isArray(group) || group.length === 0) {
+      if (!groupData || !Array.isArray(groupData) || groupData.length === 0) {
         throw new Error(
-          `Invalid VK API response: group data is empty or invalid. Response: ${JSON.stringify(group)}`
+          `Invalid VK API response: group data is empty or invalid`
         );
       }
 
       logger.info('VK API connection successful', {
-        groupId: group[0].id,
-        groupName: group[0].name,
+        groupId: groupData[0].id,
+        groupName: groupData[0].name,
       });
 
       // Регистрация обработчиков
