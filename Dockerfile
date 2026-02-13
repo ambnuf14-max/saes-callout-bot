@@ -1,15 +1,15 @@
-# Multi-stage build для оптимизации размера образа
-
-# Этап 1: Сборка
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Копируем package.json и package-lock.json
-COPY package*.json ./
+# Устанавливаем зависимости для сборки нативных модулей (sqlite3)
+RUN apk add --no-cache python3 make g++
 
-# Устанавливаем зависимости (включая dev для сборки)
-RUN npm ci
+# Копируем package.json
+COPY package.json ./
+
+# Устанавливаем зависимости
+RUN npm install
 
 # Копируем исходный код
 COPY . .
@@ -17,25 +17,8 @@ COPY . .
 # Собираем TypeScript
 RUN npm run build
 
-# Этап 2: Production образ
-FROM node:20-alpine
-
-WORKDIR /app
-
-# Устанавливаем только production зависимости
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Копируем собранные файлы из builder
-COPY --from=builder /app/dist ./dist
-
-# Создаём директории для данных и логов
-RUN mkdir -p /app/data /app/logs
-
-# Запускаем от непривилегированного пользователя
-USER node
-
-# Expose не обязателен для ботов, но оставим на случай будущих изменений
-# EXPOSE 3000
+# Создаём директории для данных и логов с правильными правами
+RUN mkdir -p /app/data /app/logs && \
+    chmod -R 777 /app/data /app/logs
 
 CMD ["node", "dist/index.js"]
