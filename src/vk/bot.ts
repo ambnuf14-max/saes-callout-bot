@@ -22,6 +22,15 @@ class VkBot {
    * Регистрация обработчиков событий
    */
   private registerEventHandlers() {
+    // Логирование всех входящих обновлений для отладки
+    this.vk.updates.use(async (context, next) => {
+      logger.info('VK update received', {
+        type: context.type,
+        subTypes: context.subTypes,
+      });
+      await next();
+    });
+
     // Обработка ошибок через хук (не событие)
     this.vk.updates.use(async (context, next) => {
       try {
@@ -37,10 +46,12 @@ class VkBot {
     // Обработка callback кнопок (message_event)
     this.vk.updates.on('message_event', handleCallbackEvent);
 
+    logger.info('VK event handlers registered', {
+      handlers: ['message_event'],
+    });
+
     // TODO: Обработка текстовых сообщений (опционально для будущих функций)
     // this.vk.updates.on('message_new', messageHandler);
-
-    logger.info('VK event handlers registered');
   }
 
   /**
