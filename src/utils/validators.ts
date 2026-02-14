@@ -54,6 +54,36 @@ export const validators = {
   },
 
   /**
+   * Валидация места инцидента
+   */
+  validateLocation(location: string): ValidationResult {
+    if (!location || location.trim().length === 0) {
+      return {
+        valid: false,
+        error: MESSAGES.VALIDATION.LOCATION_EMPTY,
+      };
+    }
+
+    const trimmed = location.trim();
+
+    if (trimmed.length < LIMITS.LOCATION_MIN) {
+      return {
+        valid: false,
+        error: MESSAGES.VALIDATION.LOCATION_TOO_SHORT(LIMITS.LOCATION_MIN),
+      };
+    }
+
+    if (trimmed.length > LIMITS.LOCATION_MAX) {
+      return {
+        valid: false,
+        error: MESSAGES.VALIDATION.LOCATION_TOO_LONG(LIMITS.LOCATION_MAX),
+      };
+    }
+
+    return { valid: true };
+  },
+
+  /**
    * Валидация имени департамента
    * Формат: 2-10 символов, только заглавные буквы и цифры
    */

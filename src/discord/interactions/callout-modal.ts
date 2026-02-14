@@ -1,12 +1,15 @@
 import { ModalSubmitInteraction } from 'discord.js';
 import logger from '../../utils/logger';
-import { ServerModel } from '../../database/models';
-import DepartmentService from '../../services/department.service';
+import { ServerModel, DepartmentModel } from '../../database/models';
 import CalloutService from '../../services/callout.service';
 import CalloutGatewayService from '../../services/callout-gateway.service';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { isAdministrator } from '../utils/permission-checker';
+import {
+  getDepartmentSelection,
+  clearDepartmentSelection,
+} from './department-select';
 
 /**
  * Обработчик submit модального окна создания каллаута
@@ -27,13 +30,25 @@ export async function handleCalloutModalSubmit(
 
   try {
     // Получить данные из модального окна
-    const departmentInput = interaction.fields.getTextInputValue('department_input');
+    const location = interaction.fields.getTextInputValue('location_input');
     const description = interaction.fields.getTextInputValue('description_input');
+
+    // Получить департамент из временного хранилища
+    const departmentId = getDepartmentSelection(interaction.user.id);
+
+    if (!departmentId) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Выбор департамента истек. Попробуйте снова.`,
+        'DEPARTMENT_SELECTION_EXPIRED',
+        400
+      );
+    }
 
     logger.info('Processing callout modal submit', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
-      departmentInput,
+      departmentId,
+      location,
       descriptionLength: description.length,
     });
 
@@ -43,6 +58,25 @@ export async function handleCalloutModalSubmit(
       throw new CalloutError(
         `${EMOJI.ERROR} Сервер не настроен`,
         'SERVER_NOT_CONFIGURED',
+        400
+      );
+    }
+
+    // Получить департамент по ID
+    const department = await DepartmentModel.findById(departmentId);
+
+    if (!department) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Департамент не найден`,
+        'DEPARTMENT_NOT_FOUND',
+        404
+      );
+    }
+
+    if (!department.is_active) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Департамент ${department.name} временно неактивен`,
+        'DEPARTMENT_INACTIVE',
         400
       );
     }
@@ -61,39 +95,15 @@ export async function handleCalloutModalSubmit(
     );
 
     if (!permissionCheck.allowed) {
+      // Очистить временное хранилище перед выходом
+      clearDepartmentSelection(interaction.user.id);
       await interaction.editReply({
-        content: permissionCheck.reason || `${EMOJI.ERROR} Недостаточно прав для создания каллаута`,
+        content: permissionCheck.reason || `${EMOJI.ERROR} Недостаточно прав`,
       });
       return;
     }
 
-    // Найти департамент по названию
-    const department = await DepartmentService.getDepartmentByName(
-      server.id,
-      departmentInput.trim()
-    );
-
-    if (!department) {
-      throw new CalloutError(
-        `${EMOJI.ERROR} Департамент "${departmentInput}" не найден. Доступные: ${(
-          await DepartmentService.getDepartments(server.id, true)
-        )
-          .map((d) => d.name)
-          .join(', ')}`,
-        'DEPARTMENT_NOT_FOUND',
-        404
-      );
-    }
-
-    if (!department.is_active) {
-      throw new CalloutError(
-        `${EMOJI.ERROR} Департамент ${department.name} временно неактивен`,
-        'DEPARTMENT_INACTIVE',
-        400
-      );
-    }
-
-    // Создать каллаут через сервис
+    // Создать каллаут через сервис (с location!)
     const { callout, channel } = await CalloutService.createCallout(
       interaction.guild,
       {
@@ -102,6 +112,7 @@ export async function handleCalloutModalSubmit(
         author_id: interaction.user.id,
         author_name: interaction.user.tag,
         description: description.trim(),
+        location: location.trim(),
       }
     );
 
@@ -110,7 +121,11 @@ export async function handleCalloutModalSubmit(
       channelId: channel.id,
       userId: interaction.user.id,
       departmentId: department.id,
+      location,
     });
+
+    // Очистить временное хранилище
+    clearDepartmentSelection(interaction.user.id);
 
     // Записать время создания каллаута для rate limiting (администраторы не учитываются)
     await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id, isAdmin);
@@ -134,6 +149,9 @@ export async function handleCalloutModalSubmit(
     await interaction.editReply({
       content: errorMessage,
     });
+
+    // Очистить временное хранилище даже при ошибке
+    clearDepartmentSelection(interaction.user.id);
   }
 }
 

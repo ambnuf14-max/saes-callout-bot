@@ -135,6 +135,19 @@ async function applyColumnMigrations(): Promise<void> {
       await database.run('ALTER TABLE servers ADD COLUMN callout_allowed_role_ids TEXT');
       logger.info('Column callout_allowed_role_ids added successfully');
     }
+
+    // Проверить существование колонки location в таблице callouts
+    const calloutsTableInfo = await database.all<{ name: string }>(
+      `PRAGMA table_info(callouts)`
+    );
+
+    const hasLocationColumn = calloutsTableInfo.some((col) => col.name === 'location');
+
+    if (!hasLocationColumn) {
+      logger.info('Adding location column to callouts table...');
+      await database.run('ALTER TABLE callouts ADD COLUMN location TEXT');
+      logger.info('Column location added successfully');
+    }
   } catch (error) {
     logger.error('Failed to apply column migrations', {
       error: error instanceof Error ? error.message : error,

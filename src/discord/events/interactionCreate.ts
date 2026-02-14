@@ -4,6 +4,7 @@ import { handleDiscordError } from '../../utils/error-handler';
 import { Command } from '../types';
 import handleCreateCalloutButton from '../interactions/callout-button';
 import handleCalloutModalSubmit from '../interactions/callout-modal';
+import handleDepartmentSelect from '../interactions/department-select';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -63,8 +64,19 @@ export default async function interactionCreateHandler(
       return;
     }
 
-    // TODO: Обработка select menus (для будущих функций)
-    // if (interaction.isStringSelectMenu()) { ... }
+    // Обработка select menus
+    if (interaction.isStringSelectMenu()) {
+      logger.info('Select menu interaction', {
+        customId: interaction.customId,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+      });
+
+      if (interaction.customId === 'department_select') {
+        await handleDepartmentSelect(interaction);
+      }
+      return;
+    }
   } catch (error) {
     logger.error('Error handling interaction', {
       error: error instanceof Error ? error.message : error,

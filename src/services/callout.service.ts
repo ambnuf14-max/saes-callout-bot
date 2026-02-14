@@ -37,6 +37,18 @@ export class CalloutService {
       );
     }
 
+    // Валидация места (если предоставлено)
+    if (data.location) {
+      const locationValidation = validators.validateLocation(data.location);
+      if (!locationValidation.valid) {
+        throw new CalloutError(
+          locationValidation.error || 'Невалидное место',
+          'INVALID_LOCATION',
+          400
+        );
+      }
+    }
+
     // Получить департамент
     const department = await DepartmentModel.findById(data.department_id);
     if (!department) {

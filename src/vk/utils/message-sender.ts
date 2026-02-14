@@ -116,6 +116,7 @@ function formatCalloutMessage(callout: Callout, department: Department): string 
     '',
     `📋 Департамент: ${department.name}`,
     `👤 От: ${callout.author_name}`,
+    `📍 Место: ${callout.location || 'Не указано'}`,
     `📝 Описание: ${callout.description}`,
     '',
     `🕐 Время: ${new Date(callout.created_at).toLocaleString('ru-RU', {

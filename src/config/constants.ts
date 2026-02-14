@@ -25,12 +25,14 @@ export const LIMITS = {
   DESCRIPTION_MAX: 500,
   DEPARTMENT_NAME_MIN: 2,
   DEPARTMENT_NAME_MAX: 10,
+  LOCATION_MIN: 3,
+  LOCATION_MAX: 100,
 } as const;
 
 // Текстовые константы
 export const MESSAGES = {
   CALLOUT: {
-    BUTTON_CREATE: `${EMOJI.PHONE} Создать каллаут`,
+    BUTTON_CREATE: `${EMOJI.PHONE} New Callout`,
     BUTTON_CLOSE: `${EMOJI.CLOSED} Закрыть инцидент`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
 
@@ -78,6 +80,11 @@ export const MESSAGES = {
       `${EMOJI.ERROR} Описание слишком короткое (минимум ${min} символов)`,
     DESC_TOO_LONG: (max: number) =>
       `${EMOJI.ERROR} Описание слишком длинное (максимум ${max} символов)`,
+    LOCATION_EMPTY: `${EMOJI.ERROR} Место не может быть пустым`,
+    LOCATION_TOO_SHORT: (min: number) =>
+      `${EMOJI.ERROR} Место слишком короткое (минимум ${min} символов)`,
+    LOCATION_TOO_LONG: (max: number) =>
+      `${EMOJI.ERROR} Место слишком длинное (максимум ${max} символов)`,
   },
 } as const;
 

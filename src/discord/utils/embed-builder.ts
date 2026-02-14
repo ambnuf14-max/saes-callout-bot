@@ -35,6 +35,11 @@ export function buildCalloutEmbed(callout: Callout, department: Department): Emb
         inline: true,
       },
       {
+        name: '📍 Место',
+        value: callout.location || 'Не указано',
+        inline: false,
+      },
+      {
         name: `${EMOJI.INFO} Описание инцидента`,
         value: callout.description,
         inline: false,

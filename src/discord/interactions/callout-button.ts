@@ -1,14 +1,13 @@
 import {
   ButtonInteraction,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
+  EmbedBuilder,
+  StringSelectMenuBuilder,
   ActionRowBuilder,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import DepartmentService from '../../services/department.service';
-import { EMOJI, MESSAGES, LIMITS } from '../../config/constants';
+import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
@@ -47,74 +46,67 @@ export async function handleCreateCalloutButton(
       );
     }
 
-    logger.info('Creating callout modal', {
+    logger.info('Creating department select menu', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
       departmentsCount: departments.length,
     });
 
-    // Создать модальное окно
-    const modal = new ModalBuilder()
-      .setCustomId('callout_modal')
-      .setTitle(MESSAGES.CALLOUT.MODAL_TITLE);
+    // Создать Embed со списком департаментов
+    const departmentList = departments
+      .map((d) => `**${d.name}**${d.description ? ` - ${d.description}` : ''}`)
+      .join('\n');
 
-    // Text Input для описания
-    const descriptionInput = new TextInputBuilder()
-      .setCustomId('description_input')
-      .setLabel(MESSAGES.CALLOUT.MODAL_DESC_LABEL)
-      .setPlaceholder(MESSAGES.CALLOUT.MODAL_DESC_PLACEHOLDER)
-      .setStyle(TextInputStyle.Paragraph)
-      .setMinLength(LIMITS.DESCRIPTION_MIN)
-      .setMaxLength(LIMITS.DESCRIPTION_MAX)
-      .setRequired(true);
+    const embed = new EmbedBuilder()
+      .setTitle('📞 Создание нового каллаута')
+      .setDescription(
+        'Выберите департамент из списка ниже:\n\n' + departmentList
+      )
+      .setColor(COLORS.INFO)
+      .setFooter({ text: 'Выберите департамент из меню' })
+      .setTimestamp();
 
-    const departmentInput = new TextInputBuilder()
-      .setCustomId('department_input')
-      .setLabel('Департамент (введите название)')
-      .setPlaceholder(departments.map((d) => d.name).join(', '))
-      .setStyle(TextInputStyle.Short)
-      .setMinLength(2)
-      .setMaxLength(10)
-      .setRequired(true);
+    // Создать Select Menu с департаментами
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('department_select')
+      .setPlaceholder('Выберите департамент...')
+      .addOptions(
+        departments.map((dept) => ({
+          label: dept.name,
+          description: dept.description || 'Нет описания',
+          value: dept.id.toString(),
+          emoji: '🏢',
+        }))
+      );
 
-    const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      departmentInput
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      selectMenu
     );
-    const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      descriptionInput
-    );
 
-    modal.addComponents(row1, row2);
+    // Отправить ephemeral сообщение
+    await interaction.reply({
+      embeds: [embed],
+      components: [row],
+      ephemeral: true,
+    });
 
-    // Показать модальное окно
-    await interaction.showModal(modal);
-
-    logger.info('Callout modal shown', {
+    logger.info('Department select menu shown', {
       userId: interaction.user.id,
+      departmentsCount: departments.length,
     });
   } catch (error) {
-    logger.error('Error showing callout modal', {
+    logger.error('Error showing department select menu', {
       error: error instanceof Error ? error.message : error,
       userId: interaction.user.id,
     });
 
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({
-        content:
-          error instanceof CalloutError
-            ? error.message
-            : `${EMOJI.ERROR} Не удалось открыть форму создания каллаута`,
-        ephemeral: true,
-      });
-    } else {
-      await interaction.reply({
-        content:
-          error instanceof CalloutError
-            ? error.message
-            : `${EMOJI.ERROR} Не удалось открыть форму создания каллаута`,
-        ephemeral: true,
-      });
-    }
+    await interaction.reply({
+      content:
+        error instanceof CalloutError
+          ? error.message
+          : `${EMOJI.ERROR} Не удалось открыть меню выбора департамента`,
+      ephemeral: true,
+    });
   }
 }
 

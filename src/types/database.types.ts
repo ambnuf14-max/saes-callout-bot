@@ -67,6 +67,7 @@ export interface Callout {
   author_id: string;
   author_name: string;
   description: string;
+  location: string | null;
   discord_channel_id: string | null;
   discord_message_id: string | null;
   vk_message_id: string | null;
@@ -83,6 +84,7 @@ export interface CreateCalloutDTO {
   author_id: string;
   author_name: string;
   description: string;
+  location?: string;
 }
 
 export interface UpdateCalloutDTO {

@@ -12,14 +12,15 @@ export class CalloutModel {
    */
   static async create(data: CreateCalloutDTO): Promise<Callout> {
     const result = await database.run(
-      `INSERT INTO callouts (server_id, department_id, author_id, author_name, description, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO callouts (server_id, department_id, author_id, author_name, description, location, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.department_id,
         data.author_id,
         data.author_name,
         data.description,
+        data.location || null,
         CALLOUT_STATUS.ACTIVE,
       ]
     );
