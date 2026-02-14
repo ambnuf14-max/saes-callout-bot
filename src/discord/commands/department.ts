@@ -36,15 +36,15 @@ const departmentCommand: Command = {
         return;
       }
 
-      // Проверить, является ли пользователь лидером фракции
+      // Проверить, является ли пользователь лидером департамента
       let department;
       try {
-        department = await getLeaderFaction(member);
+        department = await getLeaderDepartment(member);
       } catch (error) {
-        // Если ошибка о множественных фракциях
-        if (error instanceof CalloutError && error.code === 'MULTIPLE_FACTIONS') {
+        // Если ошибка о множественных департаментах
+        if (error instanceof CalloutError && error.code === 'MULTIPLE_DEPARTMENTS') {
           await interaction.editReply({
-            content: MESSAGES.FACTION.MULTIPLE_FACTIONS,
+            content: MESSAGES.DEPARTMENT.MULTIPLE_DEPARTMENTS,
           });
           return;
         }
@@ -53,13 +53,13 @@ const departmentCommand: Command = {
 
       if (!department) {
         await interaction.editReply({
-          content: MESSAGES.FACTION.NO_FACTION,
+          content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
         });
         return;
       }
 
       // Получить статистику подразделений
-      const subdivisions = await SubdivisionService.getSubdivisionsByFactionId(department.id);
+      const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id);
       const activeCount = subdivisions.filter((sub) => sub.is_active).length;
 
       // Построить главную панель

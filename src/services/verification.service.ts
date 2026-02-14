@@ -4,7 +4,7 @@ import {
   CreateVerificationTokenDTO,
   Subdivision,
 } from '../types/database.types';
-import { VerificationInstructions } from '../types/faction.types';
+import { VerificationInstructions } from '../types/department.types';
 import logger from '../utils/logger';
 import { CalloutError } from '../utils/error-handler';
 

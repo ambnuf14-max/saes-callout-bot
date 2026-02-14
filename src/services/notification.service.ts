@@ -102,6 +102,14 @@ export class NotificationService {
         return;
       }
 
+      if (!subdivision.vk_chat_id) {
+        logger.warn('Subdivision has no VK chat linked', {
+          calloutId: callout.id,
+          subdivisionId: callout.subdivision_id,
+        });
+        return;
+      }
+
       // Форматировать сообщение о закрытии
       let message: string;
       if (status === 'closed') {

@@ -66,7 +66,7 @@ export class SubdivisionModel {
   /**
    * Получить все подразделения департамента
    */
-  static async findByFactionId(departmentId: number, activeOnly = false): Promise<Subdivision[]> {
+  static async findByDepartmentId(departmentId: number, activeOnly = false): Promise<Subdivision[]> {
     const sql = activeOnly
       ? 'SELECT * FROM subdivisions WHERE department_id = ? AND is_active = 1 ORDER BY name'
       : 'SELECT * FROM subdivisions WHERE department_id = ? ORDER BY name';
@@ -152,7 +152,7 @@ export class SubdivisionModel {
    * Отвязать VK беседу от подразделения
    */
   static async unlinkVkChat(id: number): Promise<Subdivision | undefined> {
-    return await this.update(id, { vk_chat_id: null });
+    return await this.update(id, { vk_chat_id: undefined });
   }
 
   /**

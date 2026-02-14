@@ -86,7 +86,7 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
 
     // Отправить ошибку в VK беседу
     try {
-      let errorMessage = MESSAGES.VERIFICATION.ERROR_INVALID;
+      let errorMessage: string = MESSAGES.VERIFICATION.ERROR_INVALID;
 
       if (error instanceof Error) {
         if (error.message.includes('уже использован')) {

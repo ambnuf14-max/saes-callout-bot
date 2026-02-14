@@ -49,8 +49,8 @@ export class CalloutService {
       }
     }
 
-    // Получить подразделение (для обратной совместимости проверяем оба поля)
-    const subdivisionId = (data as any).subdivision_id || data.department_id;
+    // Получить подразделение
+    const subdivisionId = data.subdivision_id;
     if (!subdivisionId) {
       throw new CalloutError(
         `${EMOJI.ERROR} Подразделение не указано`,
@@ -342,7 +342,7 @@ export class CalloutService {
 
     // Получить подразделение для проверки роли подразделения
     const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
-    if (subdivision && userRoles.includes(subdivision.discord_role_id)) {
+    if (subdivision && subdivision.discord_role_id && userRoles.includes(subdivision.discord_role_id)) {
       return true;
     }
 

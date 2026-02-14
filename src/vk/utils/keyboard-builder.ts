@@ -11,17 +11,17 @@ import { MESSAGES } from '../../config/constants';
 export interface CalloutResponsePayload {
   action: 'respond';
   callout_id: number;
-  dept_id: number;
+  subdivision_id: number;
 }
 
 /**
  * Создать клавиатуру для каллаута с кнопкой "Отреагировать"
  */
-export function buildCalloutKeyboard(calloutId: number, departmentId: number): string {
+export function buildCalloutKeyboard(calloutId: number, subdivisionId: number): string {
   const payload: CalloutResponsePayload = {
     action: 'respond',
     callout_id: calloutId,
-    dept_id: departmentId,
+    subdivision_id: subdivisionId,
   };
 
   const keyboard = Keyboard.builder()
@@ -41,12 +41,12 @@ export function buildCalloutKeyboard(calloutId: number, departmentId: number): s
  */
 export function buildDetailedCalloutKeyboard(
   calloutId: number,
-  departmentId: number
+  subdivisionId: number
 ): string {
   const acknowledgedPayload: CalloutResponsePayload = {
     action: 'respond',
     callout_id: calloutId,
-    dept_id: departmentId,
+    subdivision_id: subdivisionId,
   };
 
   const keyboard = Keyboard.builder()

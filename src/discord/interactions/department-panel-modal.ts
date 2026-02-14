@@ -1,8 +1,8 @@
 import { ModalSubmitInteraction } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
-import { getLeaderDepartment } from '../utils/faction-permission-checker';
-import { buildSubdivisionsList, buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
+import { getLeaderDepartment } from '../utils/department-permission-checker';
+import { buildSubdivisionsList, buildSubdivisionDetailPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -14,11 +14,11 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить фракцию лидера
-  const faction = await getLeaderDepartment(member);
-  if (!faction) {
+  // Получить департамент лидера
+  const department = await getLeaderDepartment(member);
+  if (!department) {
     await interaction.reply({
-      content: MESSAGES.FACTION.NO_FACTION,
+      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
       ephemeral: true,
     });
     return;
@@ -29,15 +29,15 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
   try {
     // Добавление подразделения
     if (customId === 'department_modal_add_subdivision') {
-      await handleAddSubdivision(interaction, faction.id, faction.server_id);
+      await handleAddSubdivision(interaction, department.id, department.server_id);
     }
     // Редактирование подразделения
     else if (customId.startsWith('department_modal_edit_subdivision_')) {
       const subdivisionId = parseInt(customId.split('_')[4]);
-      await handleEditSubdivision(interaction, subdivisionId, faction.id);
+      await handleEditSubdivision(interaction, subdivisionId, department.id);
     }
   } catch (error) {
-    logger.error('Error handling faction panel modal', {
+    logger.error('Error handling department panel modal', {
       error: error instanceof Error ? error.message : error,
       customId,
       userId: interaction.user.id,
@@ -61,7 +61,7 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
  */
 async function handleAddSubdivision(
   interaction: ModalSubmitInteraction,
-  factionId: number,
+  departmentId: number,
   serverId: number
 ) {
   await interaction.deferUpdate();
@@ -71,7 +71,7 @@ async function handleAddSubdivision(
 
   // Создать подразделение
   const subdivision = await SubdivisionService.createSubdivision({
-    faction_id: factionId,
+    department_id: departmentId,
     server_id: serverId,
     name: name,
     description: description || undefined,
@@ -80,7 +80,7 @@ async function handleAddSubdivision(
   logger.info('Subdivision created via panel', {
     subdivisionId: subdivision.id,
     name: subdivision.name,
-    factionId,
+    departmentId,
     userId: interaction.user.id,
   });
 
@@ -96,7 +96,7 @@ async function handleAddSubdivision(
 async function handleEditSubdivision(
   interaction: ModalSubmitInteraction,
   subdivisionId: number,
-  factionId: number
+  departmentId: number
 ) {
   await interaction.deferUpdate();
 

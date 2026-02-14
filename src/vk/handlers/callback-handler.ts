@@ -40,7 +40,7 @@ export async function handleCallbackEvent(
 
     logger.info('Processing VK callback', {
       calloutId: payload.callout_id,
-      departmentId: payload.dept_id,
+      subdivisionId: payload.subdivision_id,
       userId: context.userId,
       userName,
     });

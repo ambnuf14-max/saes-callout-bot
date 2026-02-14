@@ -2,14 +2,14 @@ import { ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, Acti
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { VerificationService } from '../../services/verification.service';
-import { getLeaderDepartment } from '../utils/faction-permission-checker';
+import { getLeaderDepartment } from '../utils/department-permission-checker';
 import {
   buildMainPanel,
   buildSubdivisionsList,
   buildSubdivisionDetailPanel,
   buildVerificationInstructions,
   buildDeleteConfirmation,
-} from '../utils/faction-panel-builder';
+} from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -21,11 +21,11 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить фракцию лидера
-  const faction = await getLeaderDepartment(member);
-  if (!faction) {
+  // Получить департамент лидера
+  const department = await getLeaderDepartment(member);
+  if (!department) {
     await interaction.reply({
-      content: MESSAGES.FACTION.NO_FACTION,
+      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
       ephemeral: true,
     });
     return;
@@ -36,7 +36,7 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
   try {
     // Просмотр списка подразделений
     if (customId === 'department_view_subdivisions') {
-      await handleViewSubdivisions(interaction, faction.id);
+      await handleViewSubdivisions(interaction, department.id);
     }
     // Добавление подразделения (показать modal)
     else if (customId === 'department_add_subdivision') {
@@ -44,11 +44,11 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     }
     // Возврат к главной панели
     else if (customId === 'department_back_main') {
-      await handleBackToMain(interaction, faction.id);
+      await handleBackToMain(interaction, department.id);
     }
     // Возврат к списку подразделений
     else if (customId === 'department_back_list') {
-      await handleViewSubdivisions(interaction, faction.id);
+      await handleViewSubdivisions(interaction, department.id);
     }
     // Изменение подразделения
     else if (customId.startsWith('department_edit_sub_')) {
@@ -73,19 +73,19 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     // Подтверждение удаления
     else if (customId.startsWith('department_confirm_delete_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleDeleteSubdivision(interaction, subdivisionId, faction.id);
+      await handleDeleteSubdivision(interaction, subdivisionId, department.id);
     }
     // Отмена удаления
     else if (customId === 'department_cancel_delete') {
-      await handleViewSubdivisions(interaction, faction.id);
+      await handleViewSubdivisions(interaction, department.id);
     }
     // Возврат к подразделению из верификации
     else if (customId === 'department_back_subdivision') {
       // Получить subdivision_id из сообщения (предполагаем что оно сохранено)
-      await handleViewSubdivisions(interaction, faction.id);
+      await handleViewSubdivisions(interaction, department.id);
     }
   } catch (error) {
-    logger.error('Error handling faction panel button', {
+    logger.error('Error handling department panel button', {
       error: error instanceof Error ? error.message : error,
       customId,
       userId: interaction.user.id,
@@ -107,24 +107,19 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
 /**
  * Показать список подразделений
  */
-async function handleViewSubdivisions(interaction: ButtonInteraction, factionId: number) {
+async function handleViewSubdivisions(interaction: ButtonInteraction, departmentId: number) {
   await interaction.deferUpdate();
 
-  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(factionId);
-  const faction = await SubdivisionService.getSubdivisionById(subdivisions[0]?.faction_id);
+  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
 
-  if (!faction) {
-    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
-  }
-
-  // Получить фракцию из subdivision
+  // Получить департамент
   const { DepartmentModel } = await import('../../database/models');
-  const factionData = await DepartmentModel.findById(factionId);
-  if (!factionData) {
-    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+  const department = await DepartmentModel.findById(departmentId);
+  if (!department) {
+    throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
   }
 
-  const panel = buildSubdivisionsList(factionData, subdivisions);
+  const panel = buildSubdivisionsList(department, subdivisions);
 
   await interaction.editReply(panel);
 }
@@ -132,19 +127,19 @@ async function handleViewSubdivisions(interaction: ButtonInteraction, factionId:
 /**
  * Возврат к главной панели
  */
-async function handleBackToMain(interaction: ButtonInteraction, factionId: number) {
+async function handleBackToMain(interaction: ButtonInteraction, departmentId: number) {
   await interaction.deferUpdate();
 
   const { DepartmentModel } = await import('../../database/models');
-  const faction = await DepartmentModel.findById(factionId);
-  if (!faction) {
-    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+  const department = await DepartmentModel.findById(departmentId);
+  if (!department) {
+    throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
   }
 
-  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(factionId);
+  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
   const activeCount = subdivisions.filter((sub) => sub.is_active).length;
 
-  const panel = buildMainPanel(faction, subdivisions.length, activeCount);
+  const panel = buildMainPanel(department, subdivisions.length, activeCount);
 
   await interaction.editReply(panel);
 }
@@ -307,7 +302,7 @@ async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisio
 async function handleDeleteSubdivision(
   interaction: ButtonInteraction,
   subdivisionId: number,
-  factionId: number
+  departmentId: number
 ) {
   await interaction.deferUpdate();
 
@@ -319,7 +314,7 @@ async function handleDeleteSubdivision(
   await SubdivisionService.deleteSubdivision(subdivisionId);
 
   // Вернуться к списку подразделений
-  await handleViewSubdivisions(interaction, factionId);
+  await handleViewSubdivisions(interaction, departmentId);
 
   logger.info('Subdivision deleted via panel', {
     subdivisionId,

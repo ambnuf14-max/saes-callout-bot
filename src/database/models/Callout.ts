@@ -12,11 +12,11 @@ export class CalloutModel {
    */
   static async create(data: CreateCalloutDTO): Promise<Callout> {
     const result = await database.run(
-      `INSERT INTO callouts (server_id, department_id, author_id, author_name, description, location, status)
+      `INSERT INTO callouts (server_id, subdivision_id, author_id, author_name, description, location, status)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
-        data.department_id,
+        data.subdivision_id,
         data.author_id,
         data.author_name,
         data.description,
@@ -28,7 +28,7 @@ export class CalloutModel {
     logger.info('Callout created', {
       calloutId: result.lastID,
       authorId: data.author_id,
-      departmentId: data.department_id,
+      subdivisionId: data.subdivision_id,
     });
 
     const callout = await this.findById(result.lastID);

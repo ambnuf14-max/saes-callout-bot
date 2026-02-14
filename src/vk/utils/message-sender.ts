@@ -110,7 +110,7 @@ export async function sendConfirmation(
 /**
  * Форматировать сообщение о каллауте для VK
  */
-function formatCalloutMessage(callout: Callout, subdivision: Department): string {
+function formatCalloutMessage(callout: Callout, subdivision: Subdivision): string {
   const lines = [
     `${EMOJI.ALERT} НОВЫЙ КАЛЛАУТ #${callout.id}`,
     '',

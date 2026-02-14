@@ -54,8 +54,11 @@ export async function createIncidentChannel(
           PermissionFlagsBits.AttachFiles,
         ],
       },
-      {
-        // Роль департамента - полный доступ
+    ];
+
+    // Добавить роль подразделения если она есть
+    if (subdivision.discord_role_id) {
+      permissionOverwrites.push({
         id: subdivision.discord_role_id,
         allow: [
           PermissionFlagsBits.ViewChannel,
@@ -63,8 +66,8 @@ export async function createIncidentChannel(
           PermissionFlagsBits.ReadMessageHistory,
           PermissionFlagsBits.AttachFiles,
         ],
-      },
-    ];
+      });
+    }
 
     // Добавить лидерские роли
     leaderRoleIds.forEach((roleId) => {

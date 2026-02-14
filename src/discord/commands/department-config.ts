@@ -286,7 +286,7 @@ async function handleEditDepartment(
   const department = await DepartmentService.getDepartmentByName(serverId, name);
   if (!department) {
     await interaction.editReply({
-      content: MESSAGES.FACTION.ERROR_NOT_FOUND,
+      content: MESSAGES.DEPARTMENT.ERROR_NOT_FOUND,
     });
     return;
   }
@@ -300,7 +300,7 @@ async function handleEditDepartment(
   });
 
   await interaction.editReply({
-    content: MESSAGES.FACTION.SUCCESS_UPDATED(newName || department.name),
+    content: MESSAGES.DEPARTMENT.SUCCESS_UPDATED(newName || department.name),
   });
 
   logger.info('Department updated via command', {
@@ -325,7 +325,7 @@ async function handleRemoveDepartment(
   const department = await DepartmentService.getDepartmentByName(serverId, name);
   if (!department) {
     await interaction.editReply({
-      content: MESSAGES.FACTION.ERROR_NOT_FOUND,
+      content: MESSAGES.DEPARTMENT.ERROR_NOT_FOUND,
     });
     return;
   }
@@ -334,7 +334,7 @@ async function handleRemoveDepartment(
   await DepartmentService.deleteDepartment(department.id);
 
   await interaction.editReply({
-    content: MESSAGES.FACTION.SUCCESS_REMOVED(department.name),
+    content: MESSAGES.DEPARTMENT.SUCCESS_REMOVED(department.name),
   });
 
   logger.info('Department removed via command', {

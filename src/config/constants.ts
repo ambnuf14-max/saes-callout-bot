@@ -55,19 +55,6 @@ export const MESSAGES = {
     ERROR_ALREADY_CLOSED: `${EMOJI.ERROR} Этот каллаут уже закрыт`,
   },
 
-  DEPARTMENT: {
-    SUCCESS_ADDED: (name: string) =>
-      `${EMOJI.SUCCESS} Департамент ${name} успешно добавлен`,
-    SUCCESS_REMOVED: (name: string) =>
-      `${EMOJI.SUCCESS} Департамент ${name} успешно удален`,
-
-    ERROR_NOT_FOUND: (name: string) =>
-      `${EMOJI.ERROR} Департамент ${name} не найден`,
-    ERROR_ALREADY_EXISTS: (name: string) =>
-      `${EMOJI.ERROR} Департамент ${name} уже существует`,
-    ERROR_INVALID_NAME: `${EMOJI.ERROR} Название должно быть 2-10 символов, только заглавные буквы и цифры`,
-  },
-
   SETUP: {
     SUCCESS: (channelName: string) =>
       `${EMOJI.SUCCESS} Система настроена!\nКанал: ${channelName}\nТеперь добавьте департаменты: \`/department add\``,
@@ -103,6 +90,7 @@ export const MESSAGES = {
     ERROR_ALREADY_EXISTS: (name: string) =>
       `${EMOJI.ERROR} Департамент "${name}" уже существует`,
     ERROR_ROLES_EXIST: `${EMOJI.ERROR} Департамент с такой комбинацией ролей уже существует`,
+    ERROR_INVALID_NAME: `${EMOJI.ERROR} Название должно быть от 2 до 50 символов`,
   },
 
   SUBDIVISION: {

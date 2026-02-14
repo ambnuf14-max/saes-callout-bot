@@ -16,7 +16,7 @@ import { COLORS, EMOJI, MESSAGES } from '../../config/constants';
 export function buildMainPanel(department: Department, subdivisionCount: number, activeCount: number) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`${MESSAGES.FACTION.PANEL_TITLE}: ${department.name}`)
+    .setTitle(`${MESSAGES.DEPARTMENT.PANEL_TITLE}: ${department.name}`)
     .setDescription(department.description || 'Панель управления вашей департаментом')
     .addFields(
       {

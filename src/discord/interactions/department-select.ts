@@ -14,11 +14,11 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить фракцию лидера
+  // Получить департамент лидера
   const department = await getLeaderDepartment(member);
   if (!department) {
     await interaction.reply({
-      content: MESSAGES.DEPARTMENT.NO_FACTION,
+      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
       ephemeral: true,
     });
     return;

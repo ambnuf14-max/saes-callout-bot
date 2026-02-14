@@ -12,11 +12,11 @@ export class CalloutResponseModel {
    */
   static async create(data: CreateCalloutResponseDTO): Promise<CalloutResponse> {
     const result = await database.run(
-      `INSERT INTO callout_responses (callout_id, department_id, vk_user_id, vk_user_name, response_type, message)
+      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, response_type, message)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [
         data.callout_id,
-        data.department_id,
+        data.subdivision_id,
         data.vk_user_id,
         data.vk_user_name,
         data.response_type || RESPONSE_TYPE.ACKNOWLEDGED,
