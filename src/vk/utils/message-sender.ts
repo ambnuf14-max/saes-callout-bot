@@ -15,7 +15,7 @@ export async function sendCalloutNotification(
   vk: VK,
   chatId: string,
   callout: Callout,
-  subdivision: Department
+  subdivision: Subdivision
 ): Promise<number> {
   try {
     // Форматировать сообщение

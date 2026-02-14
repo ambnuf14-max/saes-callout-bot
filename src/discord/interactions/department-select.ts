@@ -1,8 +1,8 @@
 import { StringSelectMenuInteraction } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
-import { getLeaderDepartment } from '../utils/faction-permission-checker';
-import { buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
+import { getLeaderDepartment } from '../utils/department-permission-checker';
+import { buildSubdivisionDetailPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -15,10 +15,10 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
   // Получить фракцию лидера
-  const faction = await getLeaderDepartment(member);
-  if (!faction) {
+  const department = await getLeaderDepartment(member);
+  if (!department) {
     await interaction.reply({
-      content: MESSAGES.FACTION.NO_FACTION,
+      content: MESSAGES.DEPARTMENT.NO_FACTION,
       ephemeral: true,
     });
     return;
@@ -32,7 +32,7 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
       await handleSelectSubdivision(interaction);
     }
   } catch (error) {
-    logger.error('Error handling faction select menu', {
+    logger.error('Error handling department select menu', {
       error: error instanceof Error ? error.message : error,
       customId,
       userId: interaction.user.id,

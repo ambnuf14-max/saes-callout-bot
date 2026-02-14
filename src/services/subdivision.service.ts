@@ -25,10 +25,10 @@ export class SubdivisionService {
     }
 
     // Проверка уникальности названия в фракции
-    const existing = await SubdivisionModel.findByName(data.faction_id, data.name);
+    const existing = await SubdivisionModel.findByName(data.department_id, data.name);
     if (existing) {
       throw new CalloutError(
-        `Подразделение с названием "${data.name}" уже существует в этой фракции`,
+        `Подразделение с названием "${data.name}" уже существует в этом департаменте`,
         'SUBDIVISION_EXISTS',
         400
       );
@@ -40,7 +40,7 @@ export class SubdivisionService {
     logger.info('Subdivision created via service', {
       subdivisionId: subdivision.id,
       name: subdivision.name,
-      departmentId: data.faction_id,
+      departmentId: data.department_id,
     });
 
     return subdivision;

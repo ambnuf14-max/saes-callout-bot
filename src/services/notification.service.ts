@@ -24,6 +24,15 @@ export class NotificationService {
       return;
     }
 
+    // Проверить что у подразделения есть VK чат
+    if (!subdivision.vk_chat_id) {
+      logger.warn('Subdivision has no VK chat linked, skipping notification', {
+        calloutId: callout.id,
+        subdivisionId: subdivision.id,
+      });
+      return;
+    }
+
     try {
       logger.info('Sending VK notification about callout', {
         calloutId: callout.id,

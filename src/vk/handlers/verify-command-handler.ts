@@ -132,11 +132,11 @@ async function notifyDiscordAboutVerification(
 
     // Залогировать событие в audit log
     try {
-      const { FactionModel } = await import('../../database/models');
+      const { DepartmentModel } = await import('../../database/models');
       const { logAuditEvent, AuditEventType } = await import('../../discord/utils/audit-logger');
 
-      const faction = await FactionModel.findById(subdivision.faction_id);
-      if (!faction) return;
+      const department = await DepartmentModel.findById(subdivision.department_id);
+      if (!department) return;
 
       // Получить guild
       const guilds = discordBot.client.guilds.cache;
@@ -145,9 +145,9 @@ async function notifyDiscordAboutVerification(
       if (guild) {
         await logAuditEvent(guild, AuditEventType.VK_CHAT_LINKED, {
           userId: leaderUserId,
-          userName: 'Лидер фракции',
+          userName: 'Лидер департамента',
           subdivisionName: subdivision.name,
-          factionName: faction.name,
+          factionName: department.name,
           vkChatId: vkChatId,
           chatTitle: chatTitle,
         });
