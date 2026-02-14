@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { Callout, Department, CalloutResponse } from '../../types/database.types';
+import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
 
 /**
@@ -9,14 +9,14 @@ import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
 /**
  * Создать Embed для каллаута
  */
-export function buildCalloutEmbed(callout: Callout, department: Department): EmbedBuilder {
+export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): EmbedBuilder {
   const isActive = callout.status === CALLOUT_STATUS.ACTIVE;
   const color = isActive ? COLORS.ACTIVE : COLORS.CLOSED;
   const statusEmoji = isActive ? EMOJI.ACTIVE : EMOJI.CLOSED;
   const statusText = isActive ? 'Active' : 'Closed';
 
   const embed = new EmbedBuilder()
-    .setTitle(`${EMOJI.ALERT} Incident #${callout.id} - ${department.name}`)
+    .setTitle(`${EMOJI.ALERT} Incident #${callout.id} - ${subdivision.name}`)
     .setColor(color)
     .addFields([
       {
@@ -25,8 +25,8 @@ export function buildCalloutEmbed(callout: Callout, department: Department): Emb
         inline: true,
       },
       {
-        name: `${EMOJI.INFO} Департамент`,
-        value: `<@&${department.discord_role_id}>`,
+        name: `${EMOJI.INFO} Подразделение`,
+        value: `<@&${subdivision.discord_role_id}>`,
         inline: true,
       },
       {
@@ -73,19 +73,19 @@ export function buildCalloutEmbed(callout: Callout, department: Department): Emb
 }
 
 /**
- * Создать Embed для ответа департамента
+ * Создать Embed для ответа подразделения
  */
 export function buildResponseEmbed(
   response: CalloutResponse,
-  department: Department
+  subdivision: Subdivision
 ): EmbedBuilder {
   return new EmbedBuilder()
-    .setTitle(`${EMOJI.SUCCESS} Департамент отреагировал`)
+    .setTitle(`${EMOJI.SUCCESS} Подразделение отреагировало`)
     .setColor(COLORS.ACTIVE)
     .addFields([
       {
-        name: 'Департамент',
-        value: department.name,
+        name: 'Подразделение',
+        value: subdivision.name,
         inline: true,
       },
       {
@@ -108,9 +108,9 @@ export function buildResponseEmbed(
  */
 export function buildClosedCalloutEmbed(
   callout: Callout,
-  department: Department
+  subdivision: Subdivision
 ): EmbedBuilder {
-  const embed = buildCalloutEmbed(callout, department);
+  const embed = buildCalloutEmbed(callout, subdivision);
 
   // Изменить цвет на красный
   embed.setColor(COLORS.CLOSED);
@@ -132,7 +132,7 @@ export function buildClosedCalloutEmbed(
 export function addResponsesToEmbed(
   embed: EmbedBuilder,
   responses: CalloutResponse[],
-  departments: Map<number, Department>
+  subdivisions: Map<number, Subdivision>
 ): EmbedBuilder {
   if (responses.length === 0) {
     return embed;
@@ -140,15 +140,15 @@ export function addResponsesToEmbed(
 
   const responseText = responses
     .map((r) => {
-      const dept = departments.get(r.department_id);
-      const deptName = dept?.name || 'Unknown';
-      return `• **${deptName}** - ${r.vk_user_name} (${getResponseTypeLabel(r.response_type)})`;
+      const subdiv = subdivisions.get(r.subdivision_id);
+      const subdivName = subdiv?.name || 'Unknown';
+      return `• **${subdivName}** - ${r.vk_user_name} (${getResponseTypeLabel(r.response_type)})`;
     })
     .join('\n');
 
   embed.addFields([
     {
-      name: `${EMOJI.SUCCESS} Ответы департаментов (${responses.length})`,
+      name: `${EMOJI.SUCCESS} Ответы подразделений (${responses.length})`,
       value: responseText,
       inline: false,
     },

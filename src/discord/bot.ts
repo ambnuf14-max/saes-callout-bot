@@ -16,6 +16,8 @@ import setupCommand from './commands/setup';
 import departmentCommand from './commands/department';
 import closeCalloutCommand from './commands/close-callout';
 import settingsCommand from './commands/settings';
+import departmentLeaderCommand from './commands/department';
+import departmentConfigCommand from './commands/department-config';
 
 // Импорт обработчиков событий
 import readyHandler from './events/ready';
@@ -50,6 +52,8 @@ class DiscordBot {
     this.commands.set(departmentCommand.data.name, departmentCommand);
     this.commands.set(closeCalloutCommand.data.name, closeCalloutCommand);
     this.commands.set(settingsCommand.data.name, settingsCommand);
+    this.commands.set(departmentLeaderCommand.data.name, departmentLeaderCommand);
+    this.commands.set(departmentConfigCommand.data.name, departmentConfigCommand);
 
     logger.info('Commands registered', {
       count: this.commands.size,

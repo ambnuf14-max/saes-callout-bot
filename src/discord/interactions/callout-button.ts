@@ -6,7 +6,7 @@ import {
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import DepartmentService from '../../services/department.service';
+import SubdivisionService from '../../services/subdivision.service';
 import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -35,47 +35,51 @@ export async function handleCreateCalloutButton(
       );
     }
 
-    // Получить активные департаменты
-    const departments = await DepartmentService.getDepartments(server.id, true);
+    // Получить активные подразделения
+    const subdivisions = await SubdivisionService.getSubdivisionsByServerId(server.id, true);
 
-    if (departments.length === 0) {
+    if (subdivisions.length === 0) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Нет доступных департаментов. Обратитесь к администратору.`,
-        'NO_DEPARTMENTS',
+        `${EMOJI.ERROR} Нет доступных подразделений. Обратитесь к администратору.`,
+        'NO_SUBDIVISIONS',
         400
       );
     }
 
-    logger.info('Creating department select menu', {
+    logger.info('Creating subdivision select menu', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
-      departmentsCount: departments.length,
+      subdivisionsCount: subdivisions.length,
     });
 
-    // Создать Embed со списком департаментов
-    const departmentList = departments
-      .map((d) => `**${d.name}**${d.description ? ` - ${d.description}` : ''}`)
+    // Создать Embed со списком подразделений
+    const subdivisionList = subdivisions
+      .map((s) => {
+        const prefix = s.is_accepting_callouts ? '🟢' : '⏸️';
+        const suffix = s.is_accepting_callouts ? '' : ' (не принимает каллауты)';
+        return `${prefix} **${s.name}**${s.description ? ` - ${s.description}` : ''}${suffix}`;
+      })
       .join('\n');
 
     const embed = new EmbedBuilder()
       .setTitle('📞 Создание нового каллаута')
       .setDescription(
-        'Выберите департамент из списка ниже:\n\n' + departmentList
+        'Выберите подразделение из списка ниже:\n\n' + subdivisionList
       )
       .setColor(COLORS.INFO)
-      .setFooter({ text: 'Выберите департамент из меню' })
+      .setFooter({ text: 'Выберите подразделение из меню' })
       .setTimestamp();
 
-    // Создать Select Menu с департаментами
+    // Создать Select Menu с подразделениями
     const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('department_select')
-      .setPlaceholder('Выберите департамент...')
+      .setCustomId('subdivision_select')
+      .setPlaceholder('Выберите подразделение...')
       .addOptions(
-        departments.map((dept) => ({
-          label: dept.name,
-          description: dept.description || 'Нет описания',
-          value: dept.id.toString(),
-          emoji: '🏢',
+        subdivisions.map((subdivision) => ({
+          label: (subdivision.is_accepting_callouts ? '' : '⏸️ ') + subdivision.name,
+          description: subdivision.description || 'Нет описания',
+          value: subdivision.id.toString(),
+          emoji: subdivision.is_accepting_callouts ? '🏢' : undefined,
         }))
       );
 
@@ -90,12 +94,12 @@ export async function handleCreateCalloutButton(
       ephemeral: true,
     });
 
-    logger.info('Department select menu shown', {
+    logger.info('Subdivision select menu shown', {
       userId: interaction.user.id,
-      departmentsCount: departments.length,
+      subdivisionsCount: subdivisions.length,
     });
   } catch (error) {
-    logger.error('Error showing department select menu', {
+    logger.error('Error showing subdivision select menu', {
       error: error instanceof Error ? error.message : error,
       userId: interaction.user.id,
     });
@@ -104,7 +108,7 @@ export async function handleCreateCalloutButton(
       content:
         error instanceof CalloutError
           ? error.message
-          : `${EMOJI.ERROR} Не удалось открыть меню выбора департамента`,
+          : `${EMOJI.ERROR} Не удалось открыть меню выбора подразделения`,
       ephemeral: true,
     });
   }

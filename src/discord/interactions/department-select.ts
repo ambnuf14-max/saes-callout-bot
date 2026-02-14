@@ -1,121 +1,80 @@
-import {
-  StringSelectMenuInteraction,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ActionRowBuilder,
-} from 'discord.js';
+import { StringSelectMenuInteraction } from 'discord.js';
 import logger from '../../utils/logger';
-import { EMOJI, LIMITS } from '../../config/constants';
+import { SubdivisionService } from '../../services/subdivision.service';
+import { getLeaderDepartment } from '../utils/faction-permission-checker';
+import { buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
+import { EMOJI, MESSAGES } from '../../config/constants';
+import { CalloutError } from '../../utils/error-handler';
 
 /**
- * Временное хранилище выбранного департамента (user_id → department_id)
- * В продакшене можно использовать Redis, но для простоты - Map
+ * Обработчик select menu для выбора подразделения
  */
-const departmentSelections = new Map<string, number>();
+export async function handleDepartmentSelect(interaction: StringSelectMenuInteraction) {
+  if (!interaction.guild) return;
 
-/**
- * Обработчик выбора департамента из Select Menu
- */
-export async function handleDepartmentSelect(
-  interaction: StringSelectMenuInteraction
-): Promise<void> {
-  if (!interaction.inGuild() || !interaction.guild) {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+
+  // Получить фракцию лидера
+  const faction = await getLeaderDepartment(member);
+  if (!faction) {
     await interaction.reply({
-      content: `${EMOJI.ERROR} Эта функция доступна только на сервере`,
+      content: MESSAGES.FACTION.NO_FACTION,
       ephemeral: true,
     });
     return;
   }
 
+  const customId = interaction.customId;
+
   try {
-    // Получить выбранный департамент ID
-    const departmentId = parseInt(interaction.values[0], 10);
-
-    logger.info('Department selected from menu', {
-      userId: interaction.user.id,
-      departmentId,
-    });
-
-    // Сохранить выбор в временное хранилище
-    departmentSelections.set(interaction.user.id, departmentId);
-
-    // Создать модальное окно с полями "Подробности" и "Место"
-    const modal = new ModalBuilder()
-      .setCustomId('callout_modal')
-      .setTitle('Создание каллаута');
-
-    // Поле "Место" (location)
-    const locationInput = new TextInputBuilder()
-      .setCustomId('location_input')
-      .setLabel('Место инцидента')
-      .setPlaceholder('Например: Grove Street, перекресток Main St.')
-      .setStyle(TextInputStyle.Short)
-      .setMinLength(3)
-      .setMaxLength(100)
-      .setRequired(true);
-
-    // Поле "Подробности" (description)
-    const descriptionInput = new TextInputBuilder()
-      .setCustomId('description_input')
-      .setLabel('Подробности инцидента')
-      .setPlaceholder('Опишите ситуацию подробно...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setMinLength(LIMITS.DESCRIPTION_MIN)
-      .setMaxLength(LIMITS.DESCRIPTION_MAX)
-      .setRequired(true);
-
-    const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      locationInput
-    );
-    const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      descriptionInput
-    );
-
-    modal.addComponents(row1, row2);
-
-    // Показать модальное окно
-    await interaction.showModal(modal);
-
-    logger.info('Callout modal shown after department selection', {
-      userId: interaction.user.id,
-      departmentId,
-    });
+    // Выбор подразделения из списка
+    if (customId === 'department_select_subdivision') {
+      await handleSelectSubdivision(interaction);
+    }
   } catch (error) {
-    logger.error('Error handling department selection', {
+    logger.error('Error handling faction select menu', {
       error: error instanceof Error ? error.message : error,
+      customId,
       userId: interaction.user.id,
     });
 
-    // Проверить, можно ли еще ответить на interaction
-    // (showModal уже мог быть вызван)
-    if (!interaction.replied && !interaction.deferred) {
-      try {
-        await interaction.reply({
-          content: `${EMOJI.ERROR} Не удалось открыть форму создания каллаута`,
-          ephemeral: true,
-        });
-      } catch (replyError) {
-        logger.error('Failed to send error message to user', {
-          error: replyError instanceof Error ? replyError.message : replyError,
-        });
-      }
+    const content =
+      error instanceof CalloutError
+        ? error.message
+        : `${EMOJI.ERROR} Произошла ошибка при выборе подразделения`;
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content });
+    } else {
+      await interaction.reply({ content, ephemeral: true });
     }
   }
 }
 
 /**
- * Получить выбранный департамент для пользователя
+ * Обработка выбора подразделения из списка
  */
-export function getDepartmentSelection(userId: string): number | undefined {
-  return departmentSelections.get(userId);
-}
+async function handleSelectSubdivision(interaction: StringSelectMenuInteraction) {
+  await interaction.deferUpdate();
 
-/**
- * Удалить выбор департамента после создания каллаута
- */
-export function clearDepartmentSelection(userId: string): void {
-  departmentSelections.delete(userId);
+  const subdivisionId = parseInt(interaction.values[0]);
+
+  // Получить подразделение
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  // Показать детальную панель подразделения
+  const panel = buildSubdivisionDetailPanel(subdivision);
+
+  await interaction.editReply(panel);
+
+  logger.info('Subdivision selected via select menu', {
+    subdivisionId,
+    name: subdivision.name,
+    userId: interaction.user.id,
+  });
 }
 
 export default handleDepartmentSelect;

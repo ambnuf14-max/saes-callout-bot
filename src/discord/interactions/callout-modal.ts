@@ -1,15 +1,15 @@
 import { ModalSubmitInteraction } from 'discord.js';
 import logger from '../../utils/logger';
-import { ServerModel, DepartmentModel } from '../../database/models';
+import { ServerModel, SubdivisionModel } from '../../database/models';
 import CalloutService from '../../services/callout.service';
 import CalloutGatewayService from '../../services/callout-gateway.service';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { isAdministrator } from '../utils/permission-checker';
 import {
-  getDepartmentSelection,
-  clearDepartmentSelection,
-} from './department-select';
+  getSubdivisionSelection,
+  clearSubdivisionSelection,
+} from './subdivision-select';
 
 /**
  * Обработчик submit модального окна создания каллаута
@@ -33,13 +33,13 @@ export async function handleCalloutModalSubmit(
     const location = interaction.fields.getTextInputValue('location_input');
     const description = interaction.fields.getTextInputValue('description_input');
 
-    // Получить департамент из временного хранилища
-    const departmentId = getDepartmentSelection(interaction.user.id);
+    // Получить подразделение из временного хранилища
+    const subdivisionId = getSubdivisionSelection(interaction.user.id);
 
-    if (!departmentId) {
+    if (!subdivisionId) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Выбор департамента истек. Попробуйте снова.`,
-        'DEPARTMENT_SELECTION_EXPIRED',
+        `${EMOJI.ERROR} Выбор подразделения истек. Попробуйте снова.`,
+        'SUBDIVISION_SELECTION_EXPIRED',
         400
       );
     }
@@ -47,7 +47,7 @@ export async function handleCalloutModalSubmit(
     logger.info('Processing callout modal submit', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
-      departmentId,
+      subdivisionId,
       location,
       descriptionLength: description.length,
     });
@@ -62,21 +62,21 @@ export async function handleCalloutModalSubmit(
       );
     }
 
-    // Получить департамент по ID
-    const department = await DepartmentModel.findById(departmentId);
+    // Получить подразделение по ID
+    const subdivision = await SubdivisionModel.findById(subdivisionId);
 
-    if (!department) {
+    if (!subdivision) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Департамент не найден`,
-        'DEPARTMENT_NOT_FOUND',
+        `${EMOJI.ERROR} Подразделение не найдено`,
+        'SUBDIVISION_NOT_FOUND',
         404
       );
     }
 
-    if (!department.is_active) {
+    if (!subdivision.is_active) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Департамент ${department.name} временно неактивен`,
-        'DEPARTMENT_INACTIVE',
+        `${EMOJI.ERROR} Подразделение ${subdivision.name} временно неактивно`,
+        'SUBDIVISION_INACTIVE',
         400
       );
     }
@@ -96,7 +96,7 @@ export async function handleCalloutModalSubmit(
 
     if (!permissionCheck.allowed) {
       // Очистить временное хранилище перед выходом
-      clearDepartmentSelection(interaction.user.id);
+      clearSubdivisionSelection(interaction.user.id);
       await interaction.editReply({
         content: permissionCheck.reason || `${EMOJI.ERROR} Недостаточно прав`,
       });
@@ -108,7 +108,7 @@ export async function handleCalloutModalSubmit(
       interaction.guild,
       {
         server_id: server.id,
-        department_id: department.id,
+        subdivision_id: subdivision.id,
         author_id: interaction.user.id,
         author_name: interaction.user.tag,
         description: description.trim(),
@@ -120,12 +120,12 @@ export async function handleCalloutModalSubmit(
       calloutId: callout.id,
       channelId: channel.id,
       userId: interaction.user.id,
-      departmentId: department.id,
+      subdivisionId: subdivision.id,
       location,
     });
 
     // Очистить временное хранилище
-    clearDepartmentSelection(interaction.user.id);
+    clearSubdivisionSelection(interaction.user.id);
 
     // Записать время создания каллаута для rate limiting (администраторы не учитываются)
     await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id, isAdmin);
@@ -151,7 +151,7 @@ export async function handleCalloutModalSubmit(
     });
 
     // Очистить временное хранилище даже при ошибке
-    clearDepartmentSelection(interaction.user.id);
+    clearSubdivisionSelection(interaction.user.id);
   }
 }
 

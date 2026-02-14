@@ -19,29 +19,15 @@ CREATE TABLE IF NOT EXISTS servers (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица департаментов
-CREATE TABLE IF NOT EXISTS departments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    server_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    discord_role_id TEXT NOT NULL,
-    vk_chat_id TEXT NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-    UNIQUE(server_id, name)
-);
-
 -- Таблица каллаутов
 CREATE TABLE IF NOT EXISTS callouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     server_id INTEGER NOT NULL,
-    department_id INTEGER NOT NULL,
+    subdivision_id INTEGER NOT NULL,
     author_id TEXT NOT NULL,
     author_name TEXT NOT NULL,
     description TEXT NOT NULL,
+    location TEXT,
     discord_channel_id TEXT,
     discord_message_id TEXT,
     vk_message_id TEXT,
@@ -51,21 +37,21 @@ CREATE TABLE IF NOT EXISTS callouts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     closed_at DATETIME,
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+    FOREIGN KEY (subdivision_id) REFERENCES subdivisions(id) ON DELETE CASCADE
 );
 
 -- Таблица ответов на каллауты
 CREATE TABLE IF NOT EXISTS callout_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     callout_id INTEGER NOT NULL,
-    department_id INTEGER NOT NULL,
+    subdivision_id INTEGER NOT NULL,
     vk_user_id TEXT NOT NULL,
     vk_user_name TEXT NOT NULL,
     response_type TEXT DEFAULT 'acknowledged',
     message TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (callout_id) REFERENCES callouts(id) ON DELETE CASCADE,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+    FOREIGN KEY (subdivision_id) REFERENCES subdivisions(id) ON DELETE CASCADE
 );
 
 -- Таблица для rate limiting каллаутов
@@ -80,14 +66,75 @@ CREATE TABLE IF NOT EXISTS callout_rate_limits (
     UNIQUE(user_id, server_id)
 );
 
+-- Таблица департаментов
+CREATE TABLE IF NOT EXISTS departments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    general_leader_role_id TEXT NOT NULL,
+    department_role_id TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    UNIQUE(server_id, name),
+    UNIQUE(server_id, general_leader_role_id, department_role_id)
+);
+
+-- Таблица подразделений внутри департаментов
+CREATE TABLE IF NOT EXISTS subdivisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    department_id INTEGER NOT NULL,
+    server_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    discord_role_id TEXT,
+    vk_chat_id TEXT,
+    is_accepting_callouts BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    UNIQUE(department_id, name)
+);
+
+-- Таблица токенов верификации VK бесед
+CREATE TABLE IF NOT EXISTS vk_verification_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER NOT NULL,
+    subdivision_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_by TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    is_used BOOLEAN DEFAULT 0,
+    used_at DATETIME,
+    vk_peer_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+    FOREIGN KEY (subdivision_id) REFERENCES subdivisions(id) ON DELETE CASCADE
+);
+
 -- Индексы для производительности
 CREATE INDEX IF NOT EXISTS idx_callouts_status ON callouts(status);
 CREATE INDEX IF NOT EXISTS idx_callouts_created ON callouts(created_at);
 CREATE INDEX IF NOT EXISTS idx_callouts_server ON callouts(server_id);
-CREATE INDEX IF NOT EXISTS idx_departments_server ON departments(server_id);
+CREATE INDEX IF NOT EXISTS idx_callouts_subdivision ON callouts(subdivision_id);
 CREATE INDEX IF NOT EXISTS idx_responses_callout ON callout_responses(callout_id);
+CREATE INDEX IF NOT EXISTS idx_responses_subdivision ON callout_responses(subdivision_id);
 CREATE INDEX IF NOT EXISTS idx_servers_guild ON servers(guild_id);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_user_server ON callout_rate_limits(user_id, server_id);
+
+-- Индексы для новых таблиц
+CREATE INDEX IF NOT EXISTS idx_departments_server ON departments(server_id);
+CREATE INDEX IF NOT EXISTS idx_departments_roles ON departments(general_leader_role_id, department_role_id);
+CREATE INDEX IF NOT EXISTS idx_subdivisions_department ON subdivisions(department_id);
+CREATE INDEX IF NOT EXISTS idx_subdivisions_server ON subdivisions(server_id);
+CREATE INDEX IF NOT EXISTS idx_subdivisions_vk_chat ON subdivisions(vk_chat_id);
+CREATE INDEX IF NOT EXISTS idx_verification_tokens_token ON vk_verification_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_verification_tokens_expires ON vk_verification_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_verification_tokens_subdivision ON vk_verification_tokens(subdivision_id);
 `;
 
 /**
@@ -97,10 +144,8 @@ export async function runMigrations(): Promise<void> {
   try {
     logger.info('Running database migrations...');
 
+    // Создать таблицы
     await database.exec(MIGRATIONS_SQL);
-
-    // Применить дополнительные миграции колонок
-    await applyColumnMigrations();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {
@@ -112,60 +157,15 @@ export async function runMigrations(): Promise<void> {
 }
 
 /**
- * Применить миграции для добавления новых колонок в существующие таблицы
- */
-async function applyColumnMigrations(): Promise<void> {
-  try {
-    // Проверить существование колонки audit_log_channel_id в таблице servers
-    const tableInfo = await database.all<{ name: string }>(
-      `PRAGMA table_info(servers)`
-    );
-
-    const hasAuditLogColumn = tableInfo.some((col) => col.name === 'audit_log_channel_id');
-    const hasCalloutRolesColumn = tableInfo.some((col) => col.name === 'callout_allowed_role_ids');
-
-    if (!hasAuditLogColumn) {
-      logger.info('Adding audit_log_channel_id column to servers table...');
-      await database.run('ALTER TABLE servers ADD COLUMN audit_log_channel_id TEXT');
-      logger.info('Column audit_log_channel_id added successfully');
-    }
-
-    if (!hasCalloutRolesColumn) {
-      logger.info('Adding callout_allowed_role_ids column to servers table...');
-      await database.run('ALTER TABLE servers ADD COLUMN callout_allowed_role_ids TEXT');
-      logger.info('Column callout_allowed_role_ids added successfully');
-    }
-
-    // Проверить существование колонки location в таблице callouts
-    const calloutsTableInfo = await database.all<{ name: string }>(
-      `PRAGMA table_info(callouts)`
-    );
-
-    const hasLocationColumn = calloutsTableInfo.some((col) => col.name === 'location');
-
-    if (!hasLocationColumn) {
-      logger.info('Adding location column to callouts table...');
-      await database.run('ALTER TABLE callouts ADD COLUMN location TEXT');
-      logger.info('Column location added successfully');
-    }
-  } catch (error) {
-    logger.error('Failed to apply column migrations', {
-      error: error instanceof Error ? error.message : error,
-    });
-    // Не бросаем ошибку, так как это может быть первый запуск
-  }
-}
-
-/**
  * Проверить существование таблиц
  */
 export async function checkTables(): Promise<boolean> {
   try {
     const tables = await database.all<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'callouts', 'callout_responses', 'callout_rate_limits')`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'subdivisions', 'callouts', 'callout_responses', 'callout_rate_limits', 'vk_verification_tokens')`
     );
 
-    return tables.length === 5;
+    return tables.length === 7;
   } catch (error) {
     logger.error('Failed to check tables', { error });
     return false;
@@ -179,9 +179,11 @@ export async function clearAllTables(): Promise<void> {
   logger.warn('Clearing all tables - this should only be used in development!');
 
   try {
+    await database.run('DELETE FROM vk_verification_tokens');
     await database.run('DELETE FROM callout_rate_limits');
     await database.run('DELETE FROM callout_responses');
     await database.run('DELETE FROM callouts');
+    await database.run('DELETE FROM subdivisions');
     await database.run('DELETE FROM departments');
     await database.run('DELETE FROM servers');
 

@@ -1,6 +1,6 @@
 import vkBot from '../vk/bot';
 import logger from '../utils/logger';
-import { Callout, Department } from '../types/database.types';
+import { Callout, Subdivision } from '../types/database.types';
 import { CalloutModel } from '../database/models';
 import { sendCalloutNotification, formatCalloutClosedMessage } from '../vk/utils/message-sender';
 import { EMOJI } from '../config/constants';
@@ -14,7 +14,7 @@ export class NotificationService {
    */
   static async notifyVkAboutCallout(
     callout: Callout,
-    department: Department
+    subdivision: Subdivision
   ): Promise<void> {
     // Проверить что VK бот активен
     if (!vkBot.isActive()) {
@@ -27,16 +27,16 @@ export class NotificationService {
     try {
       logger.info('Sending VK notification about callout', {
         calloutId: callout.id,
-        departmentId: department.id,
-        vkChatId: department.vk_chat_id,
+        subdivisionId: subdivision.id,
+        vkChatId: subdivision.vk_chat_id,
       });
 
       // Отправить уведомление в VK
       const messageId = await sendCalloutNotification(
         vkBot.getApi(),
-        department.vk_chat_id,
+        subdivision.vk_chat_id,
         callout,
-        department
+        subdivision
       );
 
       // Сохранить ID сообщения в БД
@@ -54,7 +54,7 @@ export class NotificationService {
       logger.error('Failed to send VK notification', {
         error: error instanceof Error ? error.message : error,
         calloutId: callout.id,
-        departmentId: department.id,
+        subdivisionId: subdivision.id,
       });
 
       // Можно отправить уведомление администраторам Discord об ошибке VK
@@ -73,7 +73,7 @@ export class NotificationService {
       return;
     }
 
-    if (!callout.vk_message_id || !callout.department_id) {
+    if (!callout.vk_message_id || !callout.subdivision_id) {
       logger.warn('Cannot update VK message - missing data', {
         calloutId: callout.id,
       });
@@ -81,14 +81,14 @@ export class NotificationService {
     }
 
     try {
-      const department = await (
+      const subdivision = await (
         await import('../database/models')
-      ).DepartmentModel.findById(callout.department_id);
+      ).SubdivisionModel.findById(callout.subdivision_id);
 
-      if (!department) {
-        logger.warn('Department not found for VK update', {
+      if (!subdivision) {
+        logger.warn('Subdivision not found for VK update', {
           calloutId: callout.id,
-          departmentId: callout.department_id,
+          subdivisionId: callout.subdivision_id,
         });
         return;
       }
@@ -103,7 +103,7 @@ export class NotificationService {
 
       // Обновить сообщение в VK
       await vkBot.getApi().api.messages.edit({
-        peer_id: parseInt(department.vk_chat_id),
+        peer_id: parseInt(subdivision.vk_chat_id),
         message_id: parseInt(callout.vk_message_id),
         message: message,
       });

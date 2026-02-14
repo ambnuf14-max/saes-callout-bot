@@ -24,6 +24,15 @@ export enum AuditEventType {
 
   // VK интеграция
   VK_RESPONSE_RECEIVED = 'vk_response_received',
+  VK_CHAT_LINKED = 'vk_chat_linked',
+
+  // Фракции и подразделения
+  FACTION_CREATED = 'faction_created',
+  FACTION_UPDATED = 'faction_updated',
+  FACTION_REMOVED = 'faction_removed',
+  SUBDIVISION_ADDED = 'subdivision_added',
+  SUBDIVISION_UPDATED = 'subdivision_updated',
+  SUBDIVISION_REMOVED = 'subdivision_removed',
 }
 
 /**
@@ -118,6 +127,31 @@ export interface VkResponseReceivedData extends BaseAuditEventData {
 }
 
 /**
+ * Данные для события привязки VK беседы
+ */
+export interface VkChatLinkedData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+  vkChatId: string;
+  chatTitle?: string;
+}
+
+/**
+ * Данные для событий фракций
+ */
+export interface FactionEventData extends BaseAuditEventData {
+  factionName: string;
+}
+
+/**
+ * Данные для событий подразделений
+ */
+export interface SubdivisionEventData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+}
+
+/**
  * Объединенный тип данных события
  */
 export type AuditEventData =
@@ -130,7 +164,10 @@ export type AuditEventData =
   | LeaderRoleAddedData
   | LeaderRoleRemovedData
   | AuditLogChannelSetData
-  | VkResponseReceivedData;
+  | VkResponseReceivedData
+  | VkChatLinkedData
+  | FactionEventData
+  | SubdivisionEventData;
 
 /**
  * Главная функция для логирования события в audit log канал

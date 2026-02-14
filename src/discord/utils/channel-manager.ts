@@ -6,7 +6,7 @@ import {
   CategoryChannel,
 } from 'discord.js';
 import logger from '../../utils/logger';
-import { Callout, Department } from '../../types/database.types';
+import { Callout, Subdivision } from '../../types/database.types';
 import { ServerModel } from '../../database/models';
 
 /**
@@ -19,7 +19,7 @@ import { ServerModel } from '../../database/models';
 export async function createIncidentChannel(
   guild: Guild,
   callout: Callout,
-  department: Department
+  subdivision: Subdivision
 ): Promise<TextChannel> {
   try {
     // Получить настройки сервера для категории
@@ -32,7 +32,7 @@ export async function createIncidentChannel(
     }
 
     // Название канала: incident-{id}-{dept}
-    const channelName = `incident-${callout.id}-${department.name.toLowerCase()}`;
+    const channelName = `incident-${callout.id}-${subdivision.name.toLowerCase()}`;
 
     // Получить роли для прав доступа
     const leaderRoleIds = server ? ServerModel.getLeaderRoleIds(server) : [];
@@ -56,7 +56,7 @@ export async function createIncidentChannel(
       },
       {
         // Роль департамента - полный доступ
-        id: department.discord_role_id,
+        id: subdivision.discord_role_id,
         allow: [
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
@@ -84,14 +84,14 @@ export async function createIncidentChannel(
       name: channelName,
       type: ChannelType.GuildText,
       parent: category?.id,
-      topic: `Инцидент #${callout.id} - ${department.name}`,
+      topic: `Инцидент #${callout.id} - ${subdivision.name}`,
       permissionOverwrites,
     });
 
     logger.info('Incident channel created', {
       channelId: channel.id,
       calloutId: callout.id,
-      departmentId: department.id,
+      subdivisionId: subdivision.id,
     });
 
     return channel;

@@ -1,6 +1,6 @@
 import { Guild, TextChannel } from 'discord.js';
-import { CalloutModel, DepartmentModel, ServerModel } from '../database/models';
-import { Callout, CreateCalloutDTO, Department } from '../types/database.types';
+import { CalloutModel, SubdivisionModel, ServerModel } from '../database/models';
+import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
 import validators from '../utils/validators';
 import { CalloutError } from '../utils/error-handler';
@@ -26,7 +26,7 @@ export class CalloutService {
   static async createCallout(
     guild: Guild,
     data: CreateCalloutDTO
-  ): Promise<{ callout: Callout; channel: TextChannel; department: Department }> {
+  ): Promise<{ callout: Callout; channel: TextChannel; subdivision: Subdivision }> {
     // Валидация описания
     const descValidation = validators.validateCalloutDescription(data.description);
     if (!descValidation.valid) {
@@ -49,20 +49,38 @@ export class CalloutService {
       }
     }
 
-    // Получить департамент
-    const department = await DepartmentModel.findById(data.department_id);
-    if (!department) {
+    // Получить подразделение (для обратной совместимости проверяем оба поля)
+    const subdivisionId = (data as any).subdivision_id || data.department_id;
+    if (!subdivisionId) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Департамент не найден`,
-        'DEPARTMENT_NOT_FOUND',
+        `${EMOJI.ERROR} Подразделение не указано`,
+        'SUBDIVISION_NOT_SPECIFIED',
+        400
+      );
+    }
+
+    const subdivision = await SubdivisionModel.findById(subdivisionId);
+    if (!subdivision) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Подразделение не найдено`,
+        'SUBDIVISION_NOT_FOUND',
         404
       );
     }
 
-    if (!department.is_active) {
+    if (!subdivision.is_active) {
       throw new CalloutError(
-        `${EMOJI.ERROR} Департамент ${department.name} неактивен`,
-        'DEPARTMENT_INACTIVE',
+        `${EMOJI.ERROR} Подразделение ${subdivision.name} неактивно`,
+        'SUBDIVISION_INACTIVE',
+        400
+      );
+    }
+
+    // Проверить, принимает ли подразделение каллауты
+    if (!subdivision.is_accepting_callouts) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Подразделение ${subdivision.name} временно не принимает каллауты`,
+        'SUBDIVISION_NOT_ACCEPTING',
         400
       );
     }
@@ -73,19 +91,19 @@ export class CalloutService {
 
       logger.info('Callout created in database', {
         calloutId: callout.id,
-        departmentId: department.id,
+        subdivisionId: subdivision.id,
         authorId: data.author_id,
       });
 
       // 2. Создать канал для инцидента
-      const channel = await createIncidentChannel(guild, callout, department);
+      const channel = await createIncidentChannel(guild, callout, subdivision);
 
       // 3. Создать Embed сообщение
-      const embed = buildCalloutEmbed(callout, department);
+      const embed = buildCalloutEmbed(callout, subdivision);
 
       // 4. Отправить Embed в канал с mention роли
       const message = await channel.send({
-        content: `<@&${department.discord_role_id}> - новый каллаут!`,
+        content: `<@&${subdivision.discord_role_id}> - новый каллаут!`,
         embeds: [embed],
       });
 
@@ -106,14 +124,14 @@ export class CalloutService {
         userId: data.author_id,
         userName: data.author_name,
         calloutId: callout.id,
-        departmentName: department.name,
+        departmentName: subdivision.name,
         description: data.description,
         channelId: channel.id,
       };
       await logAuditEvent(guild, AuditEventType.CALLOUT_CREATED, auditData);
 
       // Отправить уведомление в VK (не критично, ошибки обрабатываются внутри)
-      await NotificationService.notifyVkAboutCallout(callout, department);
+      await NotificationService.notifyVkAboutCallout(callout, subdivision);
 
       // Получить обновленный каллаут
       const updatedCallout = await CalloutModel.findById(callout.id);
@@ -121,12 +139,12 @@ export class CalloutService {
       return {
         callout: updatedCallout || callout,
         channel,
-        department,
+        subdivision,
       };
     } catch (error) {
       logger.error('Failed to create callout', {
         error: error instanceof Error ? error.message : error,
-        departmentId: data.department_id,
+        subdivisionId: subdivisionId,
         authorId: data.author_id,
       });
 
@@ -199,17 +217,17 @@ export class CalloutService {
         reason,
       });
 
-      // 2. Получить департамент для обновления embed
-      const department = await DepartmentModel.findById(callout.department_id);
-      if (!department) {
-        logger.warn('Department not found for closed callout', {
+      // 2. Получить подразделение для обновления embed
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
+      if (!subdivision) {
+        logger.warn('Subdivision not found for closed callout', {
           calloutId,
-          departmentId: callout.department_id,
+          subdivisionId: callout.subdivision_id,
         });
       }
 
       // 3. Обновить embed в Discord канале
-      if (callout.discord_channel_id && callout.discord_message_id && department) {
+      if (callout.discord_channel_id && callout.discord_message_id && subdivision) {
         try {
           const channel = (await guild.channels.fetch(
             callout.discord_channel_id
@@ -220,7 +238,7 @@ export class CalloutService {
 
             if (message) {
               // Создать обновленный embed
-              const closedEmbed = buildClosedCalloutEmbed(closedCallout, department);
+              const closedEmbed = buildClosedCalloutEmbed(closedCallout, subdivision);
 
               await message.edit({ embeds: [closedEmbed] });
 
@@ -251,12 +269,12 @@ export class CalloutService {
       }
 
       // Логировать событие в audit log
-      if (department) {
+      if (subdivision) {
         const auditData: CalloutClosedData = {
           userId: closedBy,
           userName: closedBy, // TODO: получить username если нужно
           calloutId,
-          departmentName: department.name,
+          departmentName: subdivision.name,
           reason: reason,
           channelId: callout.discord_channel_id || undefined,
         };
@@ -322,9 +340,9 @@ export class CalloutService {
       }
     }
 
-    // Получить департамент для проверки роли департамента
-    const department = await DepartmentModel.findById(callout.department_id);
-    if (department && userRoles.includes(department.discord_role_id)) {
+    // Получить подразделение для проверки роли подразделения
+    const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
+    if (subdivision && userRoles.includes(subdivision.discord_role_id)) {
       return true;
     }
 

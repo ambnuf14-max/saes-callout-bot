@@ -4,6 +4,9 @@ import { handleDiscordError } from '../../utils/error-handler';
 import { Command } from '../types';
 import handleCreateCalloutButton from '../interactions/callout-button';
 import handleCalloutModalSubmit from '../interactions/callout-modal';
+import handleSubdivisionSelect from '../interactions/subdivision-select';
+import handleDepartmentPanelButton from '../interactions/department-panel-button';
+import handleDepartmentPanelModal from '../interactions/department-panel-modal';
 import handleDepartmentSelect from '../interactions/department-select';
 
 /**
@@ -46,6 +49,8 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId === 'create_callout') {
         await handleCreateCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('department_')) {
+        await handleDepartmentPanelButton(interaction);
       }
       return;
     }
@@ -60,6 +65,8 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId === 'callout_modal') {
         await handleCalloutModalSubmit(interaction);
+      } else if (interaction.customId.startsWith('department_modal_')) {
+        await handleDepartmentPanelModal(interaction);
       }
       return;
     }
@@ -72,7 +79,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId === 'department_select') {
+      if (interaction.customId === 'subdivision_select') {
+        await handleSubdivisionSelect(interaction);
+      } else if (interaction.customId.startsWith('department_')) {
         await handleDepartmentSelect(interaction);
       }
       return;

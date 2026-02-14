@@ -3,6 +3,7 @@ import config from '../config/config';
 import logger from '../utils/logger';
 import { handleVkError } from '../utils/error-handler';
 import handleCallbackEvent from './handlers/callback-handler';
+import handleVerifyCommand from './handlers/verify-command-handler';
 
 /**
  * Класс VK бота
@@ -46,12 +47,18 @@ class VkBot {
     // Обработка callback кнопок (message_event)
     this.vk.updates.on('message_event', handleCallbackEvent);
 
-    logger.info('VK event handlers registered', {
-      handlers: ['message_event'],
+    // Обработка текстовых сообщений для команды /verify
+    this.vk.updates.on('message_new', async (context) => {
+      const text = context.text?.trim();
+      // Проверяем, начинается ли сообщение с /verify
+      if (text && text.startsWith('/verify')) {
+        await handleVerifyCommand(context);
+      }
     });
 
-    // TODO: Обработка текстовых сообщений (опционально для будущих функций)
-    // this.vk.updates.on('message_new', messageHandler);
+    logger.info('VK event handlers registered', {
+      handlers: ['message_event', 'message_new (for /verify)'],
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 import { VK } from 'vk-io';
 import logger from '../../utils/logger';
-import { Callout, Department } from '../../types/database.types';
+import { Callout, Subdivision } from '../../types/database.types';
 import { buildCalloutKeyboard } from './keyboard-builder';
 import { EMOJI } from '../../config/constants';
 
@@ -15,14 +15,14 @@ export async function sendCalloutNotification(
   vk: VK,
   chatId: string,
   callout: Callout,
-  department: Department
+  subdivision: Department
 ): Promise<number> {
   try {
     // Форматировать сообщение
-    const message = formatCalloutMessage(callout, department);
+    const message = formatCalloutMessage(callout, subdivision);
 
     // Создать клавиатуру с кнопкой
-    const keyboard = buildCalloutKeyboard(callout.id, department.id);
+    const keyboard = buildCalloutKeyboard(callout.id, subdivision.id);
 
     // Отправить сообщение
     const response = await vk.api.messages.send({
@@ -110,11 +110,11 @@ export async function sendConfirmation(
 /**
  * Форматировать сообщение о каллауте для VK
  */
-function formatCalloutMessage(callout: Callout, department: Department): string {
+function formatCalloutMessage(callout: Callout, subdivision: Department): string {
   const lines = [
     `${EMOJI.ALERT} НОВЫЙ КАЛЛАУТ #${callout.id}`,
     '',
-    `📋 Департамент: ${department.name}`,
+    `📋 Подразделение: ${subdivision.name}`,
     `👤 От: ${callout.author_name}`,
     `📍 Место: ${callout.location || 'Не указано'}`,
     `📝 Описание: ${callout.description}`,

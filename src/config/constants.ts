@@ -86,6 +86,64 @@ export const MESSAGES = {
     LOCATION_TOO_LONG: (max: number) =>
       `${EMOJI.ERROR} Место слишком длинное (максимум ${max} символов)`,
   },
+
+  DEPARTMENT: {
+    PANEL_TITLE: '🏛️ Панель управления департаментом',
+    NO_DEPARTMENT: `${EMOJI.ERROR} Вы не являетесь лидером департамента`,
+    MULTIPLE_DEPARTMENTS: `${EMOJI.WARNING} У вас роли нескольких департаментов. Обратитесь к администратору.`,
+
+    SUCCESS_CREATED: (name: string) =>
+      `${EMOJI.SUCCESS} Департамент "${name}" создан`,
+    SUCCESS_UPDATED: (name: string) =>
+      `${EMOJI.SUCCESS} Департамент "${name}" обновлен`,
+    SUCCESS_REMOVED: (name: string) =>
+      `${EMOJI.SUCCESS} Департамент "${name}" удален`,
+
+    ERROR_NOT_FOUND: `${EMOJI.ERROR} Департамент не найден`,
+    ERROR_ALREADY_EXISTS: (name: string) =>
+      `${EMOJI.ERROR} Департамент "${name}" уже существует`,
+    ERROR_ROLES_EXIST: `${EMOJI.ERROR} Департамент с такой комбинацией ролей уже существует`,
+  },
+
+  SUBDIVISION: {
+    SUCCESS_ADDED: (name: string) =>
+      `${EMOJI.SUCCESS} Подразделение "${name}" создано`,
+    SUCCESS_REMOVED: (name: string) =>
+      `${EMOJI.SUCCESS} Подразделение "${name}" удалено`,
+    SUCCESS_UPDATED: (name: string) =>
+      `${EMOJI.SUCCESS} Подразделение "${name}" обновлено`,
+
+    ERROR_NOT_FOUND: `${EMOJI.ERROR} Подразделение не найдено`,
+    ERROR_ALREADY_EXISTS: (name: string) =>
+      `${EMOJI.ERROR} Подразделение "${name}" уже существует`,
+
+    CALLOUTS_ENABLED: (name: string) =>
+      `${EMOJI.SUCCESS} Прием каллаутов включен для "${name}"`,
+    CALLOUTS_DISABLED: (name: string) =>
+      `⏸️ Прием каллаутов отключен для "${name}"`,
+    CALLOUTS_PAUSED: `⏸️ Подразделение временно не принимает каллауты`,
+  },
+
+  VERIFICATION: {
+    TITLE: '📱 Привязка VK беседы',
+    INSTRUCTIONS: (token: string, minutes: number) =>
+      `1. Перейдите в нужную VK беседу\n` +
+      `2. Отправьте команду: \`/verify ${token}\`\n` +
+      `3. Токен действителен ${minutes} мин.`,
+
+    SUCCESS_LINKED: (subdivisionName: string, chatTitle?: string) =>
+      chatTitle
+        ? `${EMOJI.SUCCESS} VK беседа "${chatTitle}" привязана к "${subdivisionName}"`
+        : `${EMOJI.SUCCESS} VK беседа привязана к "${subdivisionName}"`,
+    SUCCESS_VK: (subdivisionName: string) =>
+      `${EMOJI.SUCCESS} Беседа успешно привязана к подразделению "${subdivisionName}"!\n` +
+      `Теперь вы будете получать каллауты в этой беседе.`,
+
+    ERROR_INVALID: `${EMOJI.ERROR} Неверный или истекший токен верификации`,
+    ERROR_USED: `${EMOJI.ERROR} Этот токен уже использован`,
+    ERROR_TOO_MANY: (limit: number) =>
+      `${EMOJI.ERROR} Превышен лимит активных токенов (${limit}). Подождите истечения существующих.`,
+  },
 } as const;
 
 // Статусы каллаутов
