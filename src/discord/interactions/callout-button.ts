@@ -1,14 +1,15 @@
 import {
   ButtonInteraction,
-  EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
+  MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import SubdivisionService from '../../services/subdivision.service';
-import { EMOJI, COLORS } from '../../config/constants';
+import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { buildSubdivisionEmbeds } from '../utils/subdivision-embed-builder';
 
 /**
  * Обработчик нажатия кнопки "Создать каллаут"
@@ -19,7 +20,7 @@ export async function handleCreateCalloutButton(
   if (!interaction.inGuild() || !interaction.guild) {
     await interaction.reply({
       content: `${EMOJI.ERROR} Эта функция доступна только на сервере`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -52,23 +53,8 @@ export async function handleCreateCalloutButton(
       subdivisionsCount: subdivisions.length,
     });
 
-    // Создать Embed со списком подразделений
-    const subdivisionList = subdivisions
-      .map((s) => {
-        const prefix = s.is_accepting_callouts ? '🟢' : '⏸️';
-        const suffix = s.is_accepting_callouts ? '' : ' (не принимает каллауты)';
-        return `${prefix} **${s.name}**${s.description ? ` - ${s.description}` : ''}${suffix}`;
-      })
-      .join('\n');
-
-    const embed = new EmbedBuilder()
-      .setTitle('📞 Создание нового каллаута')
-      .setDescription(
-        'Выберите подразделение из списка ниже:\n\n' + subdivisionList
-      )
-      .setColor(COLORS.INFO)
-      .setFooter({ text: 'Выберите подразделение из меню' })
-      .setTimestamp();
+    // Создать массив embeds для каждого подразделения (максимум 10)
+    const embeds = buildSubdivisionEmbeds(subdivisions);
 
     // Создать Select Menu с подразделениями
     const selectMenu = new StringSelectMenuBuilder()
@@ -87,11 +73,11 @@ export async function handleCreateCalloutButton(
       selectMenu
     );
 
-    // Отправить ephemeral сообщение
+    // Отправить ephemeral сообщение с несколькими embeds
     await interaction.reply({
-      embeds: [embed],
+      embeds: embeds,
       components: [row],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
 
     logger.info('Subdivision select menu shown', {
@@ -109,7 +95,7 @@ export async function handleCreateCalloutButton(
         error instanceof CalloutError
           ? error.message
           : `${EMOJI.ERROR} Не удалось открыть меню выбора подразделения`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }

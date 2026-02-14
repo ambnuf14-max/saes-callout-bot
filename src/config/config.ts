@@ -15,6 +15,12 @@ interface Config {
     groupId: string;
   };
 
+  // Telegram
+  telegram: {
+    token: string;
+    botUsername: string;
+  };
+
   // Database
   database: {
     path: string;
@@ -39,6 +45,8 @@ function getConfig(): Config {
     'DISCORD_CLIENT_ID',
     'VK_TOKEN',
     'VK_GROUP_ID',
+    'TELEGRAM_BOT_TOKEN',
+    'TELEGRAM_BOT_USERNAME',
   ];
 
   const missing = requiredEnvVars.filter((varName) => !process.env[varName]);
@@ -59,6 +67,11 @@ function getConfig(): Config {
     vk: {
       token: process.env.VK_TOKEN!,
       groupId: process.env.VK_GROUP_ID!,
+    },
+
+    telegram: {
+      token: process.env.TELEGRAM_BOT_TOKEN!,
+      botUsername: process.env.TELEGRAM_BOT_USERNAME!,
     },
 
     database: {

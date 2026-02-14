@@ -1,4 +1,4 @@
-import { StringSelectMenuInteraction } from 'discord.js';
+import { StringSelectMenuInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
@@ -19,7 +19,7 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
   if (!department) {
     await interaction.reply({
       content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -46,7 +46,7 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content });
     } else {
-      await interaction.reply({ content, ephemeral: true });
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
     }
   }
 }

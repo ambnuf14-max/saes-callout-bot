@@ -10,6 +10,7 @@ import {
   PermissionFlagsBits,
   CategoryChannel,
   TextChannel,
+  MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
@@ -25,7 +26,7 @@ export async function handleSetupModeSelect(
   if (!interaction.inGuild() || !interaction.guild) {
     await interaction.reply({
       content: `${EMOJI.ERROR} Эта функция доступна только на сервере`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -73,7 +74,7 @@ export async function handleSetupModeSelect(
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content });
     } else {
-      await interaction.reply({ content, ephemeral: true });
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
     }
   }
 }
@@ -211,7 +212,6 @@ async function setupModeCategory(interaction: ButtonInteraction) {
     .setColor(COLORS.INFO);
 
   await interaction.editReply({
-    content: '',
     embeds: [embed],
     components: [row],
   });
@@ -283,7 +283,6 @@ async function setupModeChannel(interaction: ButtonInteraction) {
     .setColor(COLORS.INFO);
 
   await interaction.editReply({
-    content: '',
     embeds: [embed],
     components: [row],
   });

@@ -64,6 +64,16 @@ export class SubdivisionModel {
   }
 
   /**
+   * Найти подразделение по Telegram chat_id
+   */
+  static async findByTelegramChatId(telegramChatId: string): Promise<Subdivision | undefined> {
+    return await database.get<Subdivision>(
+      'SELECT * FROM subdivisions WHERE telegram_chat_id = ?',
+      [telegramChatId]
+    );
+  }
+
+  /**
    * Получить все подразделения департамента
    */
   static async findByDepartmentId(departmentId: number, activeOnly = false): Promise<Subdivision[]> {
@@ -118,6 +128,10 @@ export class SubdivisionModel {
       updates.push('vk_chat_id = ?');
       params.push(data.vk_chat_id);
     }
+    if (data.telegram_chat_id !== undefined) {
+      updates.push('telegram_chat_id = ?');
+      params.push(data.telegram_chat_id);
+    }
     if (data.is_accepting_callouts !== undefined) {
       updates.push('is_accepting_callouts = ?');
       params.push(data.is_accepting_callouts ? 1 : 0);
@@ -125,6 +139,48 @@ export class SubdivisionModel {
     if (data.is_active !== undefined) {
       updates.push('is_active = ?');
       params.push(data.is_active ? 1 : 0);
+    }
+
+    // Embed настройки
+    if (data.embed_author_name !== undefined) {
+      updates.push('embed_author_name = ?');
+      params.push(data.embed_author_name);
+    }
+    if (data.embed_author_url !== undefined) {
+      updates.push('embed_author_url = ?');
+      params.push(data.embed_author_url);
+    }
+    if (data.embed_author_icon_url !== undefined) {
+      updates.push('embed_author_icon_url = ?');
+      params.push(data.embed_author_icon_url);
+    }
+    if (data.embed_title !== undefined) {
+      updates.push('embed_title = ?');
+      params.push(data.embed_title);
+    }
+    if (data.embed_description !== undefined) {
+      updates.push('embed_description = ?');
+      params.push(data.embed_description);
+    }
+    if (data.embed_color !== undefined) {
+      updates.push('embed_color = ?');
+      params.push(data.embed_color);
+    }
+    if (data.embed_image_url !== undefined) {
+      updates.push('embed_image_url = ?');
+      params.push(data.embed_image_url);
+    }
+    if (data.embed_thumbnail_url !== undefined) {
+      updates.push('embed_thumbnail_url = ?');
+      params.push(data.embed_thumbnail_url);
+    }
+    if (data.embed_footer_text !== undefined) {
+      updates.push('embed_footer_text = ?');
+      params.push(data.embed_footer_text);
+    }
+    if (data.embed_footer_icon_url !== undefined) {
+      updates.push('embed_footer_icon_url = ?');
+      params.push(data.embed_footer_icon_url);
     }
 
     if (updates.length === 0) {
@@ -153,6 +209,20 @@ export class SubdivisionModel {
    */
   static async unlinkVkChat(id: number): Promise<Subdivision | undefined> {
     return await this.update(id, { vk_chat_id: undefined });
+  }
+
+  /**
+   * Привязать Telegram группу к подразделению
+   */
+  static async linkTelegramChat(id: number, telegramChatId: string): Promise<Subdivision | undefined> {
+    return await this.update(id, { telegram_chat_id: telegramChatId });
+  }
+
+  /**
+   * Отвязать Telegram группу от подразделения
+   */
+  static async unlinkTelegramChat(id: number): Promise<Subdivision | undefined> {
+    return await this.update(id, { telegram_chat_id: undefined });
   }
 
   /**
@@ -227,6 +297,13 @@ export class SubdivisionModel {
    */
   static hasVkChat(subdivision: Subdivision): boolean {
     return !!subdivision.vk_chat_id;
+  }
+
+  /**
+   * Проверить, привязана ли Telegram группа
+   */
+  static hasTelegramChat(subdivision: Subdivision): boolean {
+    return !!subdivision.telegram_chat_id;
   }
 }
 

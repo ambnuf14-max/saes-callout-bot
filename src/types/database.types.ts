@@ -71,6 +71,7 @@ export interface Callout {
   discord_channel_id: string | null;
   discord_message_id: string | null;
   vk_message_id: string | null;
+  telegram_message_id: string | null;
   status: 'active' | 'closed' | 'cancelled';
   closed_by: string | null;
   closed_reason: string | null;
@@ -91,6 +92,7 @@ export interface UpdateCalloutDTO {
   discord_channel_id?: string;
   discord_message_id?: string;
   vk_message_id?: string;
+  telegram_message_id?: string;
   status?: 'active' | 'closed' | 'cancelled';
   closed_by?: string;
   closed_reason?: string;
@@ -101,8 +103,8 @@ export interface CalloutResponse {
   id: number;
   callout_id: number;
   subdivision_id: number;
-  vk_user_id: string;
-  vk_user_name: string;
+  vk_user_id: string;              // Сохраняем для обратной совместимости
+  vk_user_name: string;            // Сохраняем для обратной совместимости
   response_type: 'acknowledged' | 'on_way' | 'arrived';
   message: string | null;
   created_at: string;
@@ -111,8 +113,8 @@ export interface CalloutResponse {
 export interface CreateCalloutResponseDTO {
   callout_id: number;
   subdivision_id: number;
-  vk_user_id: string;
-  vk_user_name: string;
+  vk_user_id: string;              // Используется как user_id для обеих платформ
+  vk_user_name: string;            // Используется как user_name для обеих платформ
   response_type?: 'acknowledged' | 'on_way' | 'arrived';
   message?: string;
 }
@@ -136,8 +138,20 @@ export interface Subdivision {
   description: string | null;
   discord_role_id: string | null;
   vk_chat_id: string | null;
+  telegram_chat_id: string | null;
   is_accepting_callouts: boolean;
   is_active: boolean;
+  // Embed настройки
+  embed_author_name: string | null;
+  embed_author_url: string | null;
+  embed_author_icon_url: string | null;
+  embed_title: string | null;
+  embed_description: string | null;
+  embed_color: string | null;
+  embed_image_url: string | null;
+  embed_thumbnail_url: string | null;
+  embed_footer_text: string | null;
+  embed_footer_icon_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -155,29 +169,50 @@ export interface UpdateSubdivisionDTO {
   description?: string;
   discord_role_id?: string;
   vk_chat_id?: string;
+  telegram_chat_id?: string;
   is_accepting_callouts?: boolean;
   is_active?: boolean;
+  // Embed настройки
+  embed_author_name?: string;
+  embed_author_url?: string;
+  embed_author_icon_url?: string;
+  embed_title?: string;
+  embed_description?: string;
+  embed_color?: string;
+  embed_image_url?: string;
+  embed_thumbnail_url?: string;
+  embed_footer_text?: string;
+  embed_footer_icon_url?: string;
 }
 
-// ============ VK VERIFICATION ============
+// ============ VERIFICATION TOKENS ============
 
-export interface VkVerificationToken {
+export type Platform = 'vk' | 'telegram';
+
+export interface VerificationToken {
   id: number;
   server_id: number;
   subdivision_id: number;
   token: string;
+  platform: Platform;
   created_by: string;              // Discord user ID лидера
   expires_at: string;
   is_used: boolean;
   used_at: string | null;
-  vk_peer_id: string | null;       // Заполняется при успешной верификации
+  chat_id: string | null;          // VK peer_id или Telegram chat_id
   created_at: string;
+}
+
+// Для обратной совместимости с существующим кодом VK
+export interface VkVerificationToken extends VerificationToken {
+  vk_peer_id: string | null;
 }
 
 export interface CreateVerificationTokenDTO {
   server_id: number;
   subdivision_id: number;
   created_by: string;
+  platform?: Platform;              // По умолчанию 'vk' для обратной совместимости
 }
 
 // ============ EXTENDED TYPES ============

@@ -17,7 +17,7 @@ import {
 } from '../discord/utils/audit-logger';
 
 /**
- * Сервис синхронизации между VK и Discord
+ * Сервис синхронизации между VK, Telegram и Discord
  */
 export class SyncService {
   /**
@@ -114,12 +114,106 @@ export class SyncService {
   }
 
   /**
-   * Отправить уведомление в Discord о реагировании из VK
+   * Обработать ответ из Telegram на каллаут
+   */
+  static async handleTelegramResponse(
+    payload: CalloutResponsePayload,
+    telegramUserId: string,
+    telegramUserName: string
+  ): Promise<CalloutResponse> {
+    logger.info('Processing Telegram response', {
+      calloutId: payload.callout_id,
+      subdivisionId: payload.subdivision_id,
+      telegramUserId,
+    });
+
+    // 1. Проверить существование каллаута
+    const callout = await CalloutModel.findById(payload.callout_id);
+    if (!callout) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Каллаут #${payload.callout_id} не найден`,
+        'CALLOUT_NOT_FOUND',
+        404
+      );
+    }
+
+    // 2. Проверить статус каллаута
+    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Каллаут #${callout.id} уже закрыт`,
+        'CALLOUT_ALREADY_CLOSED',
+        400
+      );
+    }
+
+    // 3. Проверить существование подразделения
+    const subdivision = await SubdivisionModel.findById(payload.subdivision_id);
+    if (!subdivision) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Подразделение не найдено`,
+        'SUBDIVISION_NOT_FOUND',
+        404
+      );
+    }
+
+    // 4. Проверить, не отвечал ли уже этот пользователь
+    const hasResponded = await CalloutResponseModel.hasUserResponded(
+      callout.id,
+      telegramUserId
+    );
+
+    if (hasResponded) {
+      logger.info('User already responded to this callout', {
+        calloutId: callout.id,
+        telegramUserId,
+      });
+      // Не бросаем ошибку, просто возвращаем существующий ответ
+      const existingResponse = await CalloutResponseModel.getLastUserResponse(
+        callout.id,
+        telegramUserId
+      );
+      if (existingResponse) {
+        return existingResponse;
+      }
+    }
+
+    // 5. Создать запись ответа в БД
+    const response = await CalloutResponseModel.create({
+      callout_id: callout.id,
+      subdivision_id: subdivision.id,
+      vk_user_id: telegramUserId, // Используем поле vk_user_id для хранения telegram user_id
+      vk_user_name: telegramUserName,
+      response_type: 'acknowledged',
+    });
+
+    logger.info('Telegram response saved to database', {
+      responseId: response.id,
+      calloutId: callout.id,
+      telegramUserId,
+    });
+
+    // 6. Отправить уведомление в Discord
+    try {
+      await this.notifyDiscordAboutResponse(response, callout, subdivision, 'telegram');
+    } catch (error) {
+      logger.error('Failed to notify Discord about Telegram response', {
+        error: error instanceof Error ? error.message : error,
+        responseId: response.id,
+      });
+      // Не критично, запись в БД уже создана
+    }
+
+    return response;
+  }
+
+  /**
+   * Отправить уведомление в Discord о реагировании из VK/Telegram
    */
   static async notifyDiscordAboutResponse(
     response: CalloutResponse,
     callout: Callout,
-    subdivision: Subdivision
+    subdivision: Subdivision,
+    platform: 'vk' | 'telegram' = 'vk'
   ): Promise<void> {
     if (!callout.discord_channel_id) {
       logger.warn('No Discord channel for callout', {
@@ -142,7 +236,7 @@ export class SyncService {
       }
 
       // Форматировать сообщение
-      const message = this.formatResponseMessage(response, subdivision);
+      const message = this.formatResponseMessage(response, subdivision, platform);
 
       // Отправить сообщение
       await channel.send(message);
@@ -180,15 +274,18 @@ export class SyncService {
    */
   private static formatResponseMessage(
     response: CalloutResponse,
-    subdivision: Subdivision
+    subdivision: Subdivision,
+    platform: 'vk' | 'telegram' = 'vk'
   ): string {
     const timestamp = new Date(response.created_at).toLocaleString('ru-RU', {
       timeZone: 'Europe/Moscow',
     });
 
+    const platformName = platform === 'vk' ? 'VK' : 'Telegram';
+
     return (
       `${EMOJI.SUCCESS} **${subdivision.name}** отреагировал на инцидент\n` +
-      `👤 Ответил: ${response.vk_user_name} (VK)\n` +
+      `👤 Ответил: ${response.vk_user_name} (${platformName})\n` +
       `🕐 Время: ${timestamp}`
     );
   }

@@ -155,6 +155,7 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
   const statusEmoji = subdivision.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
   const calloutsStatus = subdivision.is_accepting_callouts ? 'Включен' : 'Отключен';
   const vkStatus = subdivision.vk_chat_id ? 'Привязана' : 'Не привязана';
+  const telegramStatus = subdivision.telegram_chat_id ? 'Привязана' : 'Не привязана';
 
   const embed = new EmbedBuilder()
     .setColor(subdivision.is_active ? COLORS.ACTIVE : COLORS.ERROR)
@@ -173,6 +174,11 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
       {
         name: '💬 VK беседа',
         value: vkStatus,
+        inline: true,
+      },
+      {
+        name: '✈️ Telegram группа',
+        value: telegramStatus,
         inline: true,
       }
     )
@@ -206,6 +212,11 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
       .setEmoji('🔗')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
+      .setCustomId(`department_link_telegram_${subdivision.id}`)
+      .setLabel(subdivision.telegram_chat_id ? 'Перепривязать TG' : 'Привязать TG')
+      .setEmoji('✈️')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId(`department_toggle_callouts_${subdivision.id}`)
       .setLabel(subdivision.is_accepting_callouts ? 'Отключить каллауты' : 'Включить каллауты')
       .setEmoji(subdivision.is_accepting_callouts ? '⏸️' : '▶️')
@@ -213,6 +224,11 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
   );
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`department_configure_embed_${subdivision.id}`)
+      .setLabel('Настроить Embed')
+      .setEmoji('⚙️')
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`department_delete_sub_${subdivision.id}`)
       .setLabel('Удалить')
@@ -229,17 +245,28 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
 }
 
 /**
- * Построить embed с инструкциями верификации VK
+ * Построить embed с инструкциями верификации VK или Telegram
  */
 export function buildVerificationInstructions(instructions: VerificationInstructions) {
   const minutes = Math.ceil(
     (instructions.expiresAt.getTime() - Date.now()) / 60000
   );
 
+  const platform = instructions.platform || 'vk';
+  const isTelegram = platform === 'telegram';
+
+  const title = isTelegram
+    ? MESSAGES.VERIFICATION.TITLE_TELEGRAM
+    : MESSAGES.VERIFICATION.TITLE;
+
+  const instructionsText = isTelegram
+    ? MESSAGES.VERIFICATION.INSTRUCTIONS_TELEGRAM(instructions.token, minutes)
+    : MESSAGES.VERIFICATION.INSTRUCTIONS(instructions.token, minutes);
+
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`${MESSAGES.VERIFICATION.TITLE}: ${instructions.subdivisionName}`)
-    .setDescription(MESSAGES.VERIFICATION.INSTRUCTIONS(instructions.token, minutes))
+    .setTitle(`${title}: ${instructions.subdivisionName}`)
+    .setDescription(instructionsText)
     .addFields({
       name: '🔑 Токен',
       value: `\`\`\`${instructions.token}\`\`\``,

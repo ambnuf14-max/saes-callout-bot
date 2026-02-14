@@ -17,6 +17,7 @@ export const EMOJI = {
   CLOSED: '🔴',
   ACTIVE: '🟢',
   INFO: 'ℹ️',
+  CALLOUT: '🚨',
 } as const;
 
 // Лимиты
@@ -35,6 +36,7 @@ export const MESSAGES = {
     BUTTON_CREATE: `${EMOJI.PHONE} New Callout`,
     BUTTON_CLOSE: `${EMOJI.CLOSED} Закрыть инцидент`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
+    BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
 
     TITLE_PANEL: `${EMOJI.ALERT} Система каллаутов`,
     DESCRIPTION_PANEL: 'Нажмите кнопку ниже для создания каллаута',
@@ -57,7 +59,7 @@ export const MESSAGES = {
 
   SETUP: {
     SUCCESS: (channelName: string) =>
-      `${EMOJI.SUCCESS} Система настроена!\nКанал: ${channelName}\nТеперь добавьте департаменты: \`/department add\``,
+      `${EMOJI.SUCCESS} Система настроена!\nКанал: ${channelName}\nТеперь добавьте департаменты через \`/settings\` → Департаменты`,
     ERROR_NO_PERMISSION: `${EMOJI.ERROR} Только администраторы могут выполнить начальную настройку`,
   },
 
@@ -114,18 +116,38 @@ export const MESSAGES = {
 
   VERIFICATION: {
     TITLE: '📱 Привязка VK беседы',
+    TITLE_TELEGRAM: '📱 Привязка Telegram группы',
     INSTRUCTIONS: (token: string, minutes: number) =>
-      `1. Перейдите в нужную VK беседу\n` +
-      `2. Отправьте команду: \`/verify ${token}\`\n` +
-      `3. Токен действителен ${minutes} мин.`,
+      `**Шаг 1: Добавьте бота в VK беседу**\n` +
+      `• Откройте нужную VK беседу\n` +
+      `• Нажмите на название беседы → "Участники" → "Пригласить"\n` +
+      `• Найдите и добавьте сообщество **SAES Callout Bot**\n\n` +
+      `**Шаг 2: Привяжите беседу**\n` +
+      `• В беседе отправьте команду: \`/verify ${token}\`\n` +
+      `• Токен действителен **${minutes} минут**`,
+    INSTRUCTIONS_TELEGRAM: (token: string, minutes: number) =>
+      `**Шаг 1: Добавьте бота в Telegram группу**\n` +
+      `• Откройте нужную Telegram группу\n` +
+      `• Нажмите на название группы → "Добавить участников"\n` +
+      `• Найдите и добавьте бота **@saescalloutbot**\n\n` +
+      `**Шаг 2: Привяжите группу**\n` +
+      `• В группе отправьте команду: \`/verify ${token}\`\n` +
+      `• Токен действителен **${minutes} минут**`,
 
     SUCCESS_LINKED: (subdivisionName: string, chatTitle?: string) =>
       chatTitle
         ? `${EMOJI.SUCCESS} VK беседа "${chatTitle}" привязана к "${subdivisionName}"`
         : `${EMOJI.SUCCESS} VK беседа привязана к "${subdivisionName}"`,
+    SUCCESS_LINKED_TELEGRAM: (subdivisionName: string, chatTitle?: string) =>
+      chatTitle
+        ? `${EMOJI.SUCCESS} Telegram группа "${chatTitle}" привязана к "${subdivisionName}"`
+        : `${EMOJI.SUCCESS} Telegram группа привязана к "${subdivisionName}"`,
     SUCCESS_VK: (subdivisionName: string) =>
       `${EMOJI.SUCCESS} Беседа успешно привязана к подразделению "${subdivisionName}"!\n` +
       `Теперь вы будете получать каллауты в этой беседе.`,
+    SUCCESS_TELEGRAM: (subdivisionName: string) =>
+      `${EMOJI.SUCCESS} Группа успешно привязана к подразделению "<b>${subdivisionName}</b>"!\n` +
+      `Теперь вы будете получать каллауты в этой группе.`,
 
     ERROR_INVALID: `${EMOJI.ERROR} Неверный или истекший токен верификации`,
     ERROR_USED: `${EMOJI.ERROR} Этот токен уже использован`,

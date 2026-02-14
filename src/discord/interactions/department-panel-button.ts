@@ -1,4 +1,4 @@
-import { ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
+import { ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { VerificationService } from '../../services/verification.service';
@@ -26,7 +26,7 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
   if (!department) {
     await interaction.reply({
       content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -58,17 +58,27 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     // Привязка VK беседы
     else if (customId.startsWith('department_link_vk_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleLinkVk(interaction, subdivisionId);
+      await handleLinkVk(interaction, subdivisionId, department.id);
+    }
+    // Привязка Telegram группы
+    else if (customId.startsWith('department_link_telegram_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleLinkTelegram(interaction, subdivisionId, department.id);
     }
     // Переключение приема каллаутов
     else if (customId.startsWith('department_toggle_callouts_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleToggleCallouts(interaction, subdivisionId);
+      await handleToggleCallouts(interaction, subdivisionId, department.id);
+    }
+    // Настройка embed подразделения
+    else if (customId.startsWith('department_configure_embed_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showConfigureEmbedModal(interaction, subdivisionId);
     }
     // Удаление подразделения (показать подтверждение)
     else if (customId.startsWith('department_delete_sub_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await showDeleteConfirmation(interaction, subdivisionId);
+      await showDeleteConfirmation(interaction, subdivisionId, department.id);
     }
     // Подтверждение удаления
     else if (customId.startsWith('department_confirm_delete_')) {
@@ -99,7 +109,7 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content });
     } else {
-      await interaction.reply({ content, ephemeral: true });
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
     }
   }
 }
@@ -218,12 +228,20 @@ async function showEditSubdivisionModal(interaction: ButtonInteraction, subdivis
 /**
  * Обработка привязки VK беседы
  */
-async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: number) {
+async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!subdivision) {
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
   }
 
   // Генерировать токен верификации
@@ -249,14 +267,64 @@ async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: numbe
 }
 
 /**
- * Переключение приема каллаутов
+ * Обработка привязки Telegram группы
  */
-async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionId: number) {
+async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!subdivision) {
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
+  // Генерировать токен верификации для Telegram
+  const token = await VerificationService.generateVerificationToken({
+    server_id: subdivision.server_id,
+    subdivision_id: subdivisionId,
+    created_by: interaction.user.id,
+    platform: 'telegram',
+  });
+
+  // Получить инструкции
+  const instructions = await VerificationService.generateInstructions(token.id);
+
+  // Показать инструкции
+  const panel = buildVerificationInstructions(instructions);
+
+  await interaction.editReply(panel);
+
+  logger.info('Telegram verification token generated via panel', {
+    tokenId: token.id,
+    subdivisionId,
+    userId: interaction.user.id,
+  });
+}
+
+/**
+ * Переключение приема каллаутов
+ */
+async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
   }
 
   // Переключить флаг
@@ -283,12 +351,20 @@ async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionI
 /**
  * Показать подтверждение удаления
  */
-async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisionId: number) {
+async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!subdivision) {
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
   }
 
   const panel = buildDeleteConfirmation(subdivision);
@@ -311,6 +387,14 @@ async function handleDeleteSubdivision(
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
   await SubdivisionService.deleteSubdivision(subdivisionId);
 
   // Вернуться к списку подразделений
@@ -321,6 +405,78 @@ async function handleDeleteSubdivision(
     name: subdivision.name,
     userId: interaction.user.id,
   });
+}
+
+/**
+ * Показать modal для настройки embed подразделения
+ */
+async function showConfigureEmbedModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`department_modal_configure_embed_${subdivisionId}`)
+    .setTitle(`Настроить Embed: ${subdivision.name.substring(0, 30)}`);
+
+  // Поле 1: Заголовок
+  const titleInput = new TextInputBuilder()
+    .setCustomId('embed_title')
+    .setLabel('Заголовок Embed')
+    .setPlaceholder('Оставьте пустым для использования названия подразделения')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(256)
+    .setValue(subdivision.embed_title || '');
+
+  // Поле 2: Описание
+  const descriptionInput = new TextInputBuilder()
+    .setCustomId('embed_description')
+    .setLabel('Описание Embed')
+    .setPlaceholder('Оставьте пустым для использования описания подразделения')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMaxLength(4096)
+    .setValue(subdivision.embed_description || '');
+
+  // Поле 3: URL изображения
+  const imageInput = new TextInputBuilder()
+    .setCustomId('embed_image_url')
+    .setLabel('URL основного изображения')
+    .setPlaceholder('https://example.com/image.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(subdivision.embed_image_url || '');
+
+  // Поле 4: URL миниатюры
+  const thumbnailInput = new TextInputBuilder()
+    .setCustomId('embed_thumbnail_url')
+    .setLabel('URL миниатюры (thumbnail)')
+    .setPlaceholder('https://example.com/thumbnail.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(subdivision.embed_thumbnail_url || '');
+
+  // Поле 5: Цвет
+  const colorInput = new TextInputBuilder()
+    .setCustomId('embed_color')
+    .setLabel('Цвет в hex формате')
+    .setPlaceholder('#3498db или 3498db')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(7)
+    .setValue(subdivision.embed_color || '');
+
+  const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput);
+  const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput);
+  const row3 = new ActionRowBuilder<TextInputBuilder>().addComponents(imageInput);
+  const row4 = new ActionRowBuilder<TextInputBuilder>().addComponents(thumbnailInput);
+  const row5 = new ActionRowBuilder<TextInputBuilder>().addComponents(colorInput);
+
+  modal.addComponents(row1, row2, row3, row4, row5);
+
+  await interaction.showModal(modal);
 }
 
 export default handleDepartmentPanelButton;

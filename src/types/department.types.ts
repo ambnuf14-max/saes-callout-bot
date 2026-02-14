@@ -13,6 +13,7 @@ export interface VerificationInstructions {
   subdivisionName: string;
   expiresAt: Date;
   commandText: string;  // Готовая строка для копирования: "/verify ABC123"
+  platform?: 'vk' | 'telegram';
 }
 
 export enum LeaderPanelAction {

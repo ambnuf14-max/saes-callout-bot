@@ -1,5 +1,7 @@
 import database from './db';
 import logger from '../utils/logger';
+import runTelegramIntegrationMigration from './migrations/003_telegram_integration';
+import runSubdivisionEmbedsMigration from './migrations/004_subdivision_embeds';
 
 /**
  * SQL схема для всех таблиц
@@ -147,6 +149,10 @@ export async function runMigrations(): Promise<void> {
     // Создать таблицы
     await database.exec(MIGRATIONS_SQL);
 
+    // Выполнить дополнительные миграции
+    await runTelegramIntegrationMigration();
+    await runSubdivisionEmbedsMigration();
+
     logger.info('Database migrations completed successfully');
   } catch (error) {
     logger.error('Failed to run migrations', {
@@ -162,7 +168,7 @@ export async function runMigrations(): Promise<void> {
 export async function checkTables(): Promise<boolean> {
   try {
     const tables = await database.all<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'subdivisions', 'callouts', 'callout_responses', 'callout_rate_limits', 'vk_verification_tokens')`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'subdivisions', 'callouts', 'callout_responses', 'callout_rate_limits', 'verification_tokens')`
     );
 
     return tables.length === 7;
@@ -179,7 +185,7 @@ export async function clearAllTables(): Promise<void> {
   logger.warn('Clearing all tables - this should only be used in development!');
 
   try {
-    await database.run('DELETE FROM vk_verification_tokens');
+    await database.run('DELETE FROM verification_tokens');
     await database.run('DELETE FROM callout_rate_limits');
     await database.run('DELETE FROM callout_responses');
     await database.run('DELETE FROM callouts');

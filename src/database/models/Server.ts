@@ -71,6 +71,14 @@ export class ServerModel {
       updates.push('leader_role_ids = ?');
       params.push(JSON.stringify(data.leader_role_ids));
     }
+    if (data.audit_log_channel_id !== undefined) {
+      updates.push('audit_log_channel_id = ?');
+      params.push(data.audit_log_channel_id);
+    }
+    if (data.callout_allowed_role_ids !== undefined) {
+      updates.push('callout_allowed_role_ids = ?');
+      params.push(JSON.stringify(data.callout_allowed_role_ids));
+    }
 
     if (updates.length === 0) {
       return await this.findById(id);

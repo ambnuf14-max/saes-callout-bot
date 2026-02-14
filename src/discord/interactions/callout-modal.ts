@@ -1,4 +1,4 @@
-import { ModalSubmitInteraction } from 'discord.js';
+import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel, SubdivisionModel } from '../../database/models';
 import CalloutService from '../../services/callout.service';
@@ -20,13 +20,13 @@ export async function handleCalloutModalSubmit(
   if (!interaction.inGuild() || !interaction.guild) {
     await interaction.reply({
       content: `${EMOJI.ERROR} Эта функция доступна только на сервере`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
   // Отложенный ответ, так как создание канала может занять время
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     // Получить данные из модального окна

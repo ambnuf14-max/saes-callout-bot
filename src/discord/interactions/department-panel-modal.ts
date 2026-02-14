@@ -1,4 +1,4 @@
-import { ModalSubmitInteraction } from 'discord.js';
+import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
@@ -19,7 +19,7 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
   if (!department) {
     await interaction.reply({
       content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -36,6 +36,11 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
       const subdivisionId = parseInt(customId.split('_')[4]);
       await handleEditSubdivision(interaction, subdivisionId, department.id);
     }
+    // Настройка embed подразделения
+    else if (customId.startsWith('department_modal_configure_embed_')) {
+      const subdivisionId = parseInt(customId.split('_')[4]);
+      await handleConfigureEmbed(interaction, subdivisionId, department.id);
+    }
   } catch (error) {
     logger.error('Error handling department panel modal', {
       error: error instanceof Error ? error.message : error,
@@ -51,7 +56,7 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content });
     } else {
-      await interaction.reply({ content, ephemeral: true });
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
     }
   }
 }
@@ -100,6 +105,20 @@ async function handleEditSubdivision(
 ) {
   await interaction.deferUpdate();
 
+  // Проверить что подразделение существует и принадлежит департаменту
+  const existingSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!existingSubdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (existingSubdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
   const name = interaction.fields.getTextInputValue('subdivision_name').trim();
   const description = interaction.fields.getTextInputValue('subdivision_description').trim();
 
@@ -123,6 +142,111 @@ async function handleEditSubdivision(
   const panel = buildSubdivisionDetailPanel(subdivision);
 
   await interaction.editReply(panel);
+}
+
+/**
+ * Обработка настройки embed подразделения
+ */
+async function handleConfigureEmbed(
+  interaction: ModalSubmitInteraction,
+  subdivisionId: number,
+  departmentId: number
+) {
+  await interaction.deferUpdate();
+
+  // Проверить что подразделение существует и принадлежит департаменту
+  const existingSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!existingSubdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (existingSubdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
+  // Получить значения полей
+  const title = interaction.fields.getTextInputValue('embed_title').trim() || undefined;
+  const description = interaction.fields.getTextInputValue('embed_description').trim() || undefined;
+  const imageUrl = interaction.fields.getTextInputValue('embed_image_url').trim() || undefined;
+  const thumbnailUrl = interaction.fields.getTextInputValue('embed_thumbnail_url').trim() || undefined;
+  const color = interaction.fields.getTextInputValue('embed_color').trim() || undefined;
+
+  // Валидация URL изображений
+  if (imageUrl && !isValidUrl(imageUrl)) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} Некорректный URL основного изображения`,
+      'INVALID_IMAGE_URL',
+      400
+    );
+  }
+
+  if (thumbnailUrl && !isValidUrl(thumbnailUrl)) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} Некорректный URL миниатюры`,
+      'INVALID_THUMBNAIL_URL',
+      400
+    );
+  }
+
+  // Валидация hex цвета
+  if (color && !isValidHexColor(color)) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
+      'INVALID_HEX_COLOR',
+      400
+    );
+  }
+
+  // Нормализовать цвет (добавить # если нужно)
+  const normalizedColor = color && !color.startsWith('#') ? `#${color}` : color;
+
+  // Обновить подразделение
+  const subdivision = await SubdivisionService.updateSubdivision(subdivisionId, {
+    embed_title: title,
+    embed_description: description,
+    embed_image_url: imageUrl,
+    embed_thumbnail_url: thumbnailUrl,
+    embed_color: normalizedColor,
+  });
+
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  logger.info('Subdivision embed configured via panel', {
+    subdivisionId,
+    userId: interaction.user.id,
+  });
+
+  // Показать обновленную панель подразделения
+  const panel = buildSubdivisionDetailPanel(subdivision);
+
+  await interaction.editReply(panel);
+}
+
+/**
+ * Проверить корректность URL
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Проверить корректность hex цвета
+ */
+function isValidHexColor(color: string): boolean {
+  // Поддержка форматов: #RRGGBB или RRGGBB
+  const hexPattern = /^#?[0-9A-Fa-f]{6}$/;
+  return hexPattern.test(color);
 }
 
 export default handleDepartmentPanelModal;

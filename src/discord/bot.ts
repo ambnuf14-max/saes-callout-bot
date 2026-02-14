@@ -12,12 +12,8 @@ import logger from '../utils/logger';
 import { Command } from './types';
 
 // Импорт команд
-import setupCommand from './commands/setup';
-import departmentCommand from './commands/department';
-import closeCalloutCommand from './commands/close-callout';
 import settingsCommand from './commands/settings';
-import departmentLeaderCommand from './commands/department';
-import departmentConfigCommand from './commands/department-config';
+import factionCommand from './commands/faction';
 
 // Импорт обработчиков событий
 import readyHandler from './events/ready';
@@ -48,12 +44,8 @@ class DiscordBot {
    * Регистрация команд
    */
   private registerCommands() {
-    this.commands.set(setupCommand.data.name, setupCommand);
-    this.commands.set(departmentCommand.data.name, departmentCommand);
-    this.commands.set(closeCalloutCommand.data.name, closeCalloutCommand);
     this.commands.set(settingsCommand.data.name, settingsCommand);
-    this.commands.set(departmentLeaderCommand.data.name, departmentLeaderCommand);
-    this.commands.set(departmentConfigCommand.data.name, departmentConfigCommand);
+    this.commands.set(factionCommand.data.name, factionCommand);
 
     logger.info('Commands registered', {
       count: this.commands.size,
@@ -65,7 +57,7 @@ class DiscordBot {
    * Регистрация обработчиков событий
    */
   private registerEventHandlers() {
-    this.client.once('ready', () => readyHandler(this.client));
+    this.client.once('clientReady', () => readyHandler(this.client));
     this.client.on('interactionCreate', (interaction) =>
       interactionCreateHandler(interaction, this.commands)
     );

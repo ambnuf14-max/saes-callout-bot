@@ -29,6 +29,11 @@ async function main() {
     const vkBot = (await import('./vk/bot')).default;
     await vkBot.start();
 
+    // Инициализация Telegram бота
+    logger.info('Starting Telegram bot...');
+    const telegramBot = (await import('./telegram/bot')).default;
+    await telegramBot.start();
+
     logger.info('Bot initialized successfully');
   } catch (error) {
     logger.error('Failed to start bot', error);
@@ -43,8 +48,10 @@ async function shutdown(signal: string) {
   try {
     const discordBot = (await import('./discord/bot')).default;
     const vkBot = (await import('./vk/bot')).default;
+    const telegramBot = (await import('./telegram/bot')).default;
     await discordBot.stop();
     await vkBot.stop();
+    await telegramBot.stop();
     await database.close();
   } catch (error) {
     logger.error('Error during shutdown', { error });

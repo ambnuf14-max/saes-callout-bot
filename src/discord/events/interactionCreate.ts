@@ -1,4 +1,4 @@
-import { Interaction, Collection } from 'discord.js';
+import { Interaction, Collection, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { handleDiscordError } from '../../utils/error-handler';
 import { Command } from '../types';
@@ -9,6 +9,14 @@ import handleDepartmentPanelButton from '../interactions/department-panel-button
 import handleDepartmentPanelModal from '../interactions/department-panel-modal';
 import handleDepartmentSelect from '../interactions/department-select';
 import { handleSetupModeSelect } from '../interactions/setup-mode-select';
+import { handleCloseCalloutButton, handleCloseCalloutModal } from '../interactions/close-callout-button';
+import {
+  handleAdminPanelButton,
+  handleAdminRoleSelect,
+  handleAdminChannelSelect,
+  handleAdminStringSelect,
+} from '../interactions/admin-panel-button';
+import { handleAdminPanelModal } from '../interactions/admin-panel-modal';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -26,7 +34,7 @@ export default async function interactionCreateHandler(
         logger.warn('Unknown command', { commandName: interaction.commandName });
         await interaction.reply({
           content: '❌ Неизвестная команда',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -38,6 +46,7 @@ export default async function interactionCreateHandler(
       });
 
       await command.execute(interaction);
+      return;
     }
 
     // Обработка нажатий кнопок
@@ -56,6 +65,10 @@ export default async function interactionCreateHandler(
         interaction.customId === 'setup_reconfigure'
       ) {
         await handleSetupModeSelect(interaction);
+      } else if (interaction.customId.startsWith('close_callout_')) {
+        await handleCloseCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('admin_')) {
+        await handleAdminPanelButton(interaction);
       } else if (interaction.customId.startsWith('department_')) {
         await handleDepartmentPanelButton(interaction);
       }
@@ -72,6 +85,10 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId === 'callout_modal') {
         await handleCalloutModalSubmit(interaction);
+      } else if (interaction.customId.startsWith('close_callout_modal_')) {
+        await handleCloseCalloutModal(interaction);
+      } else if (interaction.customId.startsWith('admin_modal_')) {
+        await handleAdminPanelModal(interaction);
       } else if (interaction.customId.startsWith('department_modal_')) {
         await handleDepartmentPanelModal(interaction);
       }
@@ -90,8 +107,38 @@ export default async function interactionCreateHandler(
         await handleSubdivisionSelect(interaction);
       } else if (interaction.customId.startsWith('setup_select_')) {
         await handleSetupModeSelect(interaction);
+      } else if (interaction.customId.startsWith('admin_')) {
+        await handleAdminStringSelect(interaction);
       } else if (interaction.customId.startsWith('department_')) {
         await handleDepartmentSelect(interaction);
+      }
+      return;
+    }
+
+    // Обработка RoleSelectMenu
+    if (interaction.isRoleSelectMenu()) {
+      logger.info('Role select menu interaction', {
+        customId: interaction.customId,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+      });
+
+      if (interaction.customId.startsWith('admin_')) {
+        await handleAdminRoleSelect(interaction);
+      }
+      return;
+    }
+
+    // Обработка ChannelSelectMenu
+    if (interaction.isChannelSelectMenu()) {
+      logger.info('Channel select menu interaction', {
+        customId: interaction.customId,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+      });
+
+      if (interaction.customId.startsWith('admin_')) {
+        await handleAdminChannelSelect(interaction);
       }
       return;
     }

@@ -1,15 +1,16 @@
-import { VkVerificationTokenModel, SubdivisionModel } from '../database/models';
+import { VerificationTokenModel, SubdivisionModel } from '../database/models';
 import {
-  VkVerificationToken,
+  VerificationToken,
   CreateVerificationTokenDTO,
   Subdivision,
+  Platform,
 } from '../types/database.types';
 import { VerificationInstructions } from '../types/department.types';
 import logger from '../utils/logger';
 import { CalloutError } from '../utils/error-handler';
 
 /**
- * Сервис для работы с верификацией VK бесед
+ * Сервис для работы с верификацией VK бесед и Telegram групп
  */
 export class VerificationService {
   // Максимальное количество активных токенов для одного подразделения
@@ -20,7 +21,7 @@ export class VerificationService {
    */
   static async generateVerificationToken(
     data: CreateVerificationTokenDTO
-  ): Promise<VkVerificationToken> {
+  ): Promise<VerificationToken> {
     // Проверить существование подразделения
     const subdivision = await SubdivisionModel.findById(data.subdivision_id);
     if (!subdivision) {
@@ -31,9 +32,12 @@ export class VerificationService {
       );
     }
 
-    // Проверить количество активных токенов для этого подразделения (rate limiting)
-    const activeCount = await VkVerificationTokenModel.countActiveForSubdivision(
-      data.subdivision_id
+    const platform = data.platform || 'vk';
+
+    // Проверить количество активных токенов для этого подразделения и платформы (rate limiting)
+    const activeCount = await VerificationTokenModel.countActiveForSubdivision(
+      data.subdivision_id,
+      platform
     );
 
     if (activeCount >= this.MAX_ACTIVE_TOKENS_PER_SUBDIVISION) {
@@ -45,10 +49,11 @@ export class VerificationService {
     }
 
     // Создать токен
-    const token = await VkVerificationTokenModel.create(data);
+    const token = await VerificationTokenModel.create(data);
 
     logger.info('Verification token generated', {
       tokenId: token.id,
+      platform: platform,
       subdivisionId: data.subdivision_id,
       createdBy: data.created_by,
     });
@@ -62,7 +67,7 @@ export class VerificationService {
   static async generateInstructions(
     tokenId: number
   ): Promise<VerificationInstructions> {
-    const token = await VkVerificationTokenModel.findById(tokenId);
+    const token = await VerificationTokenModel.findById(tokenId);
     if (!token) {
       throw new CalloutError('Токен не найден', 'TOKEN_NOT_FOUND', 404);
     }
@@ -84,18 +89,20 @@ export class VerificationService {
       subdivisionName: subdivision.name,
       expiresAt,
       commandText,
+      platform: token.platform, // Добавляем платформу в инструкции
     };
   }
 
   /**
-   * Верифицировать токен и привязать VK беседу
+   * Верифицировать токен и привязать VK беседу или Telegram группу
    */
   static async verifyToken(
     tokenString: string,
-    vkPeerId: string
-  ): Promise<{ subdivision: Subdivision; token: VkVerificationToken }> {
+    chatId: string,
+    platform: Platform = 'vk'
+  ): Promise<{ subdivision: Subdivision; token: VerificationToken }> {
     // Найти токен
-    const token = await VkVerificationTokenModel.findByToken(tokenString);
+    const token = await VerificationTokenModel.findByToken(tokenString);
     if (!token) {
       throw new CalloutError(
         'Токен не найден или истек',
@@ -104,8 +111,17 @@ export class VerificationService {
       );
     }
 
+    // Проверить соответствие платформы
+    if (token.platform !== platform) {
+      throw new CalloutError(
+        `Токен предназначен для ${token.platform === 'vk' ? 'VK' : 'Telegram'}, но используется в ${platform === 'vk' ? 'VK' : 'Telegram'}`,
+        'PLATFORM_MISMATCH',
+        400
+      );
+    }
+
     // Проверить валидность токена
-    const validation = VkVerificationTokenModel.getValidationInfo(token);
+    const validation = VerificationTokenModel.getValidationInfo(token);
     if (!validation.valid) {
       throw new CalloutError(
         validation.reason || 'Токен невалиден',
@@ -124,19 +140,24 @@ export class VerificationService {
       );
     }
 
-    // Привязать VK беседу к подразделению
-    await SubdivisionModel.linkVkChat(token.subdivision_id, vkPeerId);
+    // Привязать чат к подразделению в зависимости от платформы
+    if (platform === 'vk') {
+      await SubdivisionModel.linkVkChat(token.subdivision_id, chatId);
+    } else if (platform === 'telegram') {
+      await SubdivisionModel.linkTelegramChat(token.subdivision_id, chatId);
+    }
 
     // Пометить токен как использованный
-    const usedToken = await VkVerificationTokenModel.markAsUsed(token.id, vkPeerId);
+    const usedToken = await VerificationTokenModel.markAsUsed(token.id, chatId);
     if (!usedToken) {
       throw new Error('Failed to mark token as used');
     }
 
-    logger.info('Token verified and VK chat linked', {
+    logger.info('Token verified and chat linked', {
       tokenId: token.id,
+      platform: platform,
       subdivisionId: token.subdivision_id,
-      vkPeerId,
+      chatId,
     });
 
     // Вернуть обновленное подразделение
@@ -152,7 +173,7 @@ export class VerificationService {
    * Очистить просроченные токены
    */
   static async cleanupExpiredTokens(): Promise<number> {
-    const deletedCount = await VkVerificationTokenModel.cleanupExpired();
+    const deletedCount = await VerificationTokenModel.cleanupExpired();
 
     logger.info('Expired verification tokens cleaned up', { deletedCount });
 
@@ -163,7 +184,7 @@ export class VerificationService {
    * Очистить использованные токены старше указанного времени
    */
   static async cleanupUsedTokens(olderThanHours: number = 24): Promise<number> {
-    const deletedCount = await VkVerificationTokenModel.cleanupUsed(olderThanHours);
+    const deletedCount = await VerificationTokenModel.cleanupUsed(olderThanHours);
 
     logger.info('Used verification tokens cleaned up', {
       deletedCount,
@@ -177,24 +198,25 @@ export class VerificationService {
    * Получить активные токены для подразделения
    */
   static async getActiveTokensForSubdivision(
-    subdivisionId: number
-  ): Promise<VkVerificationToken[]> {
-    const allTokens = await VkVerificationTokenModel.findBySubdivisionId(subdivisionId);
+    subdivisionId: number,
+    platform?: Platform
+  ): Promise<VerificationToken[]> {
+    const allTokens = await VerificationTokenModel.findBySubdivisionId(subdivisionId, platform);
 
     // Фильтровать только валидные токены
-    return allTokens.filter((token) => VkVerificationTokenModel.isValid(token));
+    return allTokens.filter((token) => VerificationTokenModel.isValid(token));
   }
 
   /**
    * Получить информацию о токене
    */
   static async getTokenInfo(tokenString: string): Promise<{
-    token: VkVerificationToken;
+    token: VerificationToken;
     subdivision: Subdivision;
     valid: boolean;
     reason?: string;
   }> {
-    const token = await VkVerificationTokenModel.findByToken(tokenString);
+    const token = await VerificationTokenModel.findByToken(tokenString);
     if (!token) {
       throw new CalloutError(
         'Токен не найден',
@@ -212,7 +234,7 @@ export class VerificationService {
       );
     }
 
-    const validation = VkVerificationTokenModel.getValidationInfo(token);
+    const validation = VerificationTokenModel.getValidationInfo(token);
 
     return {
       token,

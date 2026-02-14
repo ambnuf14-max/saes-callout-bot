@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, CommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, CommandInteraction, MessageFlags } from 'discord.js';
 import { Command } from '../types';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
@@ -8,21 +8,21 @@ import { buildMainPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
-const departmentCommand: Command = {
+const factionCommand: Command = {
   data: new SlashCommandBuilder()
-    .setName('department')
-    .setDescription('Панель управления вашим департаментом (для лидеров)'),
+    .setName('faction')
+    .setDescription('Панель управления вашей фракцией'),
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.inGuild() || !interaction.guild) {
       await interaction.reply({
         content: `${EMOJI.ERROR} Эта команда доступна только на сервере`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const member = await interaction.guild.members.fetch(interaction.user.id);
@@ -74,7 +74,7 @@ const departmentCommand: Command = {
         guildId: interaction.guild.id,
       });
     } catch (error) {
-      logger.error('Error in department command', {
+      logger.error('Error in faction command', {
         error: error instanceof Error ? error.message : error,
         userId: interaction.user.id,
         guildId: interaction.guild?.id,
@@ -93,4 +93,4 @@ const departmentCommand: Command = {
   },
 };
 
-export default departmentCommand;
+export default factionCommand;

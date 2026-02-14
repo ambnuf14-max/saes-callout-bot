@@ -26,6 +26,10 @@ export enum AuditEventType {
   VK_RESPONSE_RECEIVED = 'vk_response_received',
   VK_CHAT_LINKED = 'vk_chat_linked',
 
+  // Telegram интеграция
+  TELEGRAM_RESPONSE_RECEIVED = 'telegram_response_received',
+  TELEGRAM_CHAT_LINKED = 'telegram_chat_linked',
+
   // Фракции и подразделения
   FACTION_CREATED = 'faction_created',
   FACTION_UPDATED = 'faction_updated',
@@ -137,6 +141,26 @@ export interface VkChatLinkedData extends BaseAuditEventData {
 }
 
 /**
+ * Данные для события получения Telegram ответа
+ */
+export interface TelegramResponseReceivedData extends BaseAuditEventData {
+  calloutId: number;
+  departmentName: string;
+  telegramUserId: string;
+  telegramUserName: string;
+}
+
+/**
+ * Данные для события привязки Telegram группы
+ */
+export interface TelegramChatLinkedData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+  telegramChatId: string;
+  chatTitle?: string;
+}
+
+/**
  * Данные для событий фракций
  */
 export interface FactionEventData extends BaseAuditEventData {
@@ -163,6 +187,8 @@ export type AuditEventData =
   | SettingsUpdatedData
   | LeaderRoleAddedData
   | LeaderRoleRemovedData
+  | TelegramResponseReceivedData
+  | TelegramChatLinkedData
   | AuditLogChannelSetData
   | VkResponseReceivedData
   | VkChatLinkedData

@@ -1,4 +1,4 @@
-import { Interaction } from 'discord.js';
+import { Interaction, MessageFlags } from 'discord.js';
 import logger from './logger';
 import { EMOJI } from '../config/constants';
 
@@ -39,22 +39,45 @@ export async function handleDiscordError(
       : `${EMOJI.ERROR} Произошла ошибка при выполнении команды. Пожалуйста, попробуйте позже.`;
 
   try {
-    if (interaction.replied || interaction.deferred) {
+    if (interaction.deferred) {
+      await interaction.editReply({
+        content: userMessage,
+      });
+    } else if (interaction.replied) {
       await interaction.followUp({
         content: userMessage,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } else {
       await interaction.reply({
         content: userMessage,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
-  } catch (replyError) {
-    logger.error('Failed to send error message to user', {
-      error: replyError,
-      originalError: error.message,
-    });
+  } catch (replyError: any) {
+    // Если взаимодействие уже подтверждено, попробуем editReply
+    if (replyError?.code === 40060 || replyError?.rawError?.code === 40060) {
+      try {
+        if (interaction.deferred) {
+          await interaction.editReply({ content: userMessage });
+        } else {
+          logger.warn('Cannot send error message - interaction already acknowledged', {
+            interactionId: interaction.id,
+            originalError: error.message,
+          });
+        }
+      } catch (editError) {
+        logger.error('Failed to edit reply with error message', {
+          error: editError,
+          originalError: error.message,
+        });
+      }
+    } else {
+      logger.error('Failed to send error message to user', {
+        error: replyError,
+        originalError: error.message,
+      });
+    }
   }
 }
 
@@ -63,6 +86,17 @@ export async function handleDiscordError(
  */
 export function handleVkError(error: Error, context: any): void {
   logger.error('VK handler error', {
+    error: error.message,
+    stack: error.stack,
+    context,
+  });
+}
+
+/**
+ * Обработка ошибок Telegram
+ */
+export function handleTelegramError(error: Error, context: any): void {
+  logger.error('Telegram handler error', {
     error: error.message,
     stack: error.stack,
     context,

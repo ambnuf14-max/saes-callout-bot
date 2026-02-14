@@ -4,6 +4,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
+  MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
@@ -11,10 +12,23 @@ import { EMOJI, LIMITS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
- * Временное хранилище выбранного подразделения (user_id → subdivision_id)
- * В продакшене можно использовать Redis, но для простоты - Map
+ * Временное хранилище выбранного подразделения (user_id → {subdivisionId, expiresAt})
+ * Записи автоматически удаляются через 5 минут
  */
-const subdivisionSelections = new Map<string, number>();
+const SELECTION_TTL_MS = 5 * 60 * 1000;
+const subdivisionSelections = new Map<string, { subdivisionId: number; expiresAt: number }>();
+
+/**
+ * Периодическая очистка просроченных записей (каждые 60 секунд)
+ */
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of subdivisionSelections) {
+    if (now >= entry.expiresAt) {
+      subdivisionSelections.delete(userId);
+    }
+  }
+}, 60_000);
 
 /**
  * Обработчик выбора подразделения из Select Menu
@@ -25,7 +39,7 @@ export async function handleSubdivisionSelect(
   if (!interaction.inGuild() || !interaction.guild) {
     await interaction.reply({
       content: `${EMOJI.ERROR} Эта функция доступна только на сервере`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -54,7 +68,7 @@ export async function handleSubdivisionSelect(
     if (!subdivision.is_accepting_callouts) {
       await interaction.reply({
         content: MESSAGES.SUBDIVISION.CALLOUTS_PAUSED,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -63,13 +77,16 @@ export async function handleSubdivisionSelect(
     if (!subdivision.is_active) {
       await interaction.reply({
         content: `${EMOJI.ERROR} Подразделение неактивно`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    // Сохранить выбор в временное хранилище
-    subdivisionSelections.set(interaction.user.id, subdivisionId);
+    // Сохранить выбор в временное хранилище с TTL
+    subdivisionSelections.set(interaction.user.id, {
+      subdivisionId,
+      expiresAt: Date.now() + SELECTION_TTL_MS,
+    });
 
     // Создать модальное окно с полями "Подробности" и "Место"
     const modal = new ModalBuilder()
@@ -130,7 +147,7 @@ export async function handleSubdivisionSelect(
 
         await interaction.reply({
           content: errorMessage,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } catch (replyError) {
         logger.error('Failed to send error message to user', {
@@ -145,7 +162,13 @@ export async function handleSubdivisionSelect(
  * Получить выбранное подразделение для пользователя
  */
 export function getSubdivisionSelection(userId: string): number | undefined {
-  return subdivisionSelections.get(userId);
+  const entry = subdivisionSelections.get(userId);
+  if (!entry) return undefined;
+  if (Date.now() >= entry.expiresAt) {
+    subdivisionSelections.delete(userId);
+    return undefined;
+  }
+  return entry.subdivisionId;
 }
 
 /**

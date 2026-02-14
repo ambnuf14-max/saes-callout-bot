@@ -1,4 +1,4 @@
-import { Guild, TextChannel } from 'discord.js';
+import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { CalloutModel, SubdivisionModel, ServerModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
@@ -6,7 +6,7 @@ import validators from '../utils/validators';
 import { CalloutError } from '../utils/error-handler';
 import { createIncidentChannel, deleteIncidentChannel } from '../discord/utils/channel-manager';
 import { buildCalloutEmbed, buildClosedCalloutEmbed } from '../discord/utils/embed-builder';
-import { EMOJI, CALLOUT_STATUS } from '../config/constants';
+import { EMOJI, CALLOUT_STATUS, MESSAGES } from '../config/constants';
 import NotificationService from './notification.service';
 import config from '../config/config';
 import {
@@ -101,13 +101,22 @@ export class CalloutService {
       // 3. Создать Embed сообщение
       const embed = buildCalloutEmbed(callout, subdivision);
 
-      // 4. Отправить Embed в канал с mention роли
+      // 4. Создать кнопку "Закрыть инцидент"
+      const closeButton = new ButtonBuilder()
+        .setCustomId(`close_callout_${callout.id}`)
+        .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
+        .setStyle(ButtonStyle.Danger);
+
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton);
+
+      // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({
         content: `<@&${subdivision.discord_role_id}> - новый каллаут!`,
         embeds: [embed],
+        components: [actionRow],
       });
 
-      // 5. Обновить каллаут с ID канала и сообщения одним запросом
+      // 6. Обновить каллаут с ID канала и сообщения одним запросом
       await CalloutModel.update(callout.id, {
         discord_channel_id: channel.id,
         discord_message_id: message.id,
@@ -130,8 +139,9 @@ export class CalloutService {
       };
       await logAuditEvent(guild, AuditEventType.CALLOUT_CREATED, auditData);
 
-      // Отправить уведомление в VK (не критично, ошибки обрабатываются внутри)
+      // Отправить уведомления в VK и Telegram (не критично, ошибки обрабатываются внутри)
       await NotificationService.notifyVkAboutCallout(callout, subdivision);
+      await NotificationService.notifyTelegramAboutCallout(callout, subdivision);
 
       // Получить обновленный каллаут
       const updatedCallout = await CalloutModel.findById(callout.id);
@@ -240,7 +250,7 @@ export class CalloutService {
               // Создать обновленный embed
               const closedEmbed = buildClosedCalloutEmbed(closedCallout, subdivision);
 
-              await message.edit({ embeds: [closedEmbed] });
+              await message.edit({ embeds: [closedEmbed], components: [] });
 
               logger.info('Discord embed updated for closed callout', {
                 calloutId,
@@ -257,11 +267,21 @@ export class CalloutService {
         }
       }
 
-      // 4. Уведомить VK о закрытии
+      // 4. Уведомить VK и Telegram о закрытии
       try {
         await NotificationService.notifyVkAboutCalloutClosed(closedCallout);
       } catch (error) {
         logger.error('Failed to notify VK about closed callout', {
+          error: error instanceof Error ? error.message : error,
+          calloutId,
+        });
+        // Не критично
+      }
+
+      try {
+        await NotificationService.notifyTelegramAboutCalloutClosed(closedCallout);
+      } catch (error) {
+        logger.error('Failed to notify Telegram about closed callout', {
           error: error instanceof Error ? error.message : error,
           calloutId,
         });
