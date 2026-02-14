@@ -65,6 +65,16 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
       const subdivisionId = parseInt(customId.split('_')[3]);
       await handleLinkTelegram(interaction, subdivisionId, department.id);
     }
+    // Отвязка VK беседы
+    else if (customId.startsWith('department_unlink_vk_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleUnlinkVk(interaction, subdivisionId, department.id);
+    }
+    // Отвязка Telegram группы
+    else if (customId.startsWith('department_unlink_telegram_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleUnlinkTelegram(interaction, subdivisionId, department.id);
+    }
     // Переключение приема каллаутов
     else if (customId.startsWith('department_toggle_callouts_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
@@ -257,12 +267,21 @@ async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: numbe
   // Показать инструкции
   const panel = buildVerificationInstructions(instructions);
 
-  await interaction.editReply(panel);
+  const message = await interaction.editReply(panel);
+
+  // Сохранить Discord message ID для последующего редактирования
+  const { VerificationTokenModel } = await import('../../database/models');
+  await VerificationTokenModel.updateDiscordMessage(
+    token.id,
+    interaction.channelId,
+    message.id
+  );
 
   logger.info('VK verification token generated via panel', {
     tokenId: token.id,
     subdivisionId,
     userId: interaction.user.id,
+    messageId: message.id,
   });
 }
 
@@ -299,10 +318,157 @@ async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId:
   // Показать инструкции
   const panel = buildVerificationInstructions(instructions);
 
-  await interaction.editReply(panel);
+  const message = await interaction.editReply(panel);
+
+  // Сохранить Discord message ID для последующего редактирования
+  const { VerificationTokenModel } = await import('../../database/models');
+  await VerificationTokenModel.updateDiscordMessage(
+    token.id,
+    interaction.channelId,
+    message.id
+  );
 
   logger.info('Telegram verification token generated via panel', {
     tokenId: token.id,
+    subdivisionId,
+    userId: interaction.user.id,
+    messageId: message.id,
+  });
+}
+
+/**
+ * Обработка отвязки VK беседы
+ */
+async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
+  if (!subdivision.vk_chat_id) {
+    throw new CalloutError('VK беседа не привязана', 'VK_NOT_LINKED', 400);
+  }
+
+  // Отправить прощальное сообщение в VK беседу и выйти
+  try {
+    const vkBot = (await import('../../vk/bot')).default;
+
+    await vkBot.getApi().api.messages.send({
+      peer_id: parseInt(subdivision.vk_chat_id),
+      message: `${EMOJI.INFO} Бот был отвязан от подразделения "${subdivision.name}".\n\nДо встречи!`,
+      random_id: Math.floor(Math.random() * 1000000),
+    });
+
+    logger.info('Sent goodbye message to VK chat', {
+      subdivisionId,
+      vkChatId: subdivision.vk_chat_id,
+    });
+  } catch (error) {
+    logger.warn('Failed to send goodbye message to VK', {
+      error: error instanceof Error ? error.message : error,
+      vkChatId: subdivision.vk_chat_id,
+    });
+  }
+
+  // Отвязать VK беседу в БД
+  await SubdivisionService.updateSubdivision(subdivisionId, { vk_chat_id: null });
+
+  // Показать обновленную панель
+  const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!updatedSubdivision) {
+    throw new Error('Failed to retrieve updated subdivision');
+  }
+
+  const panel = buildSubdivisionDetailPanel(updatedSubdivision);
+  await interaction.editReply(panel);
+
+  logger.info('VK chat unlinked successfully', {
+    subdivisionId,
+    userId: interaction.user.id,
+  });
+}
+
+/**
+ * Обработка отвязки Telegram группы
+ */
+async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
+  if (!subdivision.telegram_chat_id) {
+    throw new CalloutError('Telegram группа не привязана', 'TELEGRAM_NOT_LINKED', 400);
+  }
+
+  const telegramBot = (await import('../../telegram/bot')).default;
+
+  // Отправить прощальное сообщение в Telegram группу
+  try {
+    await telegramBot.getApi().sendMessage(
+      subdivision.telegram_chat_id,
+      `${EMOJI.INFO} Бот был отвязан от подразделения "${subdivision.name}".\n\nДо встречи!`
+    );
+
+    logger.info('Sent goodbye message to Telegram chat', {
+      subdivisionId,
+      telegramChatId: subdivision.telegram_chat_id,
+    });
+  } catch (error) {
+    logger.warn('Failed to send goodbye message to Telegram', {
+      error: error instanceof Error ? error.message : error,
+      telegramChatId: subdivision.telegram_chat_id,
+    });
+  }
+
+  // Покинуть группу (независимо от результата отправки сообщения)
+  try {
+    await telegramBot.getApi().leaveChat(subdivision.telegram_chat_id);
+
+    logger.info('Left Telegram chat successfully', {
+      subdivisionId,
+      telegramChatId: subdivision.telegram_chat_id,
+    });
+  } catch (error) {
+    logger.warn('Failed to leave Telegram chat', {
+      error: error instanceof Error ? error.message : error,
+      telegramChatId: subdivision.telegram_chat_id,
+    });
+  }
+
+  // Отвязать Telegram группу в БД
+  await SubdivisionService.updateSubdivision(subdivisionId, { telegram_chat_id: null });
+
+  // Показать обновленную панель
+  const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!updatedSubdivision) {
+    throw new Error('Failed to retrieve updated subdivision');
+  }
+
+  const panel = buildSubdivisionDetailPanel(updatedSubdivision);
+  await interaction.editReply(panel);
+
+  logger.info('Telegram chat unlinked successfully', {
     subdivisionId,
     userId: interaction.user.id,
   });

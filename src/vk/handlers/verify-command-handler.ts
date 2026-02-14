@@ -63,7 +63,7 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
     // Уведомить лидера в Discord и залогировать событие
     await notifyDiscordAboutVerification(
       result.subdivision,
-      result.token.created_by,
+      result.token,
       chatTitle,
       peerId
     );
@@ -108,7 +108,7 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
  */
 async function notifyDiscordAboutVerification(
   subdivision: any,
-  leaderUserId: string,
+  token: any,
   chatTitle: string,
   vkChatId: string
 ): Promise<void> {
@@ -116,15 +116,49 @@ async function notifyDiscordAboutVerification(
     // Импортируем discordBot динамически чтобы избежать циклических зависимостей
     const { default: discordBot } = await import('../../discord/bot');
 
+    // Редактировать исходное сообщение с инструкциями (если есть)
+    if (token.discord_channel_id && token.discord_message_id) {
+      try {
+        const channel = await discordBot.client.channels.fetch(token.discord_channel_id);
+        if (channel?.isTextBased()) {
+          const message = await channel.messages.fetch(token.discord_message_id);
+          const { EmbedBuilder } = await import('discord.js');
+          const { COLORS } = await import('../../config/constants');
+
+          const successEmbed = new EmbedBuilder()
+            .setColor(COLORS.SUCCESS)
+            .setTitle(`${EMOJI.SUCCESS} VK беседа успешно привязана!`)
+            .setDescription(
+              `**Подразделение:** ${subdivision.name}\n` +
+              `**Беседа:** ${chatTitle}\n` +
+              `**VK Chat ID:** \`${vkChatId}\``
+            )
+            .setTimestamp();
+
+          await message.edit({ embeds: [successEmbed], components: [] });
+
+          logger.info('Updated Discord instructions message with success', {
+            messageId: token.discord_message_id,
+            channelId: token.discord_channel_id,
+          });
+        }
+      } catch (editError) {
+        logger.warn('Failed to edit instructions message', {
+          error: editError,
+          messageId: token.discord_message_id,
+        });
+      }
+    }
+
     // Попытаться отправить DM лидеру
     try {
-      const user = await discordBot.client.users.fetch(leaderUserId);
+      const user = await discordBot.client.users.fetch(token.created_by);
       await user.send(
         MESSAGES.VERIFICATION.SUCCESS_LINKED(subdivision.name, chatTitle)
       );
     } catch (dmError) {
       logger.warn('Failed to send DM to leader', {
-        userId: leaderUserId,
+        userId: token.created_by,
         error: dmError,
       });
       // Не критично, если не удалось отправить DM
@@ -144,7 +178,7 @@ async function notifyDiscordAboutVerification(
 
       if (guild) {
         await logAuditEvent(guild, AuditEventType.VK_CHAT_LINKED, {
-          userId: leaderUserId,
+          userId: token.created_by,
           userName: 'Лидер департамента',
           subdivisionName: subdivision.name,
           factionName: department.name,

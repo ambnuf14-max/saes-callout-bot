@@ -122,6 +122,28 @@ export class VerificationTokenModel {
   }
 
   /**
+   * Обновить Discord message ID для токена
+   */
+  static async updateDiscordMessage(
+    id: number,
+    channelId: string,
+    messageId: string
+  ): Promise<void> {
+    await database.run(
+      `UPDATE verification_tokens
+       SET discord_channel_id = ?, discord_message_id = ?
+       WHERE id = ?`,
+      [channelId, messageId, id]
+    );
+
+    logger.debug('Verification token Discord message updated', {
+      tokenId: id,
+      channelId,
+      messageId,
+    });
+  }
+
+  /**
    * Проверить, валиден ли токен
    */
   static isValid(token: VerificationToken): boolean {

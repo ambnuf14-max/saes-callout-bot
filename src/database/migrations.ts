@@ -2,6 +2,7 @@ import database from './db';
 import logger from '../utils/logger';
 import runTelegramIntegrationMigration from './migrations/003_telegram_integration';
 import runSubdivisionEmbedsMigration from './migrations/004_subdivision_embeds';
+import runVerificationDiscordMessageMigration from './migrations/005_verification_discord_message';
 
 /**
  * SQL схема для всех таблиц
@@ -152,6 +153,7 @@ export async function runMigrations(): Promise<void> {
     // Выполнить дополнительные миграции
     await runTelegramIntegrationMigration();
     await runSubdivisionEmbedsMigration();
+    await runVerificationDiscordMessageMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

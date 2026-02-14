@@ -168,8 +168,8 @@ export interface UpdateSubdivisionDTO {
   name?: string;
   description?: string;
   discord_role_id?: string;
-  vk_chat_id?: string;
-  telegram_chat_id?: string;
+  vk_chat_id?: string | null;
+  telegram_chat_id?: string | null;
   is_accepting_callouts?: boolean;
   is_active?: boolean;
   // Embed настройки
@@ -200,6 +200,8 @@ export interface VerificationToken {
   is_used: boolean;
   used_at: string | null;
   chat_id: string | null;          // VK peer_id или Telegram chat_id
+  discord_channel_id: string | null;  // Discord канал для редактирования сообщения
+  discord_message_id: string | null;  // Discord сообщение для редактирования
   created_at: string;
 }
 

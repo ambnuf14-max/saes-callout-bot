@@ -1,6 +1,7 @@
 // Цвета для Discord Embeds (hex)
 export const COLORS = {
   ACTIVE: 0x00ff00, // Зеленый - активный каллаут
+  SUCCESS: 0x00ff00, // Зеленый - успех
   CLOSED: 0xff0000, // Красный - закрытый каллаут
   INFO: 0x3498db,   // Синий - информационный
   WARNING: 0xffaa00, // Оранжевый - предупреждение

@@ -207,15 +207,15 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
       .setEmoji('📝')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`department_link_vk_${subdivision.id}`)
-      .setLabel(subdivision.vk_chat_id ? 'Перепривязать VK' : 'Привязать VK')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Primary),
+      .setCustomId(subdivision.vk_chat_id ? `department_unlink_vk_${subdivision.id}` : `department_link_vk_${subdivision.id}`)
+      .setLabel(subdivision.vk_chat_id ? 'Отвязать VK' : 'Привязать VK')
+      .setEmoji(subdivision.vk_chat_id ? '🔓' : '🔗')
+      .setStyle(subdivision.vk_chat_id ? ButtonStyle.Secondary : ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`department_link_telegram_${subdivision.id}`)
-      .setLabel(subdivision.telegram_chat_id ? 'Перепривязать TG' : 'Привязать TG')
-      .setEmoji('✈️')
-      .setStyle(ButtonStyle.Primary),
+      .setCustomId(subdivision.telegram_chat_id ? `department_unlink_telegram_${subdivision.id}` : `department_link_telegram_${subdivision.id}`)
+      .setLabel(subdivision.telegram_chat_id ? 'Отвязать TG' : 'Привязать TG')
+      .setEmoji(subdivision.telegram_chat_id ? '🔓' : '✈️')
+      .setStyle(subdivision.telegram_chat_id ? ButtonStyle.Secondary : ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`department_toggle_callouts_${subdivision.id}`)
       .setLabel(subdivision.is_accepting_callouts ? 'Отключить каллауты' : 'Включить каллауты')
@@ -223,6 +223,7 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
       .setStyle(subdivision.is_accepting_callouts ? ButtonStyle.Secondary : ButtonStyle.Success)
   );
 
+  // Вторая строка кнопок
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`department_configure_embed_${subdivision.id}`)
