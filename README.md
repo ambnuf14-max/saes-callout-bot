@@ -206,6 +206,44 @@ SQLite с 4 таблицами:
 
 В режиме разработки логи также выводятся в консоль с цветами.
 
+## Docker
+
+### Запуск бота в Docker
+
+```bash
+# Запустить контейнер (в фоне)
+npm run docker:up
+# или
+docker-compose up -d
+
+# Остановить контейнер
+npm run docker:down
+# или
+docker-compose down
+
+# Перезапустить контейнер
+npm run docker:restart
+# или
+docker-compose restart
+```
+
+### Просмотр логов Docker
+
+```bash
+# Показать последние 1000 строк логов + следить в реальном времени
+npm run docker:logs
+
+# Показать ВСЕ логи (с самого начала) + следить в реальном времени
+npm run docker:logs:all
+
+# Или вручную:
+docker-compose logs -f --tail=1000    # Последние 1000 строк
+docker-compose logs -f --tail=all     # ВСЕ логи
+docker-compose logs -f                # Только новые логи
+```
+
+**Важно**: Docker хранит до 500MB логов (10 файлов по 50MB). Старые логи автоматически ротируются.
+
 ## Разработка
 
 ```bash
@@ -220,6 +258,10 @@ npm start
 
 # Миграции БД
 npm run migrate
+
+# Docker логи
+npm run docker:logs        # Последние 1000 строк + follow
+npm run docker:logs:all    # ВСЕ логи + follow
 ```
 
 ## Текущий статус разработки

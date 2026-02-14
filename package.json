@@ -7,7 +7,12 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "ts-node src/database/migrations.ts"
+    "migrate": "ts-node src/database/migrations.ts",
+    "docker:logs": "docker-compose logs -f --tail=1000",
+    "docker:logs:all": "docker-compose logs -f --tail=all",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:restart": "docker-compose restart"
   },
   "keywords": [
     "discord",
