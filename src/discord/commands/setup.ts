@@ -1,7 +1,6 @@
 import {
   SlashCommandBuilder,
   CommandInteraction,
-  ChannelType,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -47,106 +46,95 @@ const setupCommand: Command = {
       // Проверить, не настроена ли уже система
       const existingServer = await ServerModel.findByGuildId(interaction.guild.id);
       if (existingServer && existingServer.callout_channel_id) {
-        const channel = await interaction.guild.channels.fetch(
-          existingServer.callout_channel_id
-        );
-        if (channel) {
-          await interaction.editReply({
-            content: `${EMOJI.WARNING} Система уже настроена! Канал: <#${channel.id}>`,
+        try {
+          const channel = await interaction.guild.channels.fetch(
+            existingServer.callout_channel_id
+          );
+          if (channel) {
+            // Показать предупреждение с кнопками
+            const embed = new EmbedBuilder()
+              .setTitle(`${EMOJI.WARNING} Система уже настроена`)
+              .setDescription(`Текущий канал каллаутов: <#${channel.id}>`)
+              .addFields([
+                {
+                  name: 'Текущие настройки',
+                  value:
+                    `Канал: <#${existingServer.callout_channel_id}>\n` +
+                    (existingServer.category_id
+                      ? `Категория: <#${existingServer.category_id}>`
+                      : 'Категория: не задана'),
+                },
+              ])
+              .setColor(COLORS.WARNING);
+
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('setup_keep')
+                .setLabel('Оставить как есть')
+                .setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder()
+                .setCustomId('setup_reconfigure')
+                .setLabel('Перенастроить')
+                .setStyle(ButtonStyle.Danger)
+            );
+
+            await interaction.editReply({
+              embeds: [embed],
+              components: [row],
+            });
+            return;
+          }
+        } catch (error) {
+          logger.warn('Callout channel not found, proceeding with setup', {
+            channelId: existingServer.callout_channel_id,
           });
-          return;
         }
       }
 
-      logger.info('Setting up callout system', {
+      // Показать выбор режима настройки
+      logger.info('Showing setup mode selection', {
         guildId: interaction.guild.id,
         userId: interaction.user.id,
       });
 
-      // 1. Создать категорию "🚨 INCIDENTS"
-      const category = await interaction.guild.channels.create({
-        name: '🚨 INCIDENTS',
-        type: ChannelType.GuildCategory,
-        position: 0,
-      });
-
-      logger.info('Category created', { categoryId: category.id });
-
-      // 2. Создать канал "callouts" в категории
-      const calloutsChannel = await interaction.guild.channels.create({
-        name: 'callouts',
-        type: ChannelType.GuildText,
-        parent: category.id,
-        topic: 'Канал для создания каллаутов экстренных служб',
-        permissionOverwrites: [
-          {
-            id: interaction.guild.id, // @everyone
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-            deny: [PermissionFlagsBits.SendMessages], // Запретить отправку сообщений
-          },
-        ],
-      });
-
-      logger.info('Callouts channel created', { channelId: calloutsChannel.id });
-
-      // 3. Создать Embed с кнопкой
       const embed = new EmbedBuilder()
-        .setTitle(MESSAGES.CALLOUT.TITLE_PANEL)
-        .setDescription(MESSAGES.CALLOUT.DESCRIPTION_PANEL)
-        .setColor(COLORS.INFO)
+        .setTitle('🔧 Настройка системы каллаутов')
+        .setDescription('Выберите режим настройки:')
         .addFields([
           {
-            name: `${EMOJI.INFO} Инструкция`,
-            value:
-              '1. Нажмите кнопку ниже\n' +
-              '2. Выберите департамент из списка\n' +
-              '3. Укажите место и описание инцидента\n' +
-              '4. Система создаст канал и уведомит департамент',
+            name: '🆕 Создать новое',
+            value: 'Бот создаст новую категорию "🚨 INCIDENTS" и канал "callouts"',
+          },
+          {
+            name: '📁 Использовать категорию',
+            value: 'Выберите существующую категорию, бот создаст канал в ней',
+          },
+          {
+            name: '💬 Использовать канал',
+            value: 'Выберите существующий канал для размещения кнопки каллаутов',
           },
         ])
-        .setFooter({ text: 'SAES Callout System' })
-        .setTimestamp();
+        .setColor(COLORS.INFO)
+        .setFooter({ text: 'SAES Callout System' });
 
-      const button = new ButtonBuilder()
-        .setCustomId('create_callout')
-        .setLabel(MESSAGES.CALLOUT.BUTTON_CREATE)
-        .setStyle(ButtonStyle.Primary);
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('setup_mode_auto')
+          .setLabel('🆕 Создать новое')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('setup_mode_category')
+          .setLabel('📁 Категория')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('setup_mode_channel')
+          .setLabel('💬 Канал')
+          .setStyle(ButtonStyle.Secondary)
+      );
 
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
-
-      // Отправить сообщение с кнопкой
-      const message = await calloutsChannel.send({
+      await interaction.editReply({
         embeds: [embed],
         components: [row],
-      });
-
-      logger.info('Callout panel message created', { messageId: message.id });
-
-      // 4. Сохранить настройки в БД
-      if (existingServer) {
-        // Обновить существующий сервер
-        await ServerModel.update(existingServer.id, {
-          callout_channel_id: calloutsChannel.id,
-          callout_message_id: message.id,
-          category_id: category.id,
-        });
-      } else {
-        // Создать новый сервер
-        await ServerModel.create({
-          guild_id: interaction.guild.id,
-          callout_channel_id: calloutsChannel.id,
-          callout_message_id: message.id,
-          category_id: category.id,
-        });
-      }
-
-      logger.info('Server settings saved to database', {
-        guildId: interaction.guild.id,
-      });
-
-      // Успешный ответ
-      await interaction.editReply({
-        content: MESSAGES.SETUP.SUCCESS(calloutsChannel.toString()),
       });
     } catch (error) {
       logger.error('Failed to setup callout system', {

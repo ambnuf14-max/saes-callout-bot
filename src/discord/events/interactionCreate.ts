@@ -8,6 +8,7 @@ import handleSubdivisionSelect from '../interactions/subdivision-select';
 import handleDepartmentPanelButton from '../interactions/department-panel-button';
 import handleDepartmentPanelModal from '../interactions/department-panel-modal';
 import handleDepartmentSelect from '../interactions/department-select';
+import { handleSetupModeSelect } from '../interactions/setup-mode-select';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -49,6 +50,12 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId === 'create_callout') {
         await handleCreateCalloutButton(interaction);
+      } else if (
+        interaction.customId.startsWith('setup_mode_') ||
+        interaction.customId === 'setup_keep' ||
+        interaction.customId === 'setup_reconfigure'
+      ) {
+        await handleSetupModeSelect(interaction);
       } else if (interaction.customId.startsWith('department_')) {
         await handleDepartmentPanelButton(interaction);
       }
@@ -81,6 +88,8 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId === 'subdivision_select') {
         await handleSubdivisionSelect(interaction);
+      } else if (interaction.customId.startsWith('setup_select_')) {
+        await handleSetupModeSelect(interaction);
       } else if (interaction.customId.startsWith('department_')) {
         await handleDepartmentSelect(interaction);
       }

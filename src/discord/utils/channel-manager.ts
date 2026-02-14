@@ -24,11 +24,38 @@ export async function createIncidentChannel(
   try {
     // Получить настройки сервера для категории
     const server = await ServerModel.findByGuildId(guild.id);
-    const categoryId = server?.category_id;
+    let categoryId = server?.category_id;
+
+    // Fallback: если category_id не задан, использовать родительскую категорию callout канала
+    if (!categoryId && server?.callout_channel_id) {
+      try {
+        const calloutChannel = await guild.channels.fetch(server.callout_channel_id);
+        if (calloutChannel && calloutChannel.type === ChannelType.GuildText) {
+          const textChannel = calloutChannel as TextChannel;
+          categoryId = textChannel.parent?.id || null;
+          logger.debug('Using fallback category from callout channel', {
+            categoryId,
+            calloutChannelId: server.callout_channel_id,
+          });
+        }
+      } catch (error) {
+        logger.warn('Could not fetch callout channel for category fallback', {
+          error: error instanceof Error ? error.message : error,
+          guildId: guild.id,
+        });
+      }
+    }
 
     let category: CategoryChannel | null = null;
     if (categoryId) {
-      category = (await guild.channels.fetch(categoryId)) as CategoryChannel;
+      try {
+        category = (await guild.channels.fetch(categoryId)) as CategoryChannel;
+      } catch (error) {
+        logger.warn('Could not fetch category', {
+          error: error instanceof Error ? error.message : error,
+          categoryId,
+        });
+      }
     }
 
     // Название канала: incident-{id}-{dept}
@@ -82,11 +109,11 @@ export async function createIncidentChannel(
       });
     });
 
-    // Создать канал
+    // Создать канал (с категорией или без)
     const channel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
-      parent: category?.id,
+      parent: category?.id || undefined, // undefined если нет категории
       topic: `Инцидент #${callout.id} - ${subdivision.name}`,
       permissionOverwrites,
     });
