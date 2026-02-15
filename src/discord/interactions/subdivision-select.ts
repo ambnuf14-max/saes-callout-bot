@@ -15,8 +15,8 @@ import { CalloutError } from '../../utils/error-handler';
  * Временное хранилище выбранного подразделения (user_id → {subdivisionId, expiresAt})
  * Записи автоматически удаляются через 5 минут
  */
-const SELECTION_TTL_MS = 5 * 60 * 1000;
-const subdivisionSelections = new Map<string, { subdivisionId: number; expiresAt: number }>();
+export const SELECTION_TTL_MS = 5 * 60 * 1000;
+export const subdivisionSelections = new Map<string, { subdivisionId: number; expiresAt: number }>();
 
 /**
  * Периодическая очистка просроченных записей (каждые 60 секунд)

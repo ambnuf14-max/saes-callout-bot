@@ -1,6 +1,8 @@
 import logger from './utils/logger';
 import database from './database/db';
 import { runMigrations, checkTables } from './database/migrations';
+import { VerificationTokenModel } from './database/models/VerificationToken';
+import { COLORS, EMOJI } from './config/constants';
 
 async function main() {
   try {
@@ -10,14 +12,9 @@ async function main() {
     logger.info('Connecting to database...');
     await database.connect();
 
-    // Проверка и запуск миграций
-    const tablesExist = await checkTables();
-    if (!tablesExist) {
-      logger.info('Tables not found, running migrations...');
-      await runMigrations();
-    } else {
-      logger.info('Database tables exist');
-    }
+    // Запуск миграций (идемпотентные, безопасно запускать каждый раз)
+    await runMigrations();
+    logger.info('Database migrations applied');
 
     // Инициализация Discord бота
     logger.info('Starting Discord bot...');
@@ -34,10 +31,67 @@ async function main() {
     const telegramBot = (await import('./telegram/bot')).default;
     await telegramBot.start();
 
+    // Запустить периодическую проверку истёкших токенов (каждые 30 секунд)
+    setInterval(() => notifyExpiredTokens(discordBot), 30 * 1000);
+
     logger.info('Bot initialized successfully');
   } catch (error) {
     logger.error('Failed to start bot', error);
     process.exit(1);
+  }
+}
+
+/**
+ * Проверить истёкшие токены и отредактировать сообщения в Discord
+ */
+async function notifyExpiredTokens(discordBot: any): Promise<void> {
+  try {
+    const expiredTokens = await VerificationTokenModel.findExpiredWithInteractionToken();
+    if (expiredTokens.length === 0) return;
+
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+
+    for (const token of expiredTokens) {
+      try {
+        const expiredEmbed = new EmbedBuilder()
+          .setColor(COLORS.ERROR)
+          .setTitle(`${EMOJI.ERROR} Токен верификации истёк`)
+          .setDescription(
+            `Токен \`${token.token}\` больше недействителен.\n` +
+            `Запросите новый токен через панель управления.`
+          )
+          .setTimestamp();
+
+        const backButton = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('department_back_list')
+            .setLabel('Назад')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        await discordBot.client.rest.patch(
+          `/webhooks/${token.discord_application_id}/${token.discord_interaction_token}/messages/@original`,
+          { body: { embeds: [expiredEmbed.toJSON()], components: [backButton.toJSON()] } }
+        );
+
+        logger.info('Notified Discord about expired token', { tokenId: token.id });
+      } catch (error) {
+        // Webhook тоже истёк (>15 мин) — уже не можем редактировать
+        const errMsg = error instanceof Error ? error.message : String(error);
+        if (errMsg.includes('Unknown Webhook') || errMsg.includes('Invalid Webhook Token') || errMsg.includes('10015')) {
+          logger.debug('Webhook token also expired, cannot edit message', { tokenId: token.id });
+        } else {
+          logger.warn('Failed to notify about expired token', { tokenId: token.id, error: errMsg });
+        }
+      }
+
+      // В любом случае убираем interaction token чтобы не пытаться повторно
+      await VerificationTokenModel.clearInteractionToken(token.id);
+    }
+  } catch (error) {
+    logger.error('Error in notifyExpiredTokens', {
+      error: error instanceof Error ? error.message : error,
+    });
   }
 }
 

@@ -54,6 +54,16 @@ export class SubdivisionModel {
   }
 
   /**
+   * Найти дефолтное подразделение департамента
+   */
+  static async findDefaultByDepartmentId(departmentId: number): Promise<Subdivision | undefined> {
+    return await database.get<Subdivision>(
+      'SELECT * FROM subdivisions WHERE department_id = ? AND is_default = 1',
+      [departmentId]
+    );
+  }
+
+  /**
    * Найти подразделение по VK chat_id
    */
   static async findByVkChatId(vkChatId: string): Promise<Subdivision | undefined> {
@@ -276,6 +286,31 @@ export class SubdivisionModel {
       [departmentId]
     );
     return result?.count || 0;
+  }
+
+  /**
+   * Получить количество активных НЕ дефолтных подразделений
+   */
+  static async countActiveNonDefault(departmentId: number): Promise<number> {
+    const result = await database.get<{ count: number }>(
+      'SELECT COUNT(*) as count FROM subdivisions WHERE department_id = ? AND is_active = 1 AND is_default = 0',
+      [departmentId]
+    );
+    return result?.count || 0;
+  }
+
+  /**
+   * Деактивировать все НЕ дефолтные подразделения департамента
+   */
+  static async deactivateNonDefaultSubdivisions(departmentId: number): Promise<void> {
+    await database.run(
+      'UPDATE subdivisions SET is_active = 0 WHERE department_id = ? AND is_default = 0',
+      [departmentId]
+    );
+
+    logger.info('Deactivated all non-default subdivisions', {
+      departmentId,
+    });
   }
 
   /**

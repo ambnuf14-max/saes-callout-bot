@@ -89,7 +89,7 @@ async function handleAddDepartment(
     return;
   }
 
-  // Создать департамент
+  // Создать департамент (по умолчанию разрешено создание подразделений)
   const department = await DepartmentService.createDepartment({
     server_id: serverId,
     name,

@@ -4,12 +4,17 @@ import { SubdivisionService } from '../../services/subdivision.service';
 import { VerificationService } from '../../services/verification.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
 import {
+  buildStandaloneMainPanel,
   buildMainPanel,
   buildSubdivisionsList,
   buildSubdivisionDetailPanel,
+  buildLinksPanel,
+  buildSettingsPanel,
+  buildEmbedPreview,
   buildVerificationInstructions,
   buildDeleteConfirmation,
 } from '../utils/department-panel-builder';
+import { DepartmentModel, SubdivisionModel } from '../../database/models';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -40,7 +45,7 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     }
     // Добавление подразделения (показать modal)
     else if (customId === 'department_add_subdivision') {
-      await showAddSubdivisionModal(interaction);
+      await showAddSubdivisionModal(interaction, department);
     }
     // Возврат к главной панели
     else if (customId === 'department_back_main') {
@@ -49,6 +54,21 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     // Возврат к списку подразделений
     else if (customId === 'department_back_list') {
       await handleViewSubdivisions(interaction, department.id);
+    }
+    // Панель привязок
+    else if (customId.startsWith('department_links_')) {
+      const subdivisionId = parseInt(customId.split('_')[2]);
+      await handleShowLinks(interaction, subdivisionId, department.id);
+    }
+    // Панель настроек
+    else if (customId.startsWith('department_settings_')) {
+      const subdivisionId = parseInt(customId.split('_')[2]);
+      await handleShowSettings(interaction, subdivisionId, department.id);
+    }
+    // Возврат к детальной панели подразделения
+    else if (customId.startsWith('department_back_detail_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleBackToDetail(interaction, subdivisionId);
     }
     // Изменение подразделения
     else if (customId.startsWith('department_edit_sub_')) {
@@ -79,6 +99,25 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
     else if (customId.startsWith('department_toggle_callouts_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await handleToggleCallouts(interaction, subdivisionId, department.id);
+    }
+    // Standalone: Панель привязок
+    else if (customId.startsWith('department_standalone_links_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleShowLinks(interaction, subdivisionId, department.id);
+    }
+    // Standalone: Панель настроек
+    else if (customId.startsWith('department_standalone_settings_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleShowSettings(interaction, subdivisionId, department.id);
+    }
+    // Переход к списку подразделений
+    else if (customId.startsWith('department_subdivisions_')) {
+      await handleViewSubdivisions(interaction, department.id);
+    }
+    // Предпросмотр embed подразделения
+    else if (customId.startsWith('department_preview_embed_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handlePreviewEmbed(interaction, subdivisionId);
     }
     // Настройка embed подразделения
     else if (customId.startsWith('department_configure_embed_')) {
@@ -150,16 +189,36 @@ async function handleViewSubdivisions(interaction: ButtonInteraction, department
 async function handleBackToMain(interaction: ButtonInteraction, departmentId: number) {
   await interaction.deferUpdate();
 
-  const { DepartmentModel } = await import('../../database/models');
+  const { DepartmentModel, SubdivisionModel } = await import('../../database/models');
   const department = await DepartmentModel.findById(departmentId);
   if (!department) {
     throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
   }
 
-  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
-  const activeCount = subdivisions.filter((sub) => sub.is_active).length;
+  // Получить дефолтное подразделение
+  const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+  if (!defaultSubdivision) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
+    });
+    return;
+  }
 
-  const panel = buildMainPanel(department, subdivisions.length, activeCount);
+  // Подсчитать активные НЕ дефолтные подразделения
+  const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(department.id);
+
+  let panel;
+
+  // Выбрать режим панели автоматически
+  if (activeNonDefaultCount === 0) {
+    // Нет активных обычных подразделений - показать standalone панель
+    panel = buildStandaloneMainPanel(department, defaultSubdivision);
+  } else {
+    // Есть активные обычные подразделения - показать обычную панель
+    const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+    const totalSubdivisions = await SubdivisionService.getSubdivisionCount(department.id);
+    panel = buildMainPanel(department, totalSubdivisions, subdivisions.length);
+  }
 
   await interaction.editReply(panel);
 }
@@ -167,7 +226,16 @@ async function handleBackToMain(interaction: ButtonInteraction, departmentId: nu
 /**
  * Показать modal для добавления подразделения
  */
-async function showAddSubdivisionModal(interaction: ButtonInteraction) {
+async function showAddSubdivisionModal(interaction: ButtonInteraction, department: any) {
+  // Проверить, разрешено ли создание подразделений
+  if (!department.allow_create_subdivisions) {
+    await interaction.reply({
+      content: `${EMOJI.ERROR} Администратор запретил создание подразделений для этого департамента`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const modal = new ModalBuilder()
     .setCustomId('department_modal_add_subdivision')
     .setTitle('Добавить подразделение');
@@ -236,6 +304,59 @@ async function showEditSubdivisionModal(interaction: ButtonInteraction, subdivis
 }
 
 /**
+ * Показать панель привязок
+ */
+async function handleShowLinks(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(`${EMOJI.ERROR} У вас нет прав на управление этим подразделением`, 'PERMISSION_DENIED', 403);
+  }
+
+  const panel = buildLinksPanel(subdivision);
+  await interaction.editReply(panel);
+}
+
+/**
+ * Показать панель настроек
+ */
+async function handleShowSettings(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  if (subdivision.department_id !== departmentId) {
+    throw new CalloutError(`${EMOJI.ERROR} У вас нет прав на управление этим подразделением`, 'PERMISSION_DENIED', 403);
+  }
+
+  const panel = buildSettingsPanel(subdivision);
+  await interaction.editReply(panel);
+}
+
+/**
+ * Возврат к детальной панели подразделения
+ */
+async function handleBackToDetail(interaction: ButtonInteraction, subdivisionId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  const panel = buildSubdivisionDetailPanel(subdivision);
+  await interaction.editReply(panel);
+}
+
+/**
  * Обработка привязки VK беседы
  */
 async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
@@ -269,12 +390,14 @@ async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: numbe
 
   const message = await interaction.editReply(panel);
 
-  // Сохранить Discord message ID для последующего редактирования
+  // Сохранить Discord message ID и interaction token для последующего редактирования
   const { VerificationTokenModel } = await import('../../database/models');
   await VerificationTokenModel.updateDiscordMessage(
     token.id,
     interaction.channelId,
-    message.id
+    message.id,
+    interaction.token,
+    interaction.client.application.id
   );
 
   logger.info('VK verification token generated via panel', {
@@ -320,12 +443,14 @@ async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId:
 
   const message = await interaction.editReply(panel);
 
-  // Сохранить Discord message ID для последующего редактирования
+  // Сохранить Discord message ID и interaction token для последующего редактирования
   const { VerificationTokenModel } = await import('../../database/models');
   await VerificationTokenModel.updateDiscordMessage(
     token.id,
     interaction.channelId,
-    message.id
+    message.id,
+    interaction.token,
+    interaction.client.application.id
   );
 
   logger.info('Telegram verification token generated via panel', {
@@ -383,13 +508,13 @@ async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: num
   // Отвязать VK беседу в БД
   await SubdivisionService.updateSubdivision(subdivisionId, { vk_chat_id: null });
 
-  // Показать обновленную панель
+  // Показать обновленную панель привязок
   const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!updatedSubdivision) {
     throw new Error('Failed to retrieve updated subdivision');
   }
 
-  const panel = buildSubdivisionDetailPanel(updatedSubdivision);
+  const panel = buildLinksPanel(updatedSubdivision);
   await interaction.editReply(panel);
 
   logger.info('VK chat unlinked successfully', {
@@ -459,13 +584,13 @@ async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionI
   // Отвязать Telegram группу в БД
   await SubdivisionService.updateSubdivision(subdivisionId, { telegram_chat_id: null });
 
-  // Показать обновленную панель
+  // Показать обновленную панель привязок
   const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!updatedSubdivision) {
     throw new Error('Failed to retrieve updated subdivision');
   }
 
-  const panel = buildSubdivisionDetailPanel(updatedSubdivision);
+  const panel = buildLinksPanel(updatedSubdivision);
   await interaction.editReply(panel);
 
   logger.info('Telegram chat unlinked successfully', {
@@ -497,13 +622,13 @@ async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionI
   const newStatus = !subdivision.is_accepting_callouts;
   await SubdivisionService.toggleCallouts(subdivisionId, newStatus);
 
-  // Обновить панель подразделения
+  // Обновить панель настроек
   const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!updatedSubdivision) {
     throw new Error('Failed to retrieve updated subdivision');
   }
 
-  const panel = buildSubdivisionDetailPanel(updatedSubdivision);
+  const panel = buildSettingsPanel(updatedSubdivision);
 
   await interaction.editReply(panel);
 
@@ -574,12 +699,36 @@ async function handleDeleteSubdivision(
 }
 
 /**
+ * Показать предпросмотр embed
+ */
+async function handlePreviewEmbed(interaction: ButtonInteraction, subdivisionId: number) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  const panel = buildEmbedPreview(subdivision);
+  await interaction.editReply(panel);
+}
+
+/**
  * Показать modal для настройки embed подразделения
  */
 async function showConfigureEmbedModal(interaction: ButtonInteraction, subdivisionId: number) {
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
   if (!subdivision) {
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  // Запретить редактирование embed для дефолтного подразделения
+  if (subdivision.is_default) {
+    await interaction.reply({
+      content: `${EMOJI.ERROR} Нельзя настраивать embed для подразделения без подразделений. Создайте подразделение, чтобы настроить его embed.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
   }
 
   const modal = new ModalBuilder()
@@ -603,7 +752,7 @@ async function showConfigureEmbedModal(interaction: ButtonInteraction, subdivisi
     .setPlaceholder('Оставьте пустым для использования описания подразделения')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false)
-    .setMaxLength(4096)
+    .setMaxLength(4000)
     .setValue(subdivision.embed_description || '');
 
   // Поле 3: URL изображения

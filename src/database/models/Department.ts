@@ -10,15 +10,18 @@ export class DepartmentModel {
    * Создать новую фракцию
    */
   static async create(data: CreateDepartmentDTO): Promise<Department> {
+    const allowCreate = data.allow_create_subdivisions !== undefined ? data.allow_create_subdivisions : true;
+
     const result = await database.run(
-      `INSERT INTO departments (server_id, name, description, general_leader_role_id, department_role_id)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO departments (server_id, name, description, general_leader_role_id, department_role_id, allow_create_subdivisions)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.name,
         data.description || null,
         data.general_leader_role_id,
         data.department_role_id,
+        allowCreate ? 1 : 0,
       ]
     );
 
@@ -26,12 +29,16 @@ export class DepartmentModel {
       factionId: result.lastID,
       name: data.name,
       serverId: data.server_id,
+      allowCreate,
     });
 
     const faction = await this.findById(result.lastID);
     if (!faction) {
       throw new Error('Failed to retrieve created faction');
     }
+
+    // ВСЕГДА создавать дефолтное подразделение
+    await this.createDefaultSubdivision(faction);
 
     return faction;
   }
@@ -95,6 +102,11 @@ export class DepartmentModel {
    * Обновить фракцию
    */
   static async update(id: number, data: UpdateDepartmentDTO): Promise<Department | undefined> {
+    const currentDepartment = await this.findById(id);
+    if (!currentDepartment) {
+      throw new Error(`Department with id ${id} not found`);
+    }
+
     const updates: string[] = [];
     const params: any[] = [];
 
@@ -114,6 +126,10 @@ export class DepartmentModel {
       updates.push('department_role_id = ?');
       params.push(data.department_role_id);
     }
+    if (data.allow_create_subdivisions !== undefined) {
+      updates.push('allow_create_subdivisions = ?');
+      params.push(data.allow_create_subdivisions ? 1 : 0);
+    }
     if (data.is_active !== undefined) {
       updates.push('is_active = ?');
       params.push(data.is_active ? 1 : 0);
@@ -130,7 +146,17 @@ export class DepartmentModel {
 
     logger.info('Department updated', { factionId: id });
 
-    return await this.findById(id);
+    const updatedDepartment = await this.findById(id);
+    if (!updatedDepartment) {
+      throw new Error('Failed to retrieve updated department');
+    }
+
+    // Синхронизировать дефолтное подразделение если изменились name или department_role_id
+    if (data.name !== undefined || data.department_role_id !== undefined) {
+      await this.syncDefaultSubdivision(updatedDepartment);
+    }
+
+    return updatedDepartment;
   }
 
   /**
@@ -191,6 +217,67 @@ export class DepartmentModel {
    */
   static isActive(faction: Department): boolean {
     return faction.is_active;
+  }
+
+  /**
+   * Создать дефолтное подразделение для standalone департамента
+   */
+  private static async createDefaultSubdivision(department: Department): Promise<void> {
+    const { SubdivisionModel } = await import('./Subdivision');
+
+    // Проверить, существует ли уже дефолтное подразделение
+    const existingDefault = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+    if (existingDefault) {
+      logger.debug('Default subdivision already exists', {
+        departmentId: department.id,
+        subdivisionId: existingDefault.id,
+      });
+      return;
+    }
+
+    // Создать дефолтное подразделение с is_default = 1
+    await database.run(
+      `INSERT INTO subdivisions (department_id, server_id, name, discord_role_id, is_default, is_accepting_callouts, is_active)
+       VALUES (?, ?, ?, ?, 1, 1, 1)`,
+      [
+        department.id,
+        department.server_id,
+        department.name,
+        department.department_role_id,
+      ]
+    );
+
+    logger.info('Default subdivision created for standalone department', {
+      departmentId: department.id,
+      departmentName: department.name,
+    });
+  }
+
+  /**
+   * Синхронизировать дефолтное подразделение с департаментом
+   */
+  private static async syncDefaultSubdivision(department: Department): Promise<void> {
+    const { SubdivisionModel } = await import('./Subdivision');
+
+    const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+    if (!defaultSubdivision) {
+      logger.warn('Default subdivision not found for standalone department, creating...', {
+        departmentId: department.id,
+      });
+      await this.createDefaultSubdivision(department);
+      return;
+    }
+
+    // Синхронизировать name и discord_role_id
+    await SubdivisionModel.update(defaultSubdivision.id, {
+      name: department.name,
+      discord_role_id: department.department_role_id,
+    });
+
+    logger.info('Default subdivision synchronized with department', {
+      departmentId: department.id,
+      subdivisionId: defaultSubdivision.id,
+    });
   }
 }
 

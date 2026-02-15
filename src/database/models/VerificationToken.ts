@@ -122,24 +122,27 @@ export class VerificationTokenModel {
   }
 
   /**
-   * Обновить Discord message ID для токена
+   * Обновить Discord message ID и interaction token для токена
    */
   static async updateDiscordMessage(
     id: number,
     channelId: string,
-    messageId: string
+    messageId: string,
+    interactionToken?: string,
+    applicationId?: string
   ): Promise<void> {
     await database.run(
       `UPDATE verification_tokens
-       SET discord_channel_id = ?, discord_message_id = ?
+       SET discord_channel_id = ?, discord_message_id = ?, discord_interaction_token = ?, discord_application_id = ?
        WHERE id = ?`,
-      [channelId, messageId, id]
+      [channelId, messageId, interactionToken || null, applicationId || null, id]
     );
 
     logger.debug('Verification token Discord message updated', {
       tokenId: id,
       channelId,
       messageId,
+      hasInteractionToken: !!interactionToken,
     });
   }
 
@@ -176,6 +179,29 @@ export class VerificationTokenModel {
     }
 
     return { valid: true };
+  }
+
+  /**
+   * Получить истёкшие неиспользованные токены с interaction token (для уведомления в Discord)
+   */
+  static async findExpiredWithInteractionToken(): Promise<VerificationToken[]> {
+    const now = new Date().toISOString();
+
+    return await database.all<VerificationToken>(
+      `SELECT * FROM verification_tokens
+       WHERE is_used = 0 AND expires_at < ? AND discord_interaction_token IS NOT NULL`,
+      [now]
+    );
+  }
+
+  /**
+   * Убрать interaction token у токена (чтобы не пытаться повторно редактировать)
+   */
+  static async clearInteractionToken(id: number): Promise<void> {
+    await database.run(
+      `UPDATE verification_tokens SET discord_interaction_token = NULL WHERE id = ?`,
+      [id]
+    );
   }
 
   /**

@@ -100,8 +100,35 @@ class TelegramBotClient {
       }
     });
 
+    // Обработка добавления бота в группу
+    this.bot.on('new_chat_members', async (msg) => {
+      try {
+        const me = await this.bot.getMe();
+        const botAdded = msg.new_chat_members?.some(m => m.id === me.id);
+        if (!botAdded) return;
+
+        const welcomeText =
+          `👋 <b>Привет! Я SAES Callout Bot</b>\n\n` +
+          `Для привязки этой группы к подразделению:\n` +
+          `1. Получите токен верификации у лидера департамента в Discord\n` +
+          `2. Отправьте команду <code>/verify ТОКЕН</code> в этот чат\n\n` +
+          `💡 Токен действителен 10 минут.`;
+
+        await this.bot.sendMessage(msg.chat.id, welcomeText, { parse_mode: 'HTML' });
+
+        logger.info('Sent welcome message to Telegram group', {
+          chatId: msg.chat.id,
+          chatTitle: msg.chat.title,
+        });
+      } catch (error) {
+        logger.error('Error sending Telegram welcome message', {
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    });
+
     logger.info('Telegram event handlers registered', {
-      handlers: ['callback_query', 'verify', 'start', 'help'],
+      handlers: ['callback_query', 'verify', 'start', 'help', 'new_chat_members'],
     });
   }
 

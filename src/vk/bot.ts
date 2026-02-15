@@ -47,8 +47,42 @@ class VkBot {
     // Обработка callback кнопок (message_event)
     this.vk.updates.on('message_event', handleCallbackEvent);
 
-    // Обработка текстовых сообщений для команды /verify
+    // Обработка текстовых сообщений и приглашения бота в беседу
     this.vk.updates.on('message_new', async (context) => {
+      // Проверка приглашения бота в беседу
+      const action = (context as any).messagePayload?.source_act
+        || (context as any).$groupId
+        ? undefined
+        : undefined;
+
+      // vk-io: action доступен через context.eventPayload или напрямую
+      const msgAction = (context as any).action;
+      if (msgAction && msgAction.type === 'chat_invite_user') {
+        // Проверяем, что пригласили именно нашего бота (group id с минусом)
+        const invitedId = msgAction.memberId;
+        const groupId = parseInt(config.vk.groupId);
+        if (invitedId === -groupId) {
+          try {
+            await context.send(
+              `👋 Привет! Я SAES Callout Bot.\n\n` +
+              `Для привязки этой беседы к подразделению:\n` +
+              `1. Получите токен верификации у лидера департамента в Discord\n` +
+              `2. Отправьте команду /verify ТОКЕН в этот чат\n\n` +
+              `💡 Токен действителен 10 минут.`
+            );
+
+            logger.info('Sent welcome message to VK chat', {
+              peerId: context.peerId,
+            });
+          } catch (error) {
+            logger.error('Error sending VK welcome message', {
+              error: error instanceof Error ? error.message : error,
+            });
+          }
+          return;
+        }
+      }
+
       const text = context.text?.trim();
       // Проверяем, начинается ли сообщение с /verify
       if (text && text.startsWith('/verify')) {
@@ -57,7 +91,7 @@ class VkBot {
     });
 
     logger.info('VK event handlers registered', {
-      handlers: ['message_event', 'message_new (for /verify)'],
+      handlers: ['message_event', 'message_new (for /verify, chat_invite)'],
     });
   }
 

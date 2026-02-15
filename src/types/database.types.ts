@@ -39,6 +39,7 @@ export interface Department {
   description: string | null;
   general_leader_role_id: string;  // Общая лидерская роль (State Faction Leader)
   department_role_id: string;       // Роль конкретного департамента (LSPD, Sheriff, etc)
+  allow_create_subdivisions: boolean; // Может ли лидер создавать подразделения (контроль администратора)
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -50,6 +51,7 @@ export interface CreateDepartmentDTO {
   description?: string;
   general_leader_role_id: string;
   department_role_id: string;
+  allow_create_subdivisions?: boolean;
 }
 
 export interface UpdateDepartmentDTO {
@@ -57,6 +59,7 @@ export interface UpdateDepartmentDTO {
   description?: string;
   general_leader_role_id?: string;
   department_role_id?: string;
+  allow_create_subdivisions?: boolean;
   is_active?: boolean;
 }
 
@@ -141,6 +144,7 @@ export interface Subdivision {
   telegram_chat_id: string | null;
   is_accepting_callouts: boolean;
   is_active: boolean;
+  is_default: boolean;
   // Embed настройки
   embed_author_name: string | null;
   embed_author_url: string | null;
@@ -202,6 +206,8 @@ export interface VerificationToken {
   chat_id: string | null;          // VK peer_id или Telegram chat_id
   discord_channel_id: string | null;  // Discord канал для редактирования сообщения
   discord_message_id: string | null;  // Discord сообщение для редактирования
+  discord_interaction_token: string | null;  // Interaction token для webhook edit
+  discord_application_id: string | null;     // Application ID для webhook edit
   created_at: string;
 }
 

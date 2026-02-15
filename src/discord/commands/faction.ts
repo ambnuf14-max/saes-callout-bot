@@ -1,10 +1,10 @@
 import { SlashCommandBuilder, CommandInteraction, MessageFlags } from 'discord.js';
 import { Command } from '../types';
 import logger from '../../utils/logger';
-import { ServerModel } from '../../database/models';
+import { ServerModel, SubdivisionModel } from '../../database/models';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
-import { buildMainPanel } from '../utils/department-panel-builder';
+import { buildMainPanel, buildStandaloneMainPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -58,12 +58,30 @@ const factionCommand: Command = {
         return;
       }
 
-      // Получить статистику подразделений
-      const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id);
-      const activeCount = subdivisions.filter((sub) => sub.is_active).length;
+      let panel;
 
-      // Построить главную панель
-      const panel = buildMainPanel(department, subdivisions.length, activeCount);
+      // Получить дефолтное подразделение
+      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+      if (!defaultSubdivision) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
+        });
+        return;
+      }
+
+      // Подсчитать активные НЕ дефолтные подразделения
+      const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(department.id);
+
+      // Выбрать режим панели автоматически
+      if (activeNonDefaultCount === 0) {
+        // Нет активных обычных подразделений - показать standalone панель
+        panel = buildStandaloneMainPanel(department, defaultSubdivision);
+      } else {
+        // Есть активные обычные подразделения - показать обычную панель
+        const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+        const totalSubdivisions = await SubdivisionService.getSubdivisionCount(department.id);
+        panel = buildMainPanel(department, totalSubdivisions, subdivisions.length);
+      }
 
       await interaction.editReply(panel);
 

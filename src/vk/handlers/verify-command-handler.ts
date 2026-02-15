@@ -116,36 +116,41 @@ async function notifyDiscordAboutVerification(
     // Импортируем discordBot динамически чтобы избежать циклических зависимостей
     const { default: discordBot } = await import('../../discord/bot');
 
-    // Редактировать исходное сообщение с инструкциями (если есть)
-    if (token.discord_channel_id && token.discord_message_id) {
+    // Редактировать исходное сообщение с инструкциями через webhook (если есть interaction token)
+    if (token.discord_interaction_token && token.discord_application_id) {
       try {
-        const channel = await discordBot.client.channels.fetch(token.discord_channel_id);
-        if (channel?.isTextBased()) {
-          const message = await channel.messages.fetch(token.discord_message_id);
-          const { EmbedBuilder } = await import('discord.js');
-          const { COLORS } = await import('../../config/constants');
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+        const { COLORS } = await import('../../config/constants');
 
-          const successEmbed = new EmbedBuilder()
-            .setColor(COLORS.SUCCESS)
-            .setTitle(`${EMOJI.SUCCESS} VK беседа успешно привязана!`)
-            .setDescription(
-              `**Подразделение:** ${subdivision.name}\n` +
-              `**Беседа:** ${chatTitle}\n` +
-              `**VK Chat ID:** \`${vkChatId}\``
-            )
-            .setTimestamp();
+        const successEmbed = new EmbedBuilder()
+          .setColor(COLORS.SUCCESS)
+          .setTitle(`${EMOJI.SUCCESS} VK беседа успешно привязана!`)
+          .setDescription(
+            `**Подразделение:** ${subdivision.name}\n` +
+            `**Беседа:** ${chatTitle}\n` +
+            `**VK Chat ID:** \`${vkChatId}\``
+          )
+          .setTimestamp();
 
-          await message.edit({ embeds: [successEmbed], components: [] });
+        const backButton = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('department_back_list')
+            .setLabel('Назад')
+            .setStyle(ButtonStyle.Secondary)
+        );
 
-          logger.info('Updated Discord instructions message with success', {
-            messageId: token.discord_message_id,
-            channelId: token.discord_channel_id,
-          });
-        }
+        // Используем webhook API для редактирования ephemeral сообщения
+        await discordBot.client.rest.patch(
+          `/webhooks/${token.discord_application_id}/${token.discord_interaction_token}/messages/@original`,
+          { body: { embeds: [successEmbed.toJSON()], components: [backButton.toJSON()] } }
+        );
+
+        logger.info('Updated Discord instructions message with success via webhook', {
+          applicationId: token.discord_application_id,
+        });
       } catch (editError) {
-        logger.warn('Failed to edit instructions message', {
-          error: editError,
-          messageId: token.discord_message_id,
+        logger.warn('Failed to edit instructions message via webhook', {
+          error: editError instanceof Error ? editError.message : editError,
         });
       }
     }

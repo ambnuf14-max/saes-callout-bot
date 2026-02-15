@@ -390,6 +390,7 @@ export async function buildDepartmentsSection(server: Server) {
  */
 export function buildDepartmentDetailPanel(department: Department) {
   const statusEmoji = department.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
+  const allowCreateStatus = department.allow_create_subdivisions ? '✅ Разрешено' : '🔒 Запрещено';
 
   const embed = new EmbedBuilder()
     .setColor(department.is_active ? COLORS.ACTIVE : COLORS.ERROR)
@@ -410,6 +411,11 @@ export function buildDepartmentDetailPanel(department: Department) {
         value: department.is_active ? 'Активен' : 'Неактивен',
         inline: true,
       },
+      {
+        name: '🔒 Создание подразделений',
+        value: allowCreateStatus,
+        inline: true,
+      },
     )
     .setTimestamp();
 
@@ -417,12 +423,20 @@ export function buildDepartmentDetailPanel(department: Department) {
     embed.addFields({ name: 'Описание', value: department.description });
   }
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin_edit_department_${department.id}`)
       .setLabel('Изменить')
       .setEmoji('📝')
       .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`admin_toggle_allow_create_${department.id}`)
+      .setLabel(department.allow_create_subdivisions ? 'Запретить создание подразделений' : 'Разрешить создание подразделений')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin_delete_department_${department.id}`)
       .setLabel('Удалить')
@@ -435,7 +449,7 @@ export function buildDepartmentDetailPanel(department: Department) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  return { embeds: [embed], components: [row] };
+  return { embeds: [embed], components: [row1, row2] };
 }
 
 /**

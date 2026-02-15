@@ -43,6 +43,19 @@ export class SubdivisionService {
       departmentId: data.department_id,
     });
 
+    // Если это первое обычное подразделение - деактивировать дефолтное
+    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(data.department_id);
+    if (nonDefaultCount === 1) {
+      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(data.department_id);
+      if (defaultSubdivision && defaultSubdivision.is_active) {
+        await SubdivisionModel.update(defaultSubdivision.id, { is_active: false });
+        logger.info('Default subdivision deactivated (first regular subdivision created)', {
+          departmentId: data.department_id,
+          defaultSubdivisionId: defaultSubdivision.id,
+        });
+      }
+    }
+
     return subdivision;
   }
 
@@ -179,12 +192,36 @@ export class SubdivisionService {
       );
     }
 
+    // Запретить удаление дефолтного подразделения
+    if (subdivision.is_default) {
+      throw new CalloutError(
+        'Невозможно удалить дефолтное подразделение департамента',
+        'CANNOT_DELETE_DEFAULT',
+        400
+      );
+    }
+
+    const departmentId = subdivision.department_id;
+
     await SubdivisionModel.delete(id);
 
     logger.info('Subdivision deleted via service', {
       subdivisionId: id,
       name: subdivision.name,
     });
+
+    // Если это было последнее обычное подразделение - активировать дефолтное
+    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(departmentId);
+    if (nonDefaultCount === 0) {
+      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(departmentId);
+      if (defaultSubdivision && !defaultSubdivision.is_active) {
+        await SubdivisionModel.update(defaultSubdivision.id, { is_active: true });
+        logger.info('Default subdivision reactivated (last regular subdivision deleted)', {
+          departmentId,
+          defaultSubdivisionId: defaultSubdivision.id,
+        });
+      }
+    }
   }
 
   /**

@@ -2,7 +2,7 @@ import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
-import { buildSubdivisionsList, buildSubdivisionDetailPanel } from '../utils/department-panel-builder';
+import { buildSubdivisionsList, buildSubdivisionDetailPanel, buildSettingsPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -222,8 +222,8 @@ async function handleConfigureEmbed(
     userId: interaction.user.id,
   });
 
-  // Показать обновленную панель подразделения
-  const panel = buildSubdivisionDetailPanel(subdivision);
+  // Показать обновленную панель настроек
+  const panel = buildSettingsPanel(subdivision);
 
   await interaction.editReply(panel);
 }

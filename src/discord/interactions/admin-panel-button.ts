@@ -39,10 +39,11 @@ import {
   AuditLogChannelSetData,
 } from '../utils/audit-logger';
 
-// Состояние для добавления департамента (3 шага)
+// Состояние для добавления департамента (3-4 шага)
 interface AddDepartmentState {
   generalLeaderRoleId?: string;
   departmentRoleId?: string;
+  useSubdivisions?: boolean;
   userId: string;
   createdAt: number;
 }
@@ -215,6 +216,35 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       );
 
       await interaction.showModal(modal);
+    }
+
+    // Переключение разрешения на создание подразделений
+    else if (customId.startsWith('admin_toggle_allow_create_')) {
+      await interaction.deferUpdate();
+      const departmentId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
+      const department = await DepartmentService.getDepartmentById(departmentId);
+
+      if (!department) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Департамент не найден`,
+          embeds: [],
+          components: [],
+        });
+        return;
+      }
+
+      // Переключить allow_create_subdivisions
+      await DepartmentService.updateDepartment(departmentId, {
+        allow_create_subdivisions: !department.allow_create_subdivisions,
+      });
+
+      const updated = await DepartmentService.getDepartmentById(departmentId);
+      if (!updated) {
+        throw new Error('Failed to retrieve updated department');
+      }
+
+      const panel = buildDepartmentDetailPanel(updated);
+      await interaction.editReply(panel);
     }
 
     // Удаление департамента — показать подтверждение
@@ -418,8 +448,7 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
 
       state.departmentRoleId = roleId;
 
-      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ModalRow } = await import('discord.js');
-
+      // Показать modal с полем выбора режима
       const modal = new ModalBuilder()
         .setCustomId('admin_modal_add_dept')
         .setTitle('Добавление департамента — Шаг 3/3');
@@ -441,10 +470,10 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
         .setRequired(false)
         .setMaxLength(200);
 
-      modal.addComponents(
-        new ModalRow<TextInputBuilder>().addComponents(nameInput),
-        new ModalRow<TextInputBuilder>().addComponents(descInput),
-      );
+      const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput);
+      const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(descInput);
+
+      modal.addComponents(row1, row2);
 
       await interaction.showModal(modal);
     }

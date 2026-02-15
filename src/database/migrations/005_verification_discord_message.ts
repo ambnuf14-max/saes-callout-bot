@@ -13,6 +13,8 @@ export async function runVerificationDiscordMessageMigration(): Promise<void> {
     const columns = [
       'discord_channel_id',
       'discord_message_id',
+      'discord_interaction_token',
+      'discord_application_id',
     ];
 
     // Добавить каждую колонку отдельно (идемпотентно)

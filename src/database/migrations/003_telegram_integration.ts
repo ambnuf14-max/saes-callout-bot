@@ -9,17 +9,29 @@ export async function runTelegramIntegrationMigration(): Promise<void> {
   try {
     logger.info('Running Telegram integration migration...');
 
-    // 1. Добавить telegram_chat_id в таблицу subdivisions
-    await database.exec(`
-      -- Проверка и добавление колонки telegram_chat_id
-      ALTER TABLE subdivisions ADD COLUMN telegram_chat_id TEXT;
-    `);
+    // 1. Добавить telegram_chat_id в таблицу subdivisions (идемпотентно)
+    try {
+      await database.exec(`ALTER TABLE subdivisions ADD COLUMN telegram_chat_id TEXT;`);
+      logger.debug('Added column telegram_chat_id to subdivisions');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('duplicate column')) {
+        logger.debug('Column telegram_chat_id already exists, skipping');
+      } else {
+        throw error;
+      }
+    }
 
-    // 2. Добавить telegram_message_id в таблицу callouts
-    await database.exec(`
-      -- Проверка и добавление колонки telegram_message_id
-      ALTER TABLE callouts ADD COLUMN telegram_message_id TEXT;
-    `);
+    // 2. Добавить telegram_message_id в таблицу callouts (идемпотентно)
+    try {
+      await database.exec(`ALTER TABLE callouts ADD COLUMN telegram_message_id TEXT;`);
+      logger.debug('Added column telegram_message_id to callouts');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('duplicate column')) {
+        logger.debug('Column telegram_message_id already exists, skipping');
+      } else {
+        throw error;
+      }
+    }
 
     // 3. Создать новую таблицу verification_tokens с поддержкой платформ
     await database.exec(`
