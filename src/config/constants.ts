@@ -1,11 +1,11 @@
 // Цвета для Discord Embeds (hex)
 export const COLORS = {
-  ACTIVE: 0x00ff00, // Зеленый - активный каллаут
-  SUCCESS: 0x00ff00, // Зеленый - успех
-  CLOSED: 0xff0000, // Красный - закрытый каллаут
-  INFO: 0xff0000,   // Красный - информационный
-  WARNING: 0xffaa00, // Оранжевый - предупреждение
-  ERROR: 0xff0000,  // Красный - ошибка
+  ACTIVE: 0xdc143c,  // Темно-красный (crimson) - активный каллаут
+  SUCCESS: 0xdc143c, // Темно-красный (crimson) - успех
+  CLOSED: 0xdc143c,  // Темно-красный (crimson) - закрытый каллаут
+  INFO: 0xdc143c,    // Темно-красный (crimson) - информационный
+  WARNING: 0xdc143c, // Темно-красный (crimson) - предупреждение
+  ERROR: 0xdc143c,   // Темно-красный (crimson) - ошибка
 } as const;
 
 // Эмодзи
