@@ -15,6 +15,7 @@ import {
   CalloutCreatedData,
   CalloutClosedData,
 } from '../discord/utils/audit-logger';
+import PresenceManager from '../discord/utils/presence-manager';
 
 /**
  * Сервис для работы с каллаутами
@@ -94,6 +95,11 @@ export class CalloutService {
         subdivisionId: subdivision.id,
         authorId: data.author_id,
       });
+
+      // Обновить статус бота
+      PresenceManager.forceUpdate().catch(err =>
+        logger.error('Failed to update presence after callout created', { error: err })
+      );
 
       // 2. Создать канал для инцидента
       const channel = await createIncidentChannel(guild, callout, subdivision);
@@ -226,6 +232,11 @@ export class CalloutService {
         closedBy,
         reason,
       });
+
+      // Обновить статус бота
+      PresenceManager.forceUpdate().catch(err =>
+        logger.error('Failed to update presence after callout closed', { error: err })
+      );
 
       // 2. Получить подразделение для обновления embed
       const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
@@ -378,6 +389,14 @@ export class CalloutService {
     closed: number;
   }> {
     return await CalloutModel.getStats(serverId);
+  }
+
+  /**
+   * Получить количество активных каллаутов (для всех серверов)
+   */
+  static async getActiveCalloutsCount(): Promise<number> {
+    const callouts = await CalloutModel.findActive();
+    return callouts.length;
   }
 }
 

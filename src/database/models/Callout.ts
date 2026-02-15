@@ -236,6 +236,16 @@ export class CalloutModel {
 
     return false;
   }
+
+  /**
+   * Получить все активные каллауты (для всех серверов)
+   */
+  static async findActive(): Promise<Callout[]> {
+    return await database.all<Callout>(
+      'SELECT * FROM callouts WHERE status = ? ORDER BY created_at DESC',
+      [CALLOUT_STATUS.ACTIVE]
+    );
+  }
 }
 
 export default CalloutModel;

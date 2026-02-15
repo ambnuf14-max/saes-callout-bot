@@ -1,5 +1,6 @@
 import { Client } from 'discord.js';
 import logger from '../../utils/logger';
+import PresenceManager from '../utils/presence-manager';
 
 /**
  * Обработчик события ready
@@ -16,9 +17,6 @@ export default function readyHandler(client: Client) {
     guilds: client.guilds.cache.size,
   });
 
-  // Установка статуса бота
-  client.user.setPresence({
-    activities: [{ name: '🚨 Система каллаутов' }],
-    status: 'online',
-  });
+  // Инициализировать менеджер статуса бота
+  PresenceManager.initialize(client);
 }
