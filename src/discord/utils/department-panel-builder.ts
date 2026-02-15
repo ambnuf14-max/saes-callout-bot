@@ -20,7 +20,7 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`🚨 Панель управления каллаутами`)
+    .setTitle(`🚨 Лидерская панель управления каллаутами`)
     .setDescription(
       `**Состояние:** Подразделения не созданы\n\n` +
       `**Пояснение:** Сейчас каллауты адресуются всей фракции целиком. Если вы создадите подразделения, каллауты будут адресованы конкретному подразделению.\n\n` +
@@ -81,7 +81,7 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
 export function buildMainPanel(department: Department, subdivisionCount: number, activeCount: number) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`🚨 Панель управления каллаутами`)
+    .setTitle(`🚨 Лидерская панель управления каллаутами`)
     .setDescription(
       `**Состояние:** Используются подразделения\n\n` +
       `**Пояснение:** Каллаут адресуется конкретному подразделению. Для каждого подразделения можно привязать свои VK/Telegram конференции, назначить Discord роль (будет упомянута в каллауте), настроить внешний вид уведомлений.\n\n` +
