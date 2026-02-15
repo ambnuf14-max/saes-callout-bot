@@ -78,9 +78,10 @@ const factionCommand: Command = {
         panel = buildStandaloneMainPanel(department, defaultSubdivision);
       } else {
         // Есть активные обычные подразделения - показать обычную панель
-        const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
-        const totalSubdivisions = await SubdivisionService.getSubdivisionCount(department.id);
-        panel = buildMainPanel(department, totalSubdivisions, subdivisions.length);
+        const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+        // Отфильтровать дефолтное подразделение
+        const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
+        panel = buildMainPanel(department, subdivisions.length, subdivisions.length);
       }
 
       await interaction.editReply(panel);

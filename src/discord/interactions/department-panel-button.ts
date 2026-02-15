@@ -169,7 +169,10 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
 async function handleViewSubdivisions(interaction: ButtonInteraction, departmentId: number) {
   await interaction.deferUpdate();
 
-  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
+  const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
+
+  // Отфильтровать дефолтное подразделение из списка
+  const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
 
   // Получить департамент
   const { DepartmentModel } = await import('../../database/models');
@@ -215,9 +218,10 @@ async function handleBackToMain(interaction: ButtonInteraction, departmentId: nu
     panel = buildStandaloneMainPanel(department, defaultSubdivision);
   } else {
     // Есть активные обычные подразделения - показать обычную панель
-    const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
-    const totalSubdivisions = await SubdivisionService.getSubdivisionCount(department.id);
-    panel = buildMainPanel(department, totalSubdivisions, subdivisions.length);
+    const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+    // Отфильтровать дефолтное подразделение
+    const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
+    panel = buildMainPanel(department, subdivisions.length, subdivisions.length);
   }
 
   await interaction.editReply(panel);
