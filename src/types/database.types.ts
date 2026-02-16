@@ -32,33 +32,34 @@ export interface UpdateServerDTO {
   callout_allowed_role_ids?: string[];
 }
 
-export interface Department {
+export interface Faction {
   id: number;
   server_id: number;
   name: string;
   description: string | null;
   general_leader_role_id: string;  // Общая лидерская роль (State Faction Leader)
-  department_role_id: string;       // Роль конкретного департамента (LSPD, Sheriff, etc)
+  faction_role_id: string;       // Роль конкретной фракции (LSPD, Sheriff, etc)
   allow_create_subdivisions: boolean; // Может ли лидер создавать подразделения (контроль администратора)
+  faction_type_id: number | null; // Тип фракции (nullable)
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface CreateDepartmentDTO {
+export interface CreateFactionDTO {
   server_id: number;
   name: string;
   description?: string;
   general_leader_role_id: string;
-  department_role_id: string;
+  faction_role_id: string;
   allow_create_subdivisions?: boolean;
 }
 
-export interface UpdateDepartmentDTO {
+export interface UpdateFactionDTO {
   name?: string;
   description?: string;
   general_leader_role_id?: string;
-  department_role_id?: string;
+  faction_role_id?: string;
   allow_create_subdivisions?: boolean;
   is_active?: boolean;
 }
@@ -135,7 +136,7 @@ export interface CalloutRateLimit {
 
 export interface Subdivision {
   id: number;
-  department_id: number;
+  faction_id: number;
   server_id: number;
   name: string;
   description: string | null;
@@ -161,7 +162,7 @@ export interface Subdivision {
 }
 
 export interface CreateSubdivisionDTO {
-  department_id: number;
+  faction_id: number;
   server_id: number;
   name: string;
   description?: string;
@@ -199,7 +200,7 @@ export interface VerificationToken {
   subdivision_id: number;
   token: string;
   platform: Platform;
-  created_by: string;              // Discord user ID лидера
+  created_by: string;              // Discord user ID лидера фракции
   expires_at: string;
   is_used: boolean;
   used_at: string | null;
@@ -225,12 +226,169 @@ export interface CreateVerificationTokenDTO {
 
 // ============ EXTENDED TYPES ============
 
-// Расширенная информация о департаменте с подразделениями
-export interface DepartmentWithSubdivisions extends Department {
+// Расширенная информация о фракции с подразделениями
+export interface FactionWithSubdivisions extends Faction {
   subdivisions: Subdivision[];
 }
 
-// Расширенная информация о подразделении с департаментом
-export interface SubdivisionWithDepartment extends Subdivision {
-  department: Department;
+// Расширенная информация о подразделении с фракцией
+export interface SubdivisionWithFaction extends Subdivision {
+  faction: Faction;
+}
+
+// ============ FACTION TYPES ============
+
+export interface FactionType {
+  id: number;
+  server_id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateFactionTypeDTO {
+  server_id: number;
+  name: string;
+  description?: string;
+}
+
+export interface UpdateFactionTypeDTO {
+  name?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+// ============ SUBDIVISION TEMPLATES ============
+
+export interface SubdivisionTemplate {
+  id: number;
+  faction_type_id: number;
+  name: string;
+  description: string | null;
+  embed_author_name: string | null;
+  embed_author_url: string | null;
+  embed_author_icon_url: string | null;
+  embed_title: string | null;
+  embed_description: string | null;
+  embed_color: string | null;
+  embed_image_url: string | null;
+  embed_thumbnail_url: string | null;
+  embed_footer_text: string | null;
+  embed_footer_icon_url: string | null;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSubdivisionTemplateDTO {
+  faction_type_id?: number; // Опционально, может быть задан в методе
+  name: string;
+  description?: string;
+  display_order?: number;
+  // Все embed поля опциональны
+  embed_author_name?: string;
+  embed_author_url?: string;
+  embed_author_icon_url?: string;
+  embed_title?: string;
+  embed_description?: string;
+  embed_color?: string;
+  embed_image_url?: string;
+  embed_thumbnail_url?: string;
+  embed_footer_text?: string;
+  embed_footer_icon_url?: string;
+}
+
+export interface UpdateSubdivisionTemplateDTO {
+  name?: string;
+  description?: string;
+  display_order?: number;
+  embed_author_name?: string;
+  embed_author_url?: string;
+  embed_author_icon_url?: string;
+  embed_title?: string;
+  embed_description?: string;
+  embed_color?: string;
+  embed_image_url?: string;
+  embed_thumbnail_url?: string;
+  embed_footer_text?: string;
+  embed_footer_icon_url?: string;
+}
+
+// ============ PENDING CHANGES ============
+
+export type ChangeType =
+  | 'create_subdivision'
+  | 'update_subdivision'
+  | 'delete_subdivision'
+  | 'update_embed';
+
+export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface PendingChange {
+  id: number;
+  server_id: number;
+  faction_id: number;
+  subdivision_id: number | null;
+  change_type: ChangeType;
+  requested_by: string;
+  requested_at: string;
+  status: ChangeStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  change_data: string; // JSON string
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePendingChangeDTO {
+  server_id: number;
+  faction_id: number;
+  subdivision_id?: number;
+  change_type: ChangeType;
+  requested_by: string;
+  change_data: object; // Будет JSON.stringify
+}
+
+// Helper types для работы с change_data
+export interface CreateSubdivisionChangeData {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateSubdivisionChangeData {
+  name?: string;
+  description?: string;
+}
+
+export interface DeleteSubdivisionChangeData {
+  subdivision_name: string;
+}
+
+export interface UpdateEmbedChangeData {
+  embed_author_name?: string;
+  embed_author_url?: string;
+  embed_author_icon_url?: string;
+  embed_title?: string;
+  embed_description?: string;
+  embed_color?: string;
+  embed_image_url?: string;
+  embed_thumbnail_url?: string;
+  embed_footer_text?: string;
+  embed_footer_icon_url?: string;
+}
+
+// ============ EXTENDED TYPES FOR NEW FEATURES ============
+
+export interface FactionTypeWithTemplates extends FactionType {
+  templates: SubdivisionTemplate[];
+}
+
+export interface PendingChangeWithDetails extends PendingChange {
+  faction_name: string;
+  subdivision_name?: string;
+  requester_name?: string;
+  parsed_data: CreateSubdivisionChangeData | UpdateSubdivisionChangeData | DeleteSubdivisionChangeData | UpdateEmbedChangeData;
 }

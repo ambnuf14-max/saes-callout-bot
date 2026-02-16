@@ -1,6 +1,7 @@
 import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
+import { PendingChangeService } from '../../services/pending-change.service';
 import { getLeaderDepartment } from '../utils/department-permission-checker';
 import { buildSubdivisionsList, buildSubdivisionDetailPanel, buildSettingsPanel } from '../utils/department-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
@@ -14,11 +15,11 @@ export async function handleDepartmentPanelModal(interaction: ModalSubmitInterac
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить департамент лидера
+  // Получить фракцию лидера
   const department = await getLeaderDepartment(member);
   if (!department) {
     await interaction.reply({
-      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
+      content: MESSAGES.FACTION.NO_FACTION,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -74,25 +75,44 @@ async function handleAddSubdivision(
   const name = interaction.fields.getTextInputValue('subdivision_name').trim();
   const description = interaction.fields.getTextInputValue('subdivision_description').trim();
 
-  // Создать подразделение
-  const subdivision = await SubdivisionService.createSubdivision({
-    department_id: departmentId,
-    server_id: serverId,
-    name: name,
-    description: description || undefined,
-  });
+  // Создать pending запрос на создание подразделения
+  if (!interaction.guild) {
+    throw new Error('Guild not found');
+  }
 
-  logger.info('Subdivision created via panel', {
-    subdivisionId: subdivision.id,
-    name: subdivision.name,
+  await PendingChangeService.requestCreateSubdivision(
+    departmentId,
+    serverId,
+    interaction.user.id,
+    {
+      name,
+      description: description || undefined,
+    },
+    interaction.guild
+  );
+
+  logger.info('Subdivision creation requested via panel', {
+    name,
     departmentId,
     userId: interaction.user.id,
   });
 
-  // Показать детальную панель нового подразделения
-  const panel = buildSubdivisionDetailPanel(subdivision);
+  // Показать список подразделений с уведомлением
+  const { FactionModel } = await import('../../database/models');
+  const faction = await FactionModel.findById(departmentId);
+  if (!faction) {
+    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+  }
 
-  await interaction.editReply(panel);
+  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
+  const nonDefaultSubdivisions = subdivisions.filter(sub => !sub.is_default);
+
+  const panel = buildSubdivisionsList(faction, nonDefaultSubdivisions);
+
+  await interaction.editReply({
+    content: `${EMOJI.PENDING} Запрос на создание подразделения "${name}" отправлен администратору`,
+    ...panel,
+  });
 }
 
 /**
@@ -122,26 +142,36 @@ async function handleEditSubdivision(
   const name = interaction.fields.getTextInputValue('subdivision_name').trim();
   const description = interaction.fields.getTextInputValue('subdivision_description').trim();
 
-  // Обновить подразделение
-  const subdivision = await SubdivisionService.updateSubdivision(subdivisionId, {
-    name: name,
-    description: description || undefined,
-  });
-
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  // Создать pending запрос на обновление подразделения
+  if (!interaction.guild) {
+    throw new Error('Guild not found');
   }
 
-  logger.info('Subdivision updated via panel', {
+  await PendingChangeService.requestUpdateSubdivision(
     subdivisionId,
-    name: subdivision.name,
+    departmentId,
+    existingSubdivision.server_id,
+    interaction.user.id,
+    {
+      name,
+      description: description || undefined,
+    },
+    interaction.guild
+  );
+
+  logger.info('Subdivision update requested via panel', {
+    subdivisionId,
+    newName: name,
     userId: interaction.user.id,
   });
 
-  // Показать обновленную панель подразделения
-  const panel = buildSubdivisionDetailPanel(subdivision);
+  // Показать панель подразделения с уведомлением
+  const panel = await buildSubdivisionDetailPanel(existingSubdivision);
 
-  await interaction.editReply(panel);
+  await interaction.editReply({
+    content: `${EMOJI.PENDING} Запрос на обновление подразделения отправлен администратору`,
+    ...panel,
+  });
 }
 
 /**
@@ -204,28 +234,38 @@ async function handleConfigureEmbed(
   // Нормализовать цвет (добавить # если нужно)
   const normalizedColor = color && !color.startsWith('#') ? `#${color}` : color;
 
-  // Обновить подразделение
-  const subdivision = await SubdivisionService.updateSubdivision(subdivisionId, {
-    embed_title: title,
-    embed_description: description,
-    embed_image_url: imageUrl,
-    embed_thumbnail_url: thumbnailUrl,
-    embed_color: normalizedColor,
-  });
-
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  // Создать pending запрос на обновление embed
+  if (!interaction.guild) {
+    throw new Error('Guild not found');
   }
 
-  logger.info('Subdivision embed configured via panel', {
+  await PendingChangeService.requestUpdateEmbed(
+    subdivisionId,
+    departmentId,
+    existingSubdivision.server_id,
+    interaction.user.id,
+    {
+      embed_title: title,
+      embed_description: description,
+      embed_image_url: imageUrl,
+      embed_thumbnail_url: thumbnailUrl,
+      embed_color: normalizedColor,
+    },
+    interaction.guild
+  );
+
+  logger.info('Subdivision embed update requested via panel', {
     subdivisionId,
     userId: interaction.user.id,
   });
 
-  // Показать обновленную панель настроек
-  const panel = buildSettingsPanel(subdivision);
+  // Показать панель настроек с уведомлением
+  const panel = buildSettingsPanel(existingSubdivision);
 
-  await interaction.editReply(panel);
+  await interaction.editReply({
+    content: `${EMOJI.PENDING} Запрос на обновление embed отправлен администратору`,
+    ...panel,
+  });
 }
 
 /**

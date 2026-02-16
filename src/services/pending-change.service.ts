@@ -426,12 +426,12 @@ export class PendingChangeService {
   }
 
   /**
-   * Получить pending запросы департамента
+   * Получить pending запросы фракции
    */
   static async getPendingChangesForDepartment(
-    departmentId: number
+    factionId: number
   ): Promise<PendingChangeWithDetails[]> {
-    const changes = await PendingChangeModel.findByDepartmentId(departmentId, 'pending');
+    const changes = await PendingChangeModel.findByDepartmentId(factionId, 'pending');
 
     // Преобразовать в PendingChangeWithDetails
     const withDetails: PendingChangeWithDetails[] = [];
@@ -472,10 +472,10 @@ export class PendingChangeService {
   }
 
   /**
-   * Проверить наличие pending изменений для департамента
+   * Проверить наличие pending изменений для фракции
    */
-  static async hasPendingChanges(departmentId: number): Promise<boolean> {
-    const changes = await PendingChangeModel.findByDepartmentId(departmentId, 'pending');
+  static async hasPendingChanges(factionId: number): Promise<boolean> {
+    const changes = await PendingChangeModel.findByDepartmentId(factionId, 'pending');
     return changes.length > 0;
   }
 

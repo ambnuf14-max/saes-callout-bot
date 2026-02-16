@@ -1,15 +1,20 @@
 import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import { DepartmentService } from '../../services/department.service';
+import { FactionService } from '../../services/department.service';
+import { FactionTypeService } from '../../services/department-type.service';
+import { PendingChangeService } from '../../services/pending-change.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
   buildDepartmentsSection,
   buildDepartmentDetailPanel,
+  buildDepartmentTypesSection,
+  buildDepartmentTypeDetailPanel,
+  buildPendingChangesPanel,
 } from '../utils/admin-panel-builder';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
-import { getAddDepartmentState, clearAddDepartmentState } from './admin-panel-button';
+import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
 
 /**
  * Обработчик модальных окон админ-панели
@@ -38,14 +43,28 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
   const customId = interaction.customId;
 
   try {
-    // Добавление департамента (шаг 3 — modal с названием и описанием)
-    if (customId === 'admin_modal_add_dept') {
-      await handleAddDepartment(interaction, server.id);
+    // Добавление фракции (шаг 4 — modal с названием и описанием)
+    if (customId === 'admin_modal_add_fact') {
+      await handleAddFaction(interaction, server.id);
     }
-    // Редактирование департамента
-    else if (customId.startsWith('admin_modal_edit_dept_')) {
-      const departmentId = parseInt(customId.replace('admin_modal_edit_dept_', ''));
-      await handleEditDepartment(interaction, departmentId, server.id);
+    // Редактирование фракции
+    else if (customId.startsWith('admin_modal_edit_fact_')) {
+      const factionId = parseInt(customId.replace('admin_modal_edit_fact_', ''));
+      await handleEditFaction(interaction, factionId, server.id);
+    }
+    // Создание типа фракции
+    else if (customId === 'admin_modal_create_dept_type') {
+      await handleCreateFactionType(interaction, server.id);
+    }
+    // Добавление шаблона подразделения
+    else if (customId.startsWith('admin_modal_add_template_')) {
+      const typeId = parseInt(customId.replace('admin_modal_add_template_', ''));
+      await handleAddTemplate(interaction, typeId);
+    }
+    // Отклонение изменения с причиной
+    else if (customId.startsWith('admin_modal_reject_change_')) {
+      const changeId = parseInt(customId.replace('admin_modal_reject_change_', ''));
+      await handleRejectChange(interaction, changeId, server.id);
     }
   } catch (error) {
     logger.error('Error handling admin panel modal', {
@@ -67,9 +86,9 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
 }
 
 /**
- * Создание департамента из modal
+ * Создание фракции из modal
  */
-async function handleAddDepartment(
+async function handleAddFaction(
   interaction: ModalSubmitInteraction,
   serverId: number
 ) {
@@ -78,47 +97,48 @@ async function handleAddDepartment(
   const name = interaction.fields.getTextInputValue('dept_name').trim();
   const description = interaction.fields.getTextInputValue('dept_description').trim();
 
-  // Получить состояние с ролями
-  const state = getAddDepartmentState(interaction.user.id);
+  // Получить состояние с ролями и типом
+  const state = getAddFactionState(interaction.user.id);
   if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
     await interaction.editReply({
-      content: `${EMOJI.ERROR} Сессия добавления департамента истекла. Попробуйте снова.`,
+      content: `${EMOJI.ERROR} Сессия добавления фракции истекла. Попробуйте снова.`,
       embeds: [],
       components: [],
     });
     return;
   }
 
-  // Создать департамент (по умолчанию разрешено создание подразделений)
-  const department = await DepartmentService.createDepartment({
+  // Создать фракцию с типом (если выбран)
+  const faction = await FactionService.createDepartment({
     server_id: serverId,
     name,
     description: description || undefined,
     general_leader_role_id: state.generalLeaderRoleId,
     department_role_id: state.departmentRoleId,
-  });
+  }, state.selectedTypeId);
 
   // Очистить состояние
-  clearAddDepartmentState(interaction.user.id);
+  clearAddFactionState(interaction.user.id);
 
-  logger.info('Department created via admin panel', {
-    departmentId: department.id,
-    name: department.name,
+  logger.info('Faction created via admin panel', {
+    factionId: faction.id,
+    name: faction.name,
+    typeId: state.selectedTypeId,
     serverId,
     userId: interaction.user.id,
   });
 
-  // Показать детальную панель нового департамента
-  const panel = buildDepartmentDetailPanel(department);
+  // Показать детальную панель новой фракции
+  const panel = buildDepartmentDetailPanel(faction);
   await interaction.editReply(panel);
 }
 
 /**
- * Редактирование департамента из modal
+ * Редактирование фракции из modal
  */
-async function handleEditDepartment(
+async function handleEditFaction(
   interaction: ModalSubmitInteraction,
-  departmentId: number,
+  factionId: number,
   serverId: number
 ) {
   await interaction.deferUpdate();
@@ -126,21 +146,109 @@ async function handleEditDepartment(
   const name = interaction.fields.getTextInputValue('dept_name').trim();
   const description = interaction.fields.getTextInputValue('dept_description').trim();
 
-  const department = await DepartmentService.updateDepartment(departmentId, {
+  const faction = await FactionService.updateDepartment(factionId, {
     name,
     description: description || undefined,
   });
 
-  if (!department) {
-    throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
+  if (!faction) {
+    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
   }
 
-  logger.info('Department updated via admin panel', {
-    departmentId,
-    name: department.name,
+  logger.info('Faction updated via admin panel', {
+    factionId,
+    name: faction.name,
     userId: interaction.user.id,
   });
 
-  const panel = buildDepartmentDetailPanel(department);
+  const panel = buildDepartmentDetailPanel(faction);
+  await interaction.editReply(panel);
+}
+
+/**
+ * Создание типа фракции из modal
+ */
+async function handleCreateFactionType(
+  interaction: ModalSubmitInteraction,
+  serverId: number
+) {
+  await interaction.deferUpdate();
+
+  const name = interaction.fields.getTextInputValue('type_name').trim();
+  const description = interaction.fields.getTextInputValue('type_description').trim();
+
+  const factionType = await FactionTypeService.createDepartmentType({
+    server_id: serverId,
+    name,
+    description: description || undefined,
+  });
+
+  logger.info('Faction type created via admin panel', {
+    typeId: factionType.id,
+    name: factionType.name,
+    serverId,
+    userId: interaction.user.id,
+  });
+
+  // Показать детальную панель нового типа
+  const panel = await buildDepartmentTypeDetailPanel(factionType.id);
+  await interaction.editReply(panel);
+}
+
+/**
+ * Добавление шаблона подразделения из modal
+ */
+async function handleAddTemplate(
+  interaction: ModalSubmitInteraction,
+  typeId: number
+) {
+  await interaction.deferUpdate();
+
+  const name = interaction.fields.getTextInputValue('template_name').trim();
+  const description = interaction.fields.getTextInputValue('template_description').trim();
+
+  const template = await FactionTypeService.addTemplate(typeId, {
+    name,
+    description: description || undefined,
+  });
+
+  logger.info('Subdivision template added via admin panel', {
+    templateId: template.id,
+    typeId,
+    name: template.name,
+    userId: interaction.user.id,
+  });
+
+  // Вернуться к деталям типа фракции
+  const panel = await buildDepartmentTypeDetailPanel(typeId);
+  await interaction.editReply(panel);
+}
+
+/**
+ * Отклонение изменения с причиной из modal
+ */
+async function handleRejectChange(
+  interaction: ModalSubmitInteraction,
+  changeId: number,
+  serverId: number
+) {
+  await interaction.deferUpdate();
+
+  const reason = interaction.fields.getTextInputValue('rejection_reason').trim();
+
+  if (!interaction.guild) {
+    throw new Error('Guild not found');
+  }
+
+  await PendingChangeService.rejectChange(changeId, interaction.user.id, reason, interaction.guild);
+
+  logger.info('Change rejected via admin panel', {
+    changeId,
+    reason,
+    userId: interaction.user.id,
+  });
+
+  // Вернуться к списку pending изменений
+  const panel = await buildPendingChangesPanel(serverId);
   await interaction.editReply(panel);
 }

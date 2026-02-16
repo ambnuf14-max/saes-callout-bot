@@ -84,10 +84,10 @@ export const validators = {
   },
 
   /**
-   * Валидация имени департамента
+   * Валидация имени фракции
    * Формат: 2-10 символов, только заглавные буквы и цифры
    */
-  validateDepartmentName(name: string): ValidationResult {
+  validateFactionName(name: string): ValidationResult {
     if (!name || name.trim().length === 0) {
       return {
         valid: false,
@@ -98,19 +98,19 @@ export const validators = {
     const trimmed = name.trim();
 
     if (
-      trimmed.length < LIMITS.DEPARTMENT_NAME_MIN ||
-      trimmed.length > LIMITS.DEPARTMENT_NAME_MAX
+      trimmed.length < LIMITS.FACTION_NAME_MIN ||
+      trimmed.length > LIMITS.FACTION_NAME_MAX
     ) {
       return {
         valid: false,
-        error: MESSAGES.DEPARTMENT.ERROR_INVALID_NAME,
+        error: MESSAGES.FACTION.ERROR_INVALID_NAME,
       };
     }
 
     if (!/^[A-Z0-9]+$/.test(trimmed)) {
       return {
         valid: false,
-        error: MESSAGES.DEPARTMENT.ERROR_INVALID_NAME,
+        error: MESSAGES.FACTION.ERROR_INVALID_NAME,
       };
     }
 

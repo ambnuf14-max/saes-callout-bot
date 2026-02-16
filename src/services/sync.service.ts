@@ -300,7 +300,7 @@ export class SyncService {
   }
 
   /**
-   * Получить количество департаментов, ответивших на каллаут
+   * Получить количество фракций, ответивших на каллаут
    */
   static async getRespondedDepartmentsCount(
     calloutId: number

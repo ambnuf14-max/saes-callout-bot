@@ -1,24 +1,24 @@
 import { StringSelectMenuInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
-import { getLeaderDepartment } from '../utils/department-permission-checker';
-import { buildSubdivisionDetailPanel } from '../utils/department-panel-builder';
+import { getLeaderFaction } from '../utils/faction-permission-checker';
+import { buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
  * Обработчик select menu для выбора подразделения
  */
-export async function handleDepartmentSelect(interaction: StringSelectMenuInteraction) {
+export async function handleFactionSelect(interaction: StringSelectMenuInteraction) {
   if (!interaction.guild) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить департамент лидера
-  const department = await getLeaderDepartment(member);
-  if (!department) {
+  // Получить фракцию лидера
+  const faction = await getLeaderFaction(member);
+  if (!faction) {
     await interaction.reply({
-      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
+      content: MESSAGES.FACTION.NO_FACTION,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -28,11 +28,11 @@ export async function handleDepartmentSelect(interaction: StringSelectMenuIntera
 
   try {
     // Выбор подразделения из списка
-    if (customId === 'department_select_subdivision') {
+    if (customId === 'faction_select_subdivision') {
       await handleSelectSubdivision(interaction);
     }
   } catch (error) {
-    logger.error('Error handling department select menu', {
+    logger.error('Error handling faction select menu', {
       error: error instanceof Error ? error.message : error,
       customId,
       userId: interaction.user.id,
@@ -66,7 +66,7 @@ async function handleSelectSubdivision(interaction: StringSelectMenuInteraction)
   }
 
   // Показать детальную панель подразделения
-  const panel = buildSubdivisionDetailPanel(subdivision);
+  const panel = await buildSubdivisionDetailPanel(subdivision);
 
   await interaction.editReply(panel);
 
@@ -77,4 +77,4 @@ async function handleSelectSubdivision(interaction: StringSelectMenuInteraction)
   });
 }
 
-export default handleDepartmentSelect;
+export default handleFactionSelect;

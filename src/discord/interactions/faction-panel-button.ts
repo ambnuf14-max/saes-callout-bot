@@ -2,7 +2,8 @@ import { ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, Acti
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { VerificationService } from '../../services/verification.service';
-import { getLeaderDepartment } from '../utils/department-permission-checker';
+import { PendingChangeService } from '../../services/pending-change.service';
+import { getLeaderFaction } from '../utils/faction-permission-checker';
 import {
   buildStandaloneMainPanel,
   buildMainPanel,
@@ -13,24 +14,24 @@ import {
   buildEmbedPreview,
   buildVerificationInstructions,
   buildDeleteConfirmation,
-} from '../utils/department-panel-builder';
-import { DepartmentModel, SubdivisionModel } from '../../database/models';
+} from '../utils/faction-panel-builder';
+import { FactionModel, SubdivisionModel } from '../../database/models';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
  * Обработчик кнопок лидерской панели
  */
-export async function handleDepartmentPanelButton(interaction: ButtonInteraction) {
+export async function handleFactionPanelButton(interaction: ButtonInteraction) {
   if (!interaction.guild) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // Получить департамент лидера
-  const department = await getLeaderDepartment(member);
-  if (!department) {
+  // Получить фракцию лидера
+  const faction = await getLeaderFaction(member);
+  if (!faction) {
     await interaction.reply({
-      content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
+      content: MESSAGES.FACTION.NO_FACTION,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -40,111 +41,116 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
 
   try {
     // Просмотр списка подразделений
-    if (customId === 'department_view_subdivisions') {
-      await handleViewSubdivisions(interaction, department.id);
+    if (customId === 'faction_view_subdivisions') {
+      await handleViewSubdivisions(interaction, faction.id);
     }
     // Добавление подразделения (показать modal)
-    else if (customId === 'department_add_subdivision') {
-      await showAddSubdivisionModal(interaction, department);
+    else if (customId === 'faction_add_subdivision') {
+      await showAddSubdivisionModal(interaction, faction);
     }
     // Возврат к главной панели
-    else if (customId === 'department_back_main') {
-      await handleBackToMain(interaction, department.id);
+    else if (customId === 'faction_back_main') {
+      await handleBackToMain(interaction, faction.id);
     }
     // Возврат к списку подразделений
-    else if (customId === 'department_back_list') {
-      await handleViewSubdivisions(interaction, department.id);
+    else if (customId === 'faction_back_list') {
+      await handleViewSubdivisions(interaction, faction.id);
     }
     // Панель привязок
-    else if (customId.startsWith('department_links_')) {
+    else if (customId.startsWith('faction_links_')) {
       const subdivisionId = parseInt(customId.split('_')[2]);
-      await handleShowLinks(interaction, subdivisionId, department.id);
+      await handleShowLinks(interaction, subdivisionId, faction.id);
     }
     // Панель настроек
-    else if (customId.startsWith('department_settings_')) {
+    else if (customId.startsWith('faction_settings_')) {
       const subdivisionId = parseInt(customId.split('_')[2]);
-      await handleShowSettings(interaction, subdivisionId, department.id);
+      await handleShowSettings(interaction, subdivisionId, faction.id);
     }
     // Возврат к детальной панели подразделения
-    else if (customId.startsWith('department_back_detail_')) {
+    else if (customId.startsWith('faction_back_detail_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await handleBackToDetail(interaction, subdivisionId);
     }
     // Изменение подразделения
-    else if (customId.startsWith('department_edit_sub_')) {
+    else if (customId.startsWith('faction_edit_sub_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await showEditSubdivisionModal(interaction, subdivisionId);
     }
     // Привязка VK беседы
-    else if (customId.startsWith('department_link_vk_')) {
+    else if (customId.startsWith('faction_link_vk_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleLinkVk(interaction, subdivisionId, department.id);
+      await handleLinkVk(interaction, subdivisionId, faction.id);
     }
     // Привязка Telegram группы
-    else if (customId.startsWith('department_link_telegram_')) {
+    else if (customId.startsWith('faction_link_telegram_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleLinkTelegram(interaction, subdivisionId, department.id);
+      await handleLinkTelegram(interaction, subdivisionId, faction.id);
     }
     // Отвязка VK беседы
-    else if (customId.startsWith('department_unlink_vk_')) {
+    else if (customId.startsWith('faction_unlink_vk_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleUnlinkVk(interaction, subdivisionId, department.id);
+      await handleUnlinkVk(interaction, subdivisionId, faction.id);
     }
     // Отвязка Telegram группы
-    else if (customId.startsWith('department_unlink_telegram_')) {
+    else if (customId.startsWith('faction_unlink_telegram_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleUnlinkTelegram(interaction, subdivisionId, department.id);
+      await handleUnlinkTelegram(interaction, subdivisionId, faction.id);
     }
     // Переключение приема каллаутов
-    else if (customId.startsWith('department_toggle_callouts_')) {
+    else if (customId.startsWith('faction_toggle_callouts_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleToggleCallouts(interaction, subdivisionId, department.id);
+      await handleToggleCallouts(interaction, subdivisionId, faction.id);
     }
     // Standalone: Панель привязок
-    else if (customId.startsWith('department_standalone_links_')) {
+    else if (customId.startsWith('faction_standalone_links_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleShowLinks(interaction, subdivisionId, department.id);
+      await handleShowLinks(interaction, subdivisionId, faction.id);
     }
     // Standalone: Панель настроек
-    else if (customId.startsWith('department_standalone_settings_')) {
+    else if (customId.startsWith('faction_standalone_settings_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleShowSettings(interaction, subdivisionId, department.id);
+      await handleShowSettings(interaction, subdivisionId, faction.id);
     }
     // Переход к списку подразделений
-    else if (customId.startsWith('department_subdivisions_')) {
-      await handleViewSubdivisions(interaction, department.id);
+    else if (customId.startsWith('faction_subdivisions_')) {
+      await handleViewSubdivisions(interaction, faction.id);
     }
     // Предпросмотр embed подразделения
-    else if (customId.startsWith('department_preview_embed_')) {
+    else if (customId.startsWith('faction_preview_embed_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await handlePreviewEmbed(interaction, subdivisionId);
     }
     // Настройка embed подразделения
-    else if (customId.startsWith('department_configure_embed_')) {
+    else if (customId.startsWith('faction_configure_embed_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await showConfigureEmbedModal(interaction, subdivisionId);
     }
     // Удаление подразделения (показать подтверждение)
-    else if (customId.startsWith('department_delete_sub_')) {
+    else if (customId.startsWith('faction_delete_sub_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await showDeleteConfirmation(interaction, subdivisionId, department.id);
+      await showDeleteConfirmation(interaction, subdivisionId, faction.id);
     }
     // Подтверждение удаления
-    else if (customId.startsWith('department_confirm_delete_')) {
+    else if (customId.startsWith('faction_confirm_delete_')) {
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await handleDeleteSubdivision(interaction, subdivisionId, department.id);
+      await handleDeleteSubdivision(interaction, subdivisionId, faction.id);
     }
     // Отмена удаления
-    else if (customId === 'department_cancel_delete') {
-      await handleViewSubdivisions(interaction, department.id);
+    else if (customId === 'faction_cancel_delete') {
+      await handleViewSubdivisions(interaction, faction.id);
     }
     // Возврат к подразделению из верификации
-    else if (customId === 'department_back_subdivision') {
+    else if (customId === 'faction_back_subdivision') {
       // Получить subdivision_id из сообщения (предполагаем что оно сохранено)
-      await handleViewSubdivisions(interaction, department.id);
+      await handleViewSubdivisions(interaction, faction.id);
+    }
+    // Отмена pending запроса
+    else if (customId.startsWith('faction_cancel_change_')) {
+      const changeId = parseInt(customId.replace('faction_cancel_change_', ''));
+      await handleCancelChange(interaction, changeId, faction.id);
     }
   } catch (error) {
-    logger.error('Error handling department panel button', {
+    logger.error('Error handling faction panel button', {
       error: error instanceof Error ? error.message : error,
       customId,
       userId: interaction.user.id,
@@ -166,22 +172,22 @@ export async function handleDepartmentPanelButton(interaction: ButtonInteraction
 /**
  * Показать список подразделений
  */
-async function handleViewSubdivisions(interaction: ButtonInteraction, departmentId: number) {
+async function handleViewSubdivisions(interaction: ButtonInteraction, factionId: number) {
   await interaction.deferUpdate();
 
-  const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
+  const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(factionId);
 
   // Отфильтровать дефолтное подразделение из списка
   const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
 
-  // Получить департамент
-  const { DepartmentModel } = await import('../../database/models');
-  const department = await DepartmentModel.findById(departmentId);
-  if (!department) {
-    throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
+  // Получить фракцию
+  const { FactionModel } = await import('../../database/models');
+  const faction = await FactionModel.findById(factionId);
+  if (!faction) {
+    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
   }
 
-  const panel = buildSubdivisionsList(department, subdivisions);
+  const panel = buildSubdivisionsList(faction, subdivisions);
 
   await interaction.editReply(panel);
 }
@@ -189,17 +195,17 @@ async function handleViewSubdivisions(interaction: ButtonInteraction, department
 /**
  * Возврат к главной панели
  */
-async function handleBackToMain(interaction: ButtonInteraction, departmentId: number) {
+async function handleBackToMain(interaction: ButtonInteraction, factionId: number) {
   await interaction.deferUpdate();
 
-  const { DepartmentModel, SubdivisionModel } = await import('../../database/models');
-  const department = await DepartmentModel.findById(departmentId);
-  if (!department) {
-    throw new CalloutError('Департамент не найден', 'DEPARTMENT_NOT_FOUND', 404);
+  const { FactionModel, SubdivisionModel } = await import('../../database/models');
+  const faction = await FactionModel.findById(factionId);
+  if (!faction) {
+    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
   }
 
   // Получить дефолтное подразделение
-  const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+  const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(faction.id);
   if (!defaultSubdivision) {
     await interaction.editReply({
       content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
@@ -208,20 +214,20 @@ async function handleBackToMain(interaction: ButtonInteraction, departmentId: nu
   }
 
   // Подсчитать активные НЕ дефолтные подразделения
-  const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(department.id);
+  const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(faction.id);
 
   let panel;
 
   // Выбрать режим панели автоматически
   if (activeNonDefaultCount === 0) {
     // Нет активных обычных подразделений - показать standalone панель
-    panel = buildStandaloneMainPanel(department, defaultSubdivision);
+    panel = buildStandaloneMainPanel(faction, defaultSubdivision);
   } else {
     // Есть активные обычные подразделения - показать обычную панель
-    const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+    const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(faction.id, true);
     // Отфильтровать дефолтное подразделение
     const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
-    panel = buildMainPanel(department, subdivisions.length, subdivisions.length);
+    panel = buildMainPanel(faction, subdivisions.length, subdivisions.length);
   }
 
   await interaction.editReply(panel);
@@ -230,18 +236,18 @@ async function handleBackToMain(interaction: ButtonInteraction, departmentId: nu
 /**
  * Показать modal для добавления подразделения
  */
-async function showAddSubdivisionModal(interaction: ButtonInteraction, department: any) {
+async function showAddSubdivisionModal(interaction: ButtonInteraction, faction: any) {
   // Проверить, разрешено ли создание подразделений
-  if (!department.allow_create_subdivisions) {
+  if (!faction.allow_create_subdivisions) {
     await interaction.reply({
-      content: `${EMOJI.ERROR} Администратор запретил создание подразделений для этого департамента`,
+      content: `${EMOJI.ERROR} Администратор запретил создание подразделений для этой фракции`,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
   const modal = new ModalBuilder()
-    .setCustomId('department_modal_add_subdivision')
+    .setCustomId('faction_modal_add_subdivision')
     .setTitle('Добавить подразделение');
 
   const nameInput = new TextInputBuilder()
@@ -279,7 +285,7 @@ async function showEditSubdivisionModal(interaction: ButtonInteraction, subdivis
   }
 
   const modal = new ModalBuilder()
-    .setCustomId(`department_modal_edit_subdivision_${subdivisionId}`)
+    .setCustomId(`faction_modal_edit_subdivision_${subdivisionId}`)
     .setTitle(`Изменить: ${subdivision.name}`);
 
   const nameInput = new TextInputBuilder()
@@ -310,7 +316,7 @@ async function showEditSubdivisionModal(interaction: ButtonInteraction, subdivis
 /**
  * Показать панель привязок
  */
-async function handleShowLinks(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleShowLinks(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -318,7 +324,7 @@ async function handleShowLinks(interaction: ButtonInteraction, subdivisionId: nu
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(`${EMOJI.ERROR} У вас нет прав на управление этим подразделением`, 'PERMISSION_DENIED', 403);
   }
 
@@ -329,7 +335,7 @@ async function handleShowLinks(interaction: ButtonInteraction, subdivisionId: nu
 /**
  * Показать панель настроек
  */
-async function handleShowSettings(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleShowSettings(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -337,7 +343,7 @@ async function handleShowSettings(interaction: ButtonInteraction, subdivisionId:
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(`${EMOJI.ERROR} У вас нет прав на управление этим подразделением`, 'PERMISSION_DENIED', 403);
   }
 
@@ -356,14 +362,14 @@ async function handleBackToDetail(interaction: ButtonInteraction, subdivisionId:
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  const panel = buildSubdivisionDetailPanel(subdivision);
+  const panel = await buildSubdivisionDetailPanel(subdivision);
   await interaction.editReply(panel);
 }
 
 /**
  * Обработка привязки VK беседы
  */
-async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -371,7 +377,7 @@ async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: numbe
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -415,7 +421,7 @@ async function handleLinkVk(interaction: ButtonInteraction, subdivisionId: numbe
 /**
  * Обработка привязки Telegram группы
  */
-async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -423,7 +429,7 @@ async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId:
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -468,7 +474,7 @@ async function handleLinkTelegram(interaction: ButtonInteraction, subdivisionId:
 /**
  * Обработка отвязки VK беседы
  */
-async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -476,7 +482,7 @@ async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: num
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -530,7 +536,7 @@ async function handleUnlinkVk(interaction: ButtonInteraction, subdivisionId: num
 /**
  * Обработка отвязки Telegram группы
  */
-async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -538,7 +544,7 @@ async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionI
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -606,7 +612,7 @@ async function handleUnlinkTelegram(interaction: ButtonInteraction, subdivisionI
 /**
  * Переключение приема каллаутов
  */
-async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -614,7 +620,7 @@ async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionI
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -646,7 +652,7 @@ async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionI
 /**
  * Показать подтверждение удаления
  */
-async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisionId: number, departmentId: number) {
+async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisionId: number, factionId: number) {
   await interaction.deferUpdate();
 
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -654,7 +660,7 @@ async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisio
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -673,7 +679,7 @@ async function showDeleteConfirmation(interaction: ButtonInteraction, subdivisio
 async function handleDeleteSubdivision(
   interaction: ButtonInteraction,
   subdivisionId: number,
-  departmentId: number
+  factionId: number
 ) {
   await interaction.deferUpdate();
 
@@ -682,7 +688,7 @@ async function handleDeleteSubdivision(
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (subdivision.department_id !== departmentId) {
+  if (subdivision.department_id !== factionId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -690,15 +696,38 @@ async function handleDeleteSubdivision(
     );
   }
 
-  await SubdivisionService.deleteSubdivision(subdivisionId);
+  // Создать pending запрос на удаление подразделения
+  if (!interaction.guild) {
+    throw new Error('Guild not found');
+  }
 
-  // Вернуться к списку подразделений
-  await handleViewSubdivisions(interaction, departmentId);
+  await PendingChangeService.requestDeleteSubdivision(
+    subdivisionId,
+    factionId,
+    subdivision.server_id,
+    interaction.user.id,
+    interaction.guild
+  );
 
-  logger.info('Subdivision deleted via panel', {
+  logger.info('Subdivision deletion requested via panel', {
     subdivisionId,
     name: subdivision.name,
     userId: interaction.user.id,
+  });
+
+  // Вернуться к списку подразделений с уведомлением
+  const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(factionId);
+  const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
+
+  const faction = await FactionModel.findById(factionId);
+  if (!faction) {
+    throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+  }
+
+  const panel = buildSubdivisionsList(faction, subdivisions);
+  await interaction.editReply({
+    content: `${EMOJI.PENDING} Запрос на удаление подразделения "${subdivision.name}" отправлен администратору`,
+    ...panel,
   });
 }
 
@@ -736,7 +765,7 @@ async function showConfigureEmbedModal(interaction: ButtonInteraction, subdivisi
   }
 
   const modal = new ModalBuilder()
-    .setCustomId(`department_modal_configure_embed_${subdivisionId}`)
+    .setCustomId(`faction_modal_configure_embed_${subdivisionId}`)
     .setTitle(`Настроить Embed: ${subdivision.name.substring(0, 30)}`);
 
   // Поле 1: Заголовок
@@ -798,4 +827,34 @@ async function showConfigureEmbedModal(interaction: ButtonInteraction, subdivisi
   await interaction.showModal(modal);
 }
 
-export default handleDepartmentPanelButton;
+/**
+ * Отмена pending изменения
+ */
+async function handleCancelChange(
+  interaction: ButtonInteraction,
+  changeId: number,
+  factionId: number
+) {
+  await interaction.deferUpdate();
+
+  try {
+    await PendingChangeService.cancelChange(changeId, interaction.user.id);
+
+    logger.info('Change cancelled by leader', {
+      changeId,
+      userId: interaction.user.id,
+    });
+
+    // Вернуться к списку подразделений
+    await handleViewSubdivisions(interaction, factionId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось отменить изменение';
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} ${message}`,
+      embeds: [],
+      components: [],
+    });
+  }
+}
+
+export default handleFactionPanelButton;

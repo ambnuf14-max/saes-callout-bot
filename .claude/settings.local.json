@@ -20,7 +20,12 @@
       "Bash(grep:*)",
       "Bash(docker-compose build:*)",
       "Bash(docker-compose:*)",
-      "Bash(timeout 3 cat:*)"
+      "Bash(timeout 3 cat:*)",
+      "Bash(npm run docker:logs:*)",
+      "Bash(node check-docker-db.js:*)",
+      "Bash(pkill:*)",
+      "Bash(node:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

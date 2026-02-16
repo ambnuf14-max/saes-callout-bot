@@ -11,10 +11,10 @@ export class SubdivisionModel {
    */
   static async create(data: CreateSubdivisionDTO): Promise<Subdivision> {
     const result = await database.run(
-      `INSERT INTO subdivisions (department_id, server_id, name, description, discord_role_id)
+      `INSERT INTO subdivisions (faction_id, server_id, name, description, discord_role_id)
        VALUES (?, ?, ?, ?, ?)`,
       [
-        data.department_id,
+        data.faction_id,
         data.server_id,
         data.name,
         data.description || null,
@@ -25,7 +25,7 @@ export class SubdivisionModel {
     logger.info('Subdivision created', {
       subdivisionId: result.lastID,
       name: data.name,
-      departmentId: data.department_id,
+      factionId: data.faction_id,
     });
 
     const subdivision = await this.findById(result.lastID);
@@ -44,22 +44,22 @@ export class SubdivisionModel {
   }
 
   /**
-   * Найти подразделение по имени в департаменте
+   * Найти подразделение по имени во фракции
    */
-  static async findByName(departmentId: number, name: string): Promise<Subdivision | undefined> {
+  static async findByName(factionId: number, name: string): Promise<Subdivision | undefined> {
     return await database.get<Subdivision>(
-      'SELECT * FROM subdivisions WHERE department_id = ? AND name = ?',
-      [departmentId, name]
+      'SELECT * FROM subdivisions WHERE faction_id = ? AND name = ?',
+      [factionId, name]
     );
   }
 
   /**
-   * Найти дефолтное подразделение департамента
+   * Найти дефолтное подразделение фракции
    */
-  static async findDefaultByDepartmentId(departmentId: number): Promise<Subdivision | undefined> {
+  static async findDefaultByFactionId(factionId: number): Promise<Subdivision | undefined> {
     return await database.get<Subdivision>(
-      'SELECT * FROM subdivisions WHERE department_id = ? AND is_default = 1',
-      [departmentId]
+      'SELECT * FROM subdivisions WHERE faction_id = ? AND is_default = 1',
+      [factionId]
     );
   }
 
@@ -84,14 +84,14 @@ export class SubdivisionModel {
   }
 
   /**
-   * Получить все подразделения департамента
+   * Получить все подразделения фракции
    */
-  static async findByDepartmentId(departmentId: number, activeOnly = false): Promise<Subdivision[]> {
+  static async findByFactionId(factionId: number, activeOnly = false): Promise<Subdivision[]> {
     const sql = activeOnly
-      ? 'SELECT * FROM subdivisions WHERE department_id = ? AND is_active = 1 ORDER BY name'
-      : 'SELECT * FROM subdivisions WHERE department_id = ? ORDER BY name';
+      ? 'SELECT * FROM subdivisions WHERE faction_id = ? AND is_active = 1 ORDER BY name'
+      : 'SELECT * FROM subdivisions WHERE faction_id = ? ORDER BY name';
 
-    return await database.all<Subdivision>(sql, [departmentId]);
+    return await database.all<Subdivision>(sql, [factionId]);
   }
 
   /**
@@ -272,18 +272,18 @@ export class SubdivisionModel {
   /**
    * Проверить существование подразделения по имени
    */
-  static async exists(departmentId: number, name: string): Promise<boolean> {
-    const subdivision = await this.findByName(departmentId, name);
+  static async exists(factionId: number, name: string): Promise<boolean> {
+    const subdivision = await this.findByName(factionId, name);
     return !!subdivision;
   }
 
   /**
-   * Получить количество подразделений департамента
+   * Получить количество подразделений фракции
    */
-  static async count(departmentId: number): Promise<number> {
+  static async count(factionId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM subdivisions WHERE department_id = ?',
-      [departmentId]
+      'SELECT COUNT(*) as count FROM subdivisions WHERE faction_id = ?',
+      [factionId]
     );
     return result?.count || 0;
   }
@@ -291,25 +291,25 @@ export class SubdivisionModel {
   /**
    * Получить количество активных НЕ дефолтных подразделений
    */
-  static async countActiveNonDefault(departmentId: number): Promise<number> {
+  static async countActiveNonDefault(factionId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM subdivisions WHERE department_id = ? AND is_active = 1 AND is_default = 0',
-      [departmentId]
+      'SELECT COUNT(*) as count FROM subdivisions WHERE faction_id = ? AND is_active = 1 AND is_default = 0',
+      [factionId]
     );
     return result?.count || 0;
   }
 
   /**
-   * Деактивировать все НЕ дефолтные подразделения департамента
+   * Деактивировать все НЕ дефолтные подразделения фракции
    */
-  static async deactivateNonDefaultSubdivisions(departmentId: number): Promise<void> {
+  static async deactivateNonDefaultSubdivisions(factionId: number): Promise<void> {
     await database.run(
-      'UPDATE subdivisions SET is_active = 0 WHERE department_id = ? AND is_default = 0',
-      [departmentId]
+      'UPDATE subdivisions SET is_active = 0 WHERE faction_id = ? AND is_default = 0',
+      [factionId]
     );
 
     logger.info('Deactivated all non-default subdivisions', {
-      departmentId,
+      factionId,
     });
   }
 

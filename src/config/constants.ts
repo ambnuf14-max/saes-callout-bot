@@ -3,7 +3,7 @@ export const COLORS = {
   ACTIVE: 0xdc143c,  // Темно-красный (crimson) - активный каллаут
   SUCCESS: 0xdc143c, // Темно-красный (crimson) - успех
   CLOSED: 0xdc143c,  // Темно-красный (crimson) - закрытый каллаут
-  INFO: 0xdc143c,    // Темно-красный (crimson) - информационный
+  INFO: 0x3498db,    // Синий-голубой - информационный
   WARNING: 0xdc143c, // Темно-красный (crimson) - предупреждение
   ERROR: 0xdc143c,   // Темно-красный (crimson) - ошибка
 } as const;
@@ -19,14 +19,20 @@ export const EMOJI = {
   ACTIVE: '🟢',
   INFO: 'ℹ️',
   CALLOUT: '🚨',
+  // Approval система
+  PENDING: '⏳',
+  APPROVED: '✅',
+  REJECTED: '❌',
+  CANCELLED: '🚫',
+  FACTION: '🏛️',
 } as const;
 
 // Лимиты
 export const LIMITS = {
   DESCRIPTION_MIN: 10,
   DESCRIPTION_MAX: 500,
-  DEPARTMENT_NAME_MIN: 2,
-  DEPARTMENT_NAME_MAX: 10,
+  FACTION_NAME_MIN: 2,
+  FACTION_NAME_MAX: 10,
   LOCATION_MIN: 3,
   LOCATION_MAX: 100,
 } as const;
@@ -43,8 +49,8 @@ export const MESSAGES = {
     DESCRIPTION_PANEL: 'Нажмите кнопку ниже для создания каллаута',
 
     MODAL_TITLE: 'Создание каллаута',
-    MODAL_DEPT_LABEL: 'Департамент',
-    MODAL_DEPT_PLACEHOLDER: 'Выберите департамент',
+    MODAL_DEPT_LABEL: 'Фракция',
+    MODAL_DEPT_PLACEHOLDER: 'Выберите фракцию',
     MODAL_DESC_LABEL: 'Описание инцидента',
     MODAL_DESC_PLACEHOLDER: 'Опишите ситуацию подробно...',
 
@@ -60,7 +66,7 @@ export const MESSAGES = {
 
   SETUP: {
     SUCCESS: (channelName: string) =>
-      `${EMOJI.SUCCESS} Система настроена!\nКанал: ${channelName}\nТеперь добавьте департаменты через \`/settings\` → Департаменты`,
+      `${EMOJI.SUCCESS} Система настроена!\nКанал: ${channelName}\nТеперь добавьте фракции через \`/settings\` → Фракции`,
     ERROR_NO_PERMISSION: `${EMOJI.ERROR} Только администраторы могут выполнить начальную настройку`,
   },
 
@@ -77,22 +83,22 @@ export const MESSAGES = {
       `${EMOJI.ERROR} Место слишком длинное (максимум ${max} символов)`,
   },
 
-  DEPARTMENT: {
-    PANEL_TITLE: '🏛️ Панель управления департаментом',
-    NO_DEPARTMENT: `${EMOJI.ERROR} Вы не являетесь лидером департамента`,
-    MULTIPLE_DEPARTMENTS: `${EMOJI.WARNING} У вас роли нескольких департаментов. Обратитесь к администратору.`,
+  FACTION: {
+    PANEL_TITLE: '🏛️ Панель управления фракцией',
+    NO_FACTION: `${EMOJI.ERROR} Вы не являетесь лидером фракции`,
+    MULTIPLE_FACTIONS: `${EMOJI.WARNING} У вас роли нескольких фракций. Обратитесь к администратору.`,
 
     SUCCESS_CREATED: (name: string) =>
-      `${EMOJI.SUCCESS} Департамент "${name}" создан`,
+      `${EMOJI.SUCCESS} Фракция "${name}" создана`,
     SUCCESS_UPDATED: (name: string) =>
-      `${EMOJI.SUCCESS} Департамент "${name}" обновлен`,
+      `${EMOJI.SUCCESS} Фракция "${name}" обновлена`,
     SUCCESS_REMOVED: (name: string) =>
-      `${EMOJI.SUCCESS} Департамент "${name}" удален`,
+      `${EMOJI.SUCCESS} Фракция "${name}" удалена`,
 
-    ERROR_NOT_FOUND: `${EMOJI.ERROR} Департамент не найден`,
+    ERROR_NOT_FOUND: `${EMOJI.ERROR} Фракция не найдена`,
     ERROR_ALREADY_EXISTS: (name: string) =>
-      `${EMOJI.ERROR} Департамент "${name}" уже существует`,
-    ERROR_ROLES_EXIST: `${EMOJI.ERROR} Департамент с такой комбинацией ролей уже существует`,
+      `${EMOJI.ERROR} Фракция "${name}" уже существует`,
+    ERROR_ROLES_EXIST: `${EMOJI.ERROR} Фракция с такой комбинацией ролей уже существует`,
     ERROR_INVALID_NAME: `${EMOJI.ERROR} Название должно быть от 2 до 50 символов`,
   },
 
@@ -164,7 +170,7 @@ export const CALLOUT_STATUS = {
   CANCELLED: 'cancelled',
 } as const;
 
-// Типы ответов департаментов
+// Типы ответов фракций
 export const RESPONSE_TYPE = {
   ACKNOWLEDGED: 'acknowledged', // Принято к сведению
   ON_WAY: 'on_way',            // В пути

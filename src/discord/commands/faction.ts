@@ -36,24 +36,24 @@ const factionCommand: Command = {
         return;
       }
 
-      // Проверить, является ли пользователь лидером департамента
-      let department;
+      // Проверить, является ли пользователь лидером фракции
+      let faction;
       try {
-        department = await getLeaderDepartment(member);
+        faction = await getLeaderDepartment(member);
       } catch (error) {
-        // Если ошибка о множественных департаментах
+        // Если ошибка о множественных фракциях
         if (error instanceof CalloutError && error.code === 'MULTIPLE_DEPARTMENTS') {
           await interaction.editReply({
-            content: MESSAGES.DEPARTMENT.MULTIPLE_DEPARTMENTS,
+            content: MESSAGES.FACTION.MULTIPLE_FACTIONS,
           });
           return;
         }
         throw error;
       }
 
-      if (!department) {
+      if (!faction) {
         await interaction.editReply({
-          content: MESSAGES.DEPARTMENT.NO_DEPARTMENT,
+          content: MESSAGES.FACTION.NO_FACTION,
         });
         return;
       }
@@ -61,7 +61,7 @@ const factionCommand: Command = {
       let panel;
 
       // Получить дефолтное подразделение
-      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(faction.id);
       if (!defaultSubdivision) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
@@ -70,25 +70,25 @@ const factionCommand: Command = {
       }
 
       // Подсчитать активные НЕ дефолтные подразделения
-      const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(department.id);
+      const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(faction.id);
 
       // Выбрать режим панели автоматически
       if (activeNonDefaultCount === 0) {
         // Нет активных обычных подразделений - показать standalone панель
-        panel = buildStandaloneMainPanel(department, defaultSubdivision);
+        panel = buildStandaloneMainPanel(faction, defaultSubdivision);
       } else {
         // Есть активные обычные подразделения - показать обычную панель
-        const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(department.id, true);
+        const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(faction.id, true);
         // Отфильтровать дефолтное подразделение
         const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
-        panel = buildMainPanel(department, subdivisions.length, subdivisions.length);
+        panel = buildMainPanel(faction, subdivisions.length, subdivisions.length);
       }
 
       await interaction.editReply(panel);
 
       logger.info('Faction panel opened', {
-        departmentId: department.id,
-        departmentName: department.name,
+        factionId: faction.id,
+        factionName: faction.name,
         userId: interaction.user.id,
         guildId: interaction.guild.id,
       });

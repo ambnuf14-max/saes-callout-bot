@@ -28,7 +28,7 @@ export class SubdivisionService {
     const existing = await SubdivisionModel.findByName(data.department_id, data.name);
     if (existing) {
       throw new CalloutError(
-        `Подразделение с названием "${data.name}" уже существует в этом департаменте`,
+        `Подразделение с названием "${data.name}" уже существует в этой фракции`,
         'SUBDIVISION_EXISTS',
         400
       );
@@ -50,7 +50,7 @@ export class SubdivisionService {
       if (defaultSubdivision && defaultSubdivision.is_active) {
         await SubdivisionModel.update(defaultSubdivision.id, { is_active: false });
         logger.info('Default subdivision deactivated (first regular subdivision created)', {
-          departmentId: data.department_id,
+          factionId: data.department_id,
           defaultSubdivisionId: defaultSubdivision.id,
         });
       }
@@ -63,10 +63,10 @@ export class SubdivisionService {
    * Получить все подразделения фракции
    */
   static async getSubdivisionsByDepartmentId(
-    departmentId: number,
+    factionId: number,
     activeOnly = false
   ): Promise<Subdivision[]> {
-    return await SubdivisionModel.findByDepartmentId(departmentId, activeOnly);
+    return await SubdivisionModel.findByDepartmentId(factionId, activeOnly);
   }
 
   /**
@@ -195,13 +195,13 @@ export class SubdivisionService {
     // Запретить удаление дефолтного подразделения
     if (subdivision.is_default) {
       throw new CalloutError(
-        'Невозможно удалить дефолтное подразделение департамента',
+        'Невозможно удалить дефолтное подразделение фракции',
         'CANNOT_DELETE_DEFAULT',
         400
       );
     }
 
-    const departmentId = subdivision.department_id;
+    const factionId = subdivision.department_id;
 
     await SubdivisionModel.delete(id);
 
@@ -211,13 +211,13 @@ export class SubdivisionService {
     });
 
     // Если это было последнее обычное подразделение - активировать дефолтное
-    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(departmentId);
+    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(factionId);
     if (nonDefaultCount === 0) {
-      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(departmentId);
+      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(factionId);
       if (defaultSubdivision && !defaultSubdivision.is_active) {
         await SubdivisionModel.update(defaultSubdivision.id, { is_active: true });
         logger.info('Default subdivision reactivated (last regular subdivision deleted)', {
-          departmentId,
+          factionId,
           defaultSubdivisionId: defaultSubdivision.id,
         });
       }
@@ -241,15 +241,15 @@ export class SubdivisionService {
   /**
    * Получить количество подразделений фракции
    */
-  static async getSubdivisionCount(departmentId: number): Promise<number> {
-    return await SubdivisionModel.count(departmentId);
+  static async getSubdivisionCount(factionId: number): Promise<number> {
+    return await SubdivisionModel.count(factionId);
   }
 
   /**
    * Проверить существование подразделения
    */
-  static async subdivisionExists(departmentId: number, name: string): Promise<boolean> {
-    return await SubdivisionModel.exists(departmentId, name);
+  static async subdivisionExists(factionId: number, name: string): Promise<boolean> {
+    return await SubdivisionModel.exists(factionId, name);
   }
 }
 

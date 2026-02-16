@@ -3,7 +3,8 @@ import logger from '../utils/logger';
 import runTelegramIntegrationMigration from './migrations/003_telegram_integration';
 import runSubdivisionEmbedsMigration from './migrations/004_subdivision_embeds';
 import runVerificationDiscordMessageMigration from './migrations/005_verification_discord_message';
-import runDepartmentStandaloneModeMigration from './migrations/006_department_standalone_mode';
+import runFactionStandaloneModeMigration from './migrations/006_faction_standalone_mode';
+import runApprovalAndTypesSystemMigration from './migrations/007_approval_and_types_system';
 
 /**
  * SQL схема для всех таблиц
@@ -70,26 +71,26 @@ CREATE TABLE IF NOT EXISTS callout_rate_limits (
     UNIQUE(user_id, server_id)
 );
 
--- Таблица департаментов
-CREATE TABLE IF NOT EXISTS departments (
+-- Таблица фракций
+CREATE TABLE IF NOT EXISTS factions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     server_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
     general_leader_role_id TEXT NOT NULL,
-    department_role_id TEXT NOT NULL,
+    faction_role_id TEXT NOT NULL,
     is_active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
     UNIQUE(server_id, name),
-    UNIQUE(server_id, general_leader_role_id, department_role_id)
+    UNIQUE(server_id, general_leader_role_id, faction_role_id)
 );
 
--- Таблица подразделений внутри департаментов
+-- Таблица подразделений внутри фракций
 CREATE TABLE IF NOT EXISTS subdivisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    department_id INTEGER NOT NULL,
+    faction_id INTEGER NOT NULL,
     server_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
@@ -99,9 +100,9 @@ CREATE TABLE IF NOT EXISTS subdivisions (
     is_active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
+    FOREIGN KEY (faction_id) REFERENCES factions(id) ON DELETE CASCADE,
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-    UNIQUE(department_id, name)
+    UNIQUE(faction_id, name)
 );
 
 -- Таблица токенов верификации VK бесед
@@ -131,9 +132,9 @@ CREATE INDEX IF NOT EXISTS idx_servers_guild ON servers(guild_id);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_user_server ON callout_rate_limits(user_id, server_id);
 
 -- Индексы для новых таблиц
-CREATE INDEX IF NOT EXISTS idx_departments_server ON departments(server_id);
-CREATE INDEX IF NOT EXISTS idx_departments_roles ON departments(general_leader_role_id, department_role_id);
-CREATE INDEX IF NOT EXISTS idx_subdivisions_department ON subdivisions(department_id);
+CREATE INDEX IF NOT EXISTS idx_factions_server ON factions(server_id);
+CREATE INDEX IF NOT EXISTS idx_factions_roles ON factions(general_leader_role_id, faction_role_id);
+CREATE INDEX IF NOT EXISTS idx_subdivisions_faction ON subdivisions(faction_id);
 CREATE INDEX IF NOT EXISTS idx_subdivisions_server ON subdivisions(server_id);
 CREATE INDEX IF NOT EXISTS idx_subdivisions_vk_chat ON subdivisions(vk_chat_id);
 CREATE INDEX IF NOT EXISTS idx_verification_tokens_token ON vk_verification_tokens(token);
@@ -155,7 +156,8 @@ export async function runMigrations(): Promise<void> {
     await runTelegramIntegrationMigration();
     await runSubdivisionEmbedsMigration();
     await runVerificationDiscordMessageMigration();
-    await runDepartmentStandaloneModeMigration();
+    await runFactionStandaloneModeMigration();
+    await runApprovalAndTypesSystemMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {
@@ -172,10 +174,10 @@ export async function runMigrations(): Promise<void> {
 export async function checkTables(): Promise<boolean> {
   try {
     const tables = await database.all<{ name: string }>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'departments', 'subdivisions', 'callouts', 'callout_responses', 'callout_rate_limits', 'verification_tokens')`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('servers', 'factions', 'subdivisions', 'callouts', 'callout_responses', 'callout_rate_limits', 'vk_verification_tokens', 'faction_types', 'subdivision_templates', 'pending_changes')`
     );
 
-    return tables.length === 7;
+    return tables.length >= 7; // Минимум основные таблицы, остальные добавляются миграциями
   } catch (error) {
     logger.error('Failed to check tables', { error });
     return false;
@@ -189,12 +191,12 @@ export async function clearAllTables(): Promise<void> {
   logger.warn('Clearing all tables - this should only be used in development!');
 
   try {
-    await database.run('DELETE FROM verification_tokens');
+    await database.run('DELETE FROM vk_verification_tokens');
     await database.run('DELETE FROM callout_rate_limits');
     await database.run('DELETE FROM callout_responses');
     await database.run('DELETE FROM callouts');
     await database.run('DELETE FROM subdivisions');
-    await database.run('DELETE FROM departments');
+    await database.run('DELETE FROM factions');
     await database.run('DELETE FROM servers');
 
     logger.info('All tables cleared');

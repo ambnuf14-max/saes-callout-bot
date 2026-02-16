@@ -16,7 +16,7 @@ import {
 import { COLORS } from '../../config/constants';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import { DepartmentService } from '../../services/department.service';
+import { FactionService } from '../../services/department.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
   buildAdminMainPanel,
@@ -28,7 +28,13 @@ import {
   buildDepartmentDetailPanel,
   buildDepartmentDeleteConfirmation,
   buildInfoSection,
+  buildDepartmentTypesSection,
+  buildDepartmentTypeDetailPanel,
+  buildPendingChangesPanel,
+  buildReviewChangePanel,
 } from '../utils/admin-panel-builder';
+import { FactionTypeService } from '../../services/department-type.service';
+import { PendingChangeService } from '../../services/pending-change.service';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import {
@@ -39,24 +45,25 @@ import {
   AuditLogChannelSetData,
 } from '../utils/audit-logger';
 
-// Состояние для добавления департамента (3-4 шага)
-interface AddDepartmentState {
+// Состояние для добавления фракции (3-4 шага)
+interface AddFactionState {
   generalLeaderRoleId?: string;
   departmentRoleId?: string;
   useSubdivisions?: boolean;
+  selectedTypeId?: number;  // Тип фракции
   userId: string;
   createdAt: number;
 }
 
-const addDepartmentStates = new Map<string, AddDepartmentState>();
+const addFactionStates = new Map<string, AddFactionState>();
 const STATE_TTL = 5 * 60 * 1000; // 5 минут
 
 // Периодическая очистка
 setInterval(() => {
   const now = Date.now();
-  for (const [key, state] of addDepartmentStates.entries()) {
+  for (const [key, state] of addFactionStates.entries()) {
     if (now - state.createdAt > STATE_TTL) {
-      addDepartmentStates.delete(key);
+      addFactionStates.delete(key);
     }
   }
 }, 60_000);
@@ -132,7 +139,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.editReply(panel);
     }
 
-    else if (customId === 'admin_departments') {
+    else if (customId === 'admin_factions') {
       await interaction.deferUpdate();
       const panel = await buildDepartmentsSection(server);
       await interaction.editReply(panel);
@@ -144,10 +151,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.editReply(panel);
     }
 
-    // Добавление департамента — шаг 1: выбор общей лидерской роли
-    else if (customId === 'admin_add_department') {
+    // Добавление фракции — шаг 1: выбор общей лидерской роли
+    else if (customId === 'admin_add_faction') {
       // Инициировать состояние
-      addDepartmentStates.set(interaction.user.id, {
+      addFactionStates.set(interaction.user.id, {
         userId: interaction.user.id,
         createdAt: Date.now(),
       });
@@ -155,19 +162,19 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
       const embed = new EmbedBuilder()
         .setColor(COLORS.INFO)
-        .setTitle('➕ Добавление департамента — Шаг 1/3')
+        .setTitle('➕ Добавление фракции — Шаг 1/3')
         .setDescription('Выберите **общую лидерскую роль** (например: State Department Leader)')
         .setTimestamp();
 
       const roleSelect = new RoleSelectMenuBuilder()
-        .setCustomId('admin_dept_step1_role')
+        .setCustomId('admin_fact_step1_role')
         .setPlaceholder('Выберите общую лидерскую роль');
 
       const row = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect);
 
       const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId('admin_departments')
+          .setCustomId('admin_factions')
           .setLabel('Отмена')
           .setEmoji('❌')
           .setStyle(ButtonStyle.Secondary),
@@ -176,31 +183,31 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.editReply({ embeds: [embed], components: [row, backRow] });
     }
 
-    // Редактирование департамента (показать modal)
-    else if (customId.startsWith('admin_edit_department_')) {
-      const departmentId = parseInt(customId.replace('admin_edit_department_', ''));
-      const department = await DepartmentService.getDepartmentById(departmentId);
+    // Редактирование фракции (показать modal)
+    else if (customId.startsWith('admin_edit_faction_')) {
+      const factionId = parseInt(customId.replace('admin_edit_faction_', ''));
+      const faction = await FactionService.getDepartmentById(factionId);
 
-      if (!department) {
+      if (!faction) {
         await interaction.reply({
-          content: `${EMOJI.ERROR} Департамент не найден`,
+          content: `${EMOJI.ERROR} Фракция не найдена`,
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
       const modal = new ModalBuilder()
-        .setCustomId(`admin_modal_edit_dept_${departmentId}`)
-        .setTitle(`Изменить: ${department.name}`);
+        .setCustomId(`admin_modal_edit_fact_${factionId}`)
+        .setTitle(`Изменить: ${faction.name}`);
 
       const nameInput = new TextInputBuilder()
         .setCustomId('dept_name')
-        .setLabel('Название департамента')
+        .setLabel('Название фракции')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
         .setMinLength(2)
         .setMaxLength(50)
-        .setValue(department.name);
+        .setValue(faction.name);
 
       const descInput = new TextInputBuilder()
         .setCustomId('dept_description')
@@ -208,7 +215,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
         .setMaxLength(200)
-        .setValue(department.description || '');
+        .setValue(faction.description || '');
 
       modal.addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
@@ -221,12 +228,12 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Переключение разрешения на создание подразделений
     else if (customId.startsWith('admin_toggle_allow_create_')) {
       await interaction.deferUpdate();
-      const departmentId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
-      const department = await DepartmentService.getDepartmentById(departmentId);
+      const factionId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
+      const faction = await FactionService.getDepartmentById(factionId);
 
-      if (!department) {
+      if (!faction) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Департамент не найден`,
+          content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
           components: [],
         });
@@ -234,64 +241,359 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       }
 
       // Переключить allow_create_subdivisions
-      await DepartmentService.updateDepartment(departmentId, {
-        allow_create_subdivisions: !department.allow_create_subdivisions,
+      await FactionService.updateDepartment(factionId, {
+        allow_create_subdivisions: !faction.allow_create_subdivisions,
       });
 
-      const updated = await DepartmentService.getDepartmentById(departmentId);
+      const updated = await FactionService.getDepartmentById(factionId);
       if (!updated) {
-        throw new Error('Failed to retrieve updated department');
+        throw new Error('Failed to retrieve updated faction');
       }
 
       const panel = buildDepartmentDetailPanel(updated);
       await interaction.editReply(panel);
     }
 
-    // Удаление департамента — показать подтверждение
-    else if (customId.startsWith('admin_delete_department_')) {
+    // Удаление фракции — показать подтверждение
+    else if (customId.startsWith('admin_delete_faction_')) {
       await interaction.deferUpdate();
-      const departmentId = parseInt(customId.replace('admin_delete_department_', ''));
-      const department = await DepartmentService.getDepartmentById(departmentId);
+      const factionId = parseInt(customId.replace('admin_delete_faction_', ''));
+      const faction = await FactionService.getDepartmentById(factionId);
 
-      if (!department) {
+      if (!faction) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Департамент не найден`,
+          content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
           components: [],
         });
         return;
       }
 
-      const panel = buildDepartmentDeleteConfirmation(department);
+      const panel = buildDepartmentDeleteConfirmation(faction);
       await interaction.editReply(panel);
     }
 
-    // Подтверждение удаления департамента
+    // Подтверждение удаления фракции
     else if (customId.startsWith('admin_confirm_delete_dept_')) {
       await interaction.deferUpdate();
-      const departmentId = parseInt(customId.replace('admin_confirm_delete_dept_', ''));
-      const department = await DepartmentService.getDepartmentById(departmentId);
+      const factionId = parseInt(customId.replace('admin_confirm_delete_dept_', ''));
+      const faction = await FactionService.getDepartmentById(factionId);
 
-      if (!department) {
+      if (!faction) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Департамент не найден`,
+          content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
           components: [],
         });
         return;
       }
 
-      await DepartmentService.deleteDepartment(departmentId);
+      await FactionService.deleteDepartment(factionId);
 
-      logger.info('Department deleted via admin panel', {
-        departmentId,
-        name: department.name,
+      logger.info('Faction deleted via admin panel', {
+        factionId,
+        name: faction.name,
         userId: interaction.user.id,
       });
 
       // Вернуться к списку
       const panel = await buildDepartmentsSection(server);
       await interaction.editReply(panel);
+    }
+
+    // === Управление типами фракций ===
+
+    // Открыть секцию управления типами
+    else if (customId === 'admin_dept_types') {
+      await interaction.deferUpdate();
+      const panel = await buildDepartmentTypesSection(server);
+      await interaction.editReply(panel);
+    }
+
+    // Просмотр деталей типа фракции
+    else if (customId.startsWith('admin_view_dept_type_')) {
+      await interaction.deferUpdate();
+      const typeId = parseInt(customId.replace('admin_view_dept_type_', ''));
+      const panel = await buildDepartmentTypeDetailPanel(typeId);
+      await interaction.editReply(panel);
+    }
+
+    // Создание нового типа фракции (показать modal)
+    else if (customId === 'admin_create_dept_type') {
+      const modal = new ModalBuilder()
+        .setCustomId('admin_modal_create_dept_type')
+        .setTitle('Создание типа фракции');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('type_name')
+        .setLabel('Название типа')
+        .setPlaceholder('Например: Полицейская фракция')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('type_description')
+        .setLabel('Описание (опционально)')
+        .setPlaceholder('Краткое описание типа фракции')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+      );
+
+      await interaction.showModal(modal);
+    }
+
+    // Добавление шаблона подразделения (показать modal)
+    else if (customId.startsWith('admin_add_template_')) {
+      const typeId = parseInt(customId.replace('admin_add_template_', ''));
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_add_template_${typeId}`)
+        .setTitle('Добавление шаблона подразделения');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('template_name')
+        .setLabel('Название подразделения')
+        .setPlaceholder('Например: Патруль')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('template_description')
+        .setLabel('Описание (опционально)')
+        .setPlaceholder('Краткое описание подразделения')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+      );
+
+      await interaction.showModal(modal);
+    }
+
+    // Удаление типа фракции
+    else if (customId.startsWith('admin_delete_dept_type_')) {
+      await interaction.deferUpdate();
+      const typeId = parseInt(customId.replace('admin_delete_dept_type_', ''));
+
+      try {
+        await FactionTypeService.deleteDepartmentType(typeId);
+
+        logger.info('Faction type deleted via admin panel', {
+          typeId,
+          userId: interaction.user.id,
+        });
+
+        // Вернуться к списку типов
+        const panel = await buildDepartmentTypesSection(server);
+        await interaction.editReply(panel);
+      } catch (error) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Не удалось удалить тип фракции`,
+          embeds: [],
+          components: [],
+        });
+      }
+    }
+
+    // Удаление шаблона подразделения
+    else if (customId.startsWith('admin_delete_template_')) {
+      await interaction.deferUpdate();
+      const parts = customId.replace('admin_delete_template_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      try {
+        await FactionTypeService.deleteTemplate(templateId);
+
+        logger.info('Subdivision template deleted via admin panel', {
+          templateId,
+          typeId,
+          userId: interaction.user.id,
+        });
+
+        // Вернуться к деталям типа
+        const panel = await buildDepartmentTypeDetailPanel(typeId);
+        await interaction.editReply(panel);
+      } catch (error) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Не удалось удалить шаблон`,
+          embeds: [],
+          components: [],
+        });
+      }
+    }
+
+    // === Система одобрения изменений ===
+
+    // Открыть список pending изменений
+    else if (customId === 'admin_view_pending_changes') {
+      await interaction.deferUpdate();
+      const panel = await buildPendingChangesPanel(server.id);
+      await interaction.editReply(panel);
+    }
+
+    // Просмотр деталей конкретного изменения
+    else if (customId.startsWith('admin_review_change_')) {
+      await interaction.deferUpdate();
+      const changeId = parseInt(customId.replace('admin_review_change_', ''));
+      const panel = await buildReviewChangePanel(changeId);
+      await interaction.editReply(panel);
+    }
+
+    // Одобрение изменения
+    else if (customId.startsWith('admin_approve_change_')) {
+      await interaction.deferUpdate();
+      const changeId = parseInt(customId.replace('admin_approve_change_', ''));
+
+      try {
+        if (!interaction.guild) {
+          throw new Error('Guild not found');
+        }
+
+        await PendingChangeService.approveChange(changeId, interaction.user.id, interaction.guild);
+
+        logger.info('Change approved via admin panel', {
+          changeId,
+          userId: interaction.user.id,
+        });
+
+        // Вернуться к списку pending
+        const panel = await buildPendingChangesPanel(server.id);
+        await interaction.editReply(panel);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Не удалось одобрить изменение';
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} ${message}`,
+          embeds: [],
+          components: [],
+        });
+      }
+    }
+
+    // Отклонение изменения (показать modal для причины)
+    else if (customId.startsWith('admin_reject_change_')) {
+      const changeId = parseInt(customId.replace('admin_reject_change_', ''));
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_reject_change_${changeId}`)
+        .setTitle('Отклонение изменения');
+
+      const reasonInput = new TextInputBuilder()
+        .setCustomId('rejection_reason')
+        .setLabel('Причина отклонения')
+        .setPlaceholder('Укажите причину...')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMinLength(5)
+        .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput),
+      );
+
+      await interaction.showModal(modal);
+    }
+
+    // === Flow создания фракции - выбор типа ===
+
+    // Шаг 3: Выбран конкретный тип фракции
+    else if (customId.startsWith('admin_dept_step3_type_')) {
+      const typeId = parseInt(customId.replace('admin_dept_step3_type_', ''));
+
+      const state = addFactionStates.get(interaction.user.id);
+      if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
+        await interaction.reply({
+          content: `${EMOJI.ERROR} Сессия добавления истекла. Попробуйте снова.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      state.selectedTypeId = typeId;
+
+      // Показать modal для названия и описания
+      const modal = new ModalBuilder()
+        .setCustomId('admin_modal_add_fact')
+        .setTitle('Добавление фракции — Шаг 4/4');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('dept_name')
+        .setLabel('Название фракции')
+        .setPlaceholder('Например: LSPD')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('dept_description')
+        .setLabel('Описание (опционально)')
+        .setPlaceholder('Краткое описание фракции')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+      );
+
+      await interaction.showModal(modal);
+    }
+
+    // Шаг 3: Без типа фракции
+    else if (customId === 'admin_dept_step3_no_type') {
+      const state = addFactionStates.get(interaction.user.id);
+      if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
+        await interaction.reply({
+          content: `${EMOJI.ERROR} Сессия добавления истекла. Попробуйте снова.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // selectedTypeId остается undefined
+
+      // Показать modal для названия и описания
+      const modal = new ModalBuilder()
+        .setCustomId('admin_modal_add_fact')
+        .setTitle('Добавление фракции — Шаг 4/4');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('dept_name')
+        .setLabel('Название фракции')
+        .setPlaceholder('Например: LSPD')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('dept_description')
+        .setLabel('Описание (опционально)')
+        .setPlaceholder('Краткое описание фракции')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+      );
+
+      await interaction.showModal(modal);
     }
 
   } catch (error) {
@@ -393,12 +695,12 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       await interaction.editReply(panel);
     }
 
-    // Шаг 1 добавления департамента — выбрана общая лидерская роль
-    else if (customId === 'admin_dept_step1_role') {
+    // Шаг 1 добавления фракции — выбрана общая лидерская роль
+    else if (customId === 'admin_fact_step1_role') {
       await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
-      const state = addDepartmentStates.get(interaction.user.id);
+      const state = addFactionStates.get(interaction.user.id);
       if (!state) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Сессия добавления истекла. Попробуйте снова.`,
@@ -412,19 +714,19 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
 
       const embed = new EmbedBuilder()
         .setColor(COLORS.INFO)
-        .setTitle('➕ Добавление департамента — Шаг 2/3')
+        .setTitle('➕ Добавление фракции — Шаг 2/3')
         .setDescription(`Общая лидерская роль: <@&${roleId}>\n\nТеперь выберите **роль фракции** (например: LSPD)`)
         .setTimestamp();
 
       const roleSelect = new RoleSelectMenuBuilder()
-        .setCustomId('admin_dept_step2_role')
+        .setCustomId('admin_fact_step2_role')
         .setPlaceholder('Выберите роль фракции');
 
       const row = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect);
 
       const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId('admin_departments')
+          .setCustomId('admin_factions')
           .setLabel('Отмена')
           .setEmoji('❌')
           .setStyle(ButtonStyle.Secondary),
@@ -433,49 +735,79 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       await interaction.editReply({ embeds: [embed], components: [row, backRow] });
     }
 
-    // Шаг 2 добавления департамента — выбрана роль фракции → показать modal
-    else if (customId === 'admin_dept_step2_role') {
+    // Шаг 2 добавления фракции — выбрана роль фракции → выбор типа
+    else if (customId === 'admin_fact_step2_role') {
+      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
-      const state = addDepartmentStates.get(interaction.user.id);
+      const state = addFactionStates.get(interaction.user.id);
       if (!state || !state.generalLeaderRoleId) {
-        await interaction.reply({
+        await interaction.editReply({
           content: `${EMOJI.ERROR} Сессия добавления истекла. Попробуйте снова.`,
-          flags: MessageFlags.Ephemeral,
+          embeds: [],
+          components: [],
         });
         return;
       }
 
       state.departmentRoleId = roleId;
 
-      // Показать modal с полем выбора режима
-      const modal = new ModalBuilder()
-        .setCustomId('admin_modal_add_dept')
-        .setTitle('Добавление департамента — Шаг 3/3');
+      // Получить доступные типы фракций
+      const types = await FactionTypeService.getDepartmentTypes(server.id, true);
 
-      const nameInput = new TextInputBuilder()
-        .setCustomId('dept_name')
-        .setLabel('Название департамента')
-        .setPlaceholder('Например: LSPD')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMinLength(2)
-        .setMaxLength(50);
+      const embed = new EmbedBuilder()
+        .setColor(COLORS.INFO)
+        .setTitle('➕ Добавление фракции — Шаг 3/4')
+        .setDescription(
+          `Общая лидерская роль: <@&${state.generalLeaderRoleId}>\n` +
+          `Роль фракции: <@&${roleId}>\n\n` +
+          `Выберите тип фракции (с предустановленными подразделениями) или продолжите без типа:`
+        )
+        .setTimestamp();
 
-      const descInput = new TextInputBuilder()
-        .setCustomId('dept_description')
-        .setLabel('Описание (опционально)')
-        .setPlaceholder('Краткое описание департамента')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(200);
+      const buttons: ButtonBuilder[] = [];
 
-      const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput);
-      const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(descInput);
+      // Кнопки для каждого типа (максимум 4, чтобы уместились)
+      const displayTypes = types.slice(0, 4);
+      for (const type of displayTypes) {
+        buttons.push(
+          new ButtonBuilder()
+            .setCustomId(`admin_dept_step3_type_${type.id}`)
+            .setLabel(type.name)
+            .setStyle(ButtonStyle.Primary)
+        );
+      }
 
-      modal.addComponents(row1, row2);
+      // Кнопка "Без типа"
+      buttons.push(
+        new ButtonBuilder()
+          .setCustomId('admin_dept_step3_no_type')
+          .setLabel('Без типа')
+          .setStyle(ButtonStyle.Secondary)
+      );
 
-      await interaction.showModal(modal);
+      const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+
+      // Первый ряд - типы (до 4 кнопок)
+      if (displayTypes.length > 0) {
+        const typeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          ...buttons.slice(0, displayTypes.length)
+        );
+        rows.push(typeRow);
+      }
+
+      // Второй ряд - "Без типа" + "Отмена"
+      const controlRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        buttons[buttons.length - 1], // Без типа
+        new ButtonBuilder()
+          .setCustomId('admin_factions')
+          .setLabel('Отмена')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Danger)
+      );
+      rows.push(controlRow);
+
+      await interaction.editReply({ embeds: [embed], components: rows });
     }
 
   } catch (error) {
@@ -563,22 +895,22 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
   const customId = interaction.customId;
 
   try {
-    // Выбор департамента для просмотра
-    if (customId === 'admin_select_department') {
+    // Выбор фракции для просмотра
+    if (customId === 'admin_select_faction') {
       await interaction.deferUpdate();
-      const departmentId = parseInt(interaction.values[0]);
-      const department = await DepartmentService.getDepartmentById(departmentId);
+      const factionId = parseInt(interaction.values[0]);
+      const faction = await FactionService.getDepartmentById(factionId);
 
-      if (!department) {
+      if (!faction) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Департамент не найден`,
+          content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
           components: [],
         });
         return;
       }
 
-      const panel = buildDepartmentDetailPanel(department);
+      const panel = buildDepartmentDetailPanel(faction);
       await interaction.editReply(panel);
     }
 
@@ -659,20 +991,20 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
 }
 
 /**
- * Получить состояние добавления департамента (для modal)
+ * Получить состояние добавления фракции (для modal)
  */
-export function getAddDepartmentState(userId: string): AddDepartmentState | undefined {
-  const state = addDepartmentStates.get(userId);
+export function getAddFactionState(userId: string): AddFactionState | undefined {
+  const state = addFactionStates.get(userId);
   if (state && Date.now() - state.createdAt > STATE_TTL) {
-    addDepartmentStates.delete(userId);
+    addFactionStates.delete(userId);
     return undefined;
   }
   return state;
 }
 
 /**
- * Удалить состояние добавления департамента
+ * Удалить состояние добавления фракции
  */
-export function clearAddDepartmentState(userId: string): void {
-  addDepartmentStates.delete(userId);
+export function clearAddFactionState(userId: string): void {
+  addFactionStates.delete(userId);
 }

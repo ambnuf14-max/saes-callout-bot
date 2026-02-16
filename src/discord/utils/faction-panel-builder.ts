@@ -6,14 +6,15 @@ import {
   ButtonStyle,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
-import { Department, Subdivision } from '../../types/database.types';
+import { Faction, Subdivision, PendingChangeWithDetails } from '../../types/database.types';
 import { VerificationInstructions } from '../../types/department.types';
 import { COLORS, EMOJI, MESSAGES } from '../../config/constants';
+import { getChangeTypeLabel, getStatusEmoji } from './change-formatter';
 
 /**
- * Построить standalone панель (департамент без подразделений)
+ * Построить standalone панель (фракция без подразделений)
  */
-export function buildStandaloneMainPanel(department: Department, defaultSubdivision: Subdivision) {
+export function buildStandaloneMainPanel(faction: Faction, defaultSubdivision: Subdivision) {
   const vkStatus = defaultSubdivision.vk_chat_id ? '✅ Привязана' : '❌ Не привязана';
   const telegramStatus = defaultSubdivision.telegram_chat_id ? '✅ Привязана' : '❌ Не привязана';
   const calloutsStatus = defaultSubdivision.is_accepting_callouts ? '✅ Включен' : '⏸️ Отключен';
@@ -22,9 +23,10 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
     .setColor(COLORS.INFO)
     .setTitle(`🚨 Лидерская панель управления каллаутами`)
     .setDescription(
-      `**Состояние:** Подразделения не созданы\n\n` +
-      `**Пояснение:** Сейчас каллауты адресуются всей фракции целиком. Если вы создадите подразделения, каллауты будут адресованы конкретному подразделению.\n\n` +
-      `Вы можете привязать ВК или Telegram конференции, управлять приёмом каллаутов, настроить внешний вид уведомлений.`
+      `**Состояние:** 📂 \`Подразделения\` не созданы\n\n` +
+      `Сейчас каллауты приходят всей вашей фракции (при каллауте будет упомянута общая роль <@&${faction.department_role_id}>). Это подходит для небольших фракций (например, Пожарный департамент), но абсолютно не подходит для крупных фракций со специализированными отделами, к которым в основном и будут направляться каллауты (\`Metropolitan Division\`, \`Special Enforcement Bureau\` и др.).\n\n` +
+      `Создайте 📂 \`Подразделения\`, чтобы каллауты направлялись конкретным отделам. После создания подразделений пользователи смогут отправлять каллауты только им, отправить каллаут всей вашей фракции - будет нельзя.\n\n` +
+      `Вы можете привязать ВК или Telegram конференцию к каждому подразделению, игроки смогут получать уведомления о каллаутах в том числе и там.`
     )
     .addFields(
       {
@@ -33,7 +35,7 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
         inline: true,
       },
       {
-        name: '✈️ Telegram группа',
+        name: '📨 Telegram беседа',
         value: telegramStatus,
         inline: true,
       },
@@ -44,26 +46,26 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
       }
     )
     .setTimestamp()
-    .setFooter({ text: `${department.name} • Используйте кнопки ниже для настройки` });
+    .setFooter({ text: `${faction.name} • Используйте кнопки ниже для настройки` });
 
   const buttons: ButtonBuilder[] = [
     new ButtonBuilder()
-      .setCustomId(`department_standalone_links_${defaultSubdivision.id}`)
+      .setCustomId(`faction_standalone_links_${defaultSubdivision.id}`)
       .setLabel('Привязки')
       .setEmoji('🔗')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`department_standalone_settings_${defaultSubdivision.id}`)
+      .setCustomId(`faction_standalone_settings_${defaultSubdivision.id}`)
       .setLabel('Настройки')
       .setEmoji('⚙️')
       .setStyle(ButtonStyle.Primary),
   ];
 
   // Добавить кнопку "Подразделения" если админ разрешил их создание
-  if (department.allow_create_subdivisions) {
+  if (faction.allow_create_subdivisions) {
     buttons.push(
       new ButtonBuilder()
-        .setCustomId(`department_subdivisions_${department.id}`)
+        .setCustomId(`faction_subdivisions_${faction.id}`)
         .setLabel('Подразделения')
         .setEmoji('📂')
         .setStyle(ButtonStyle.Secondary)
@@ -76,9 +78,9 @@ export function buildStandaloneMainPanel(department: Department, defaultSubdivis
 }
 
 /**
- * Построить главную панель управления департаментом
+ * Построить главную панель управления фракцией
  */
-export function buildMainPanel(department: Department, subdivisionCount: number, activeCount: number) {
+export function buildMainPanel(faction: Faction, subdivisionCount: number, activeCount: number) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle(`🚨 Лидерская панель управления каллаутами`)
@@ -96,22 +98,22 @@ export function buildMainPanel(department: Department, subdivisionCount: number,
       {
         name: '👥 Роли лидера',
         value:
-          `Общая: <@&${department.general_leader_role_id}>\n` +
-          `Фракция: <@&${department.department_role_id}>`,
+          `Общая: <@&${faction.general_leader_role_id}>\n` +
+          `Фракция: <@&${faction.department_role_id}>`,
         inline: true,
       }
     )
     .setTimestamp()
-    .setFooter({ text: `${department.name} • Используйте кнопки ниже для управления подразделениями` });
+    .setFooter({ text: `${faction.name} • Используйте кнопки ниже для управления подразделениями` });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('department_view_subdivisions')
+      .setCustomId('faction_view_subdivisions')
       .setLabel('Список подразделений')
       .setEmoji('📋')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('department_add_subdivision')
+      .setCustomId('faction_add_subdivision')
       .setLabel('Добавить подразделение')
       .setEmoji('➕')
       .setStyle(ButtonStyle.Success)
@@ -126,12 +128,12 @@ export function buildMainPanel(department: Department, subdivisionCount: number,
  * Построить список подразделений
  */
 export function buildSubdivisionsList(
-  department: Department,
+  faction: Faction,
   subdivisions: Subdivision[]
 ): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`📋 Подразделения фракции: ${department.name}`)
+    .setTitle(`📋 Подразделения фракции: ${faction.name}`)
     .setDescription(
       subdivisions.length === 0
         ? 'Подразделения еще не созданы. Нажмите "Добавить" для создания.'
@@ -142,12 +144,12 @@ export function buildSubdivisionsList(
   if (subdivisions.length === 0) {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId('department_add_subdivision')
+        .setCustomId('faction_add_subdivision')
         .setLabel('Добавить подразделение')
         .setEmoji('➕')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId('department_back_main')
+        .setCustomId('faction_back_main')
         .setLabel('Назад')
         .setEmoji('◀️')
         .setStyle(ButtonStyle.Secondary)
@@ -181,12 +183,12 @@ export function buildSubdivisionsList(
   // Первая строка - добавить и назад
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('department_add_subdivision')
+      .setCustomId('faction_add_subdivision')
       .setLabel('Добавить')
       .setEmoji('➕')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId('department_back_main')
+      .setCustomId('faction_back_main')
       .setLabel('Назад')
       .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary)
@@ -207,7 +209,7 @@ export function buildSubdivisionsList(
     });
 
     const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('department_select_subdivision')
+      .setCustomId('faction_select_subdivision')
       .setPlaceholder('Выберите подразделение для управления')
       .addOptions(options);
 
@@ -221,11 +223,15 @@ export function buildSubdivisionsList(
 /**
  * Построить детальную панель управления подразделением
  */
-export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
+export async function buildSubdivisionDetailPanel(subdivision: Subdivision) {
   const statusEmoji = subdivision.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
   const calloutsStatus = subdivision.is_accepting_callouts ? 'Включен' : 'Отключен';
   const vkStatus = subdivision.vk_chat_id ? 'Привязана' : 'Не привязана';
   const telegramStatus = subdivision.telegram_chat_id ? 'Привязана' : 'Не привязана';
+
+  // Проверить pending запросы для этого подразделения
+  const PendingChangeModel = (await import('../../database/models/PendingChange')).default;
+  const pendingChanges = await PendingChangeModel.findPendingForSubdivision(subdivision.id);
 
   const embed = new EmbedBuilder()
     .setColor(subdivision.is_active ? COLORS.ACTIVE : COLORS.ERROR)
@@ -247,12 +253,34 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
         inline: true,
       },
       {
-        name: '✈️ Telegram группа',
+        name: '📨 Telegram беседа',
         value: telegramStatus,
         inline: true,
       }
     )
     .setTimestamp();
+
+  // Показать pending изменения
+  if (pendingChanges.length > 0) {
+    const pendingTexts = pendingChanges.map(change => {
+      if (change.change_type === 'delete_subdivision') {
+        return `${EMOJI.PENDING} **Ожидает одобрения для удаления**`;
+      } else if (change.change_type === 'update_subdivision') {
+        return `${EMOJI.PENDING} **Обновление ожидает одобрения**`;
+      } else if (change.change_type === 'update_embed') {
+        return `${EMOJI.PENDING} **Настройка embed ожидает одобрения**`;
+      }
+      return '';
+    }).filter(t => t);
+
+    if (pendingTexts.length > 0) {
+      embed.addFields({
+        name: '⏳ Pending изменения',
+        value: pendingTexts.join('\n'),
+        inline: false,
+      });
+    }
+  }
 
   if (subdivision.description) {
     embed.addFields({
@@ -272,12 +300,12 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
   // Ряд 1: Привязки и Настройки
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`department_links_${subdivision.id}`)
+      .setCustomId(`faction_links_${subdivision.id}`)
       .setLabel('Привязки')
       .setEmoji('🔗')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`department_settings_${subdivision.id}`)
+      .setCustomId(`faction_settings_${subdivision.id}`)
       .setLabel('Настройки')
       .setEmoji('⚙️')
       .setStyle(ButtonStyle.Primary)
@@ -286,11 +314,11 @@ export function buildSubdivisionDetailPanel(subdivision: Subdivision) {
   // Ряд 2: Удалить и Назад (без эмодзи)
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`department_delete_sub_${subdivision.id}`)
+      .setCustomId(`faction_delete_sub_${subdivision.id}`)
       .setLabel('Удалить')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId('department_back_list')
+      .setCustomId('faction_back_list')
       .setLabel('Назад')
       .setStyle(ButtonStyle.Secondary)
   );
@@ -315,7 +343,7 @@ export function buildLinksPanel(subdivision: Subdivision) {
         inline: true,
       },
       {
-        name: '✈️ Telegram группа',
+        name: '📨 Telegram беседа',
         value: telegramStatus,
         inline: true,
       }
@@ -324,12 +352,12 @@ export function buildLinksPanel(subdivision: Subdivision) {
 
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(subdivision.vk_chat_id ? `department_unlink_vk_${subdivision.id}` : `department_link_vk_${subdivision.id}`)
+      .setCustomId(subdivision.vk_chat_id ? `faction_unlink_vk_${subdivision.id}` : `faction_link_vk_${subdivision.id}`)
       .setLabel(subdivision.vk_chat_id ? 'Отвязать VK' : 'Привязать VK')
       .setEmoji(subdivision.vk_chat_id ? '🔓' : '🔗')
       .setStyle(subdivision.vk_chat_id ? ButtonStyle.Secondary : ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(subdivision.telegram_chat_id ? `department_unlink_telegram_${subdivision.id}` : `department_link_telegram_${subdivision.id}`)
+      .setCustomId(subdivision.telegram_chat_id ? `faction_unlink_telegram_${subdivision.id}` : `faction_link_telegram_${subdivision.id}`)
       .setLabel(subdivision.telegram_chat_id ? 'Отвязать TG' : 'Привязать TG')
       .setEmoji(subdivision.telegram_chat_id ? '🔓' : '✈️')
       .setStyle(subdivision.telegram_chat_id ? ButtonStyle.Secondary : ButtonStyle.Primary)
@@ -338,11 +366,11 @@ export function buildLinksPanel(subdivision: Subdivision) {
   // Кнопка "Назад" - для дефолтного подразделения ведёт на главную панель
   const backButton = subdivision.is_default
     ? new ButtonBuilder()
-        .setCustomId('department_back_main')
+        .setCustomId('faction_back_main')
         .setLabel('Назад')
         .setStyle(ButtonStyle.Secondary)
     : new ButtonBuilder()
-        .setCustomId(`department_back_detail_${subdivision.id}`)
+        .setCustomId(`faction_back_detail_${subdivision.id}`)
         .setLabel('Назад')
         .setStyle(ButtonStyle.Secondary);
 
@@ -382,17 +410,17 @@ export function buildSettingsPanel(subdivision: Subdivision) {
   if (!subdivision.is_default) {
     buttons.push(
       new ButtonBuilder()
-        .setCustomId(`department_edit_sub_${subdivision.id}`)
+        .setCustomId(`faction_edit_sub_${subdivision.id}`)
         .setLabel('Изменить')
         .setEmoji('📝')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`department_configure_embed_${subdivision.id}`)
+        .setCustomId(`faction_configure_embed_${subdivision.id}`)
         .setLabel('Настроить Embed')
         .setEmoji('🎨')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`department_preview_embed_${subdivision.id}`)
+        .setCustomId(`faction_preview_embed_${subdivision.id}`)
         .setLabel('Предпросмотр')
         .setEmoji('👁️')
         .setStyle(ButtonStyle.Secondary)
@@ -402,7 +430,7 @@ export function buildSettingsPanel(subdivision: Subdivision) {
   // Кнопка переключения каллаутов доступна для всех подразделений
   buttons.push(
     new ButtonBuilder()
-      .setCustomId(`department_toggle_callouts_${subdivision.id}`)
+      .setCustomId(`faction_toggle_callouts_${subdivision.id}`)
       .setLabel(subdivision.is_accepting_callouts ? 'Отключить каллауты' : 'Включить каллауты')
       .setEmoji(subdivision.is_accepting_callouts ? '⏸️' : '▶️')
       .setStyle(subdivision.is_accepting_callouts ? ButtonStyle.Secondary : ButtonStyle.Success)
@@ -413,11 +441,11 @@ export function buildSettingsPanel(subdivision: Subdivision) {
   // Кнопка "Назад" - для дефолтного подразделения ведёт на главную панель
   const backButton = subdivision.is_default
     ? new ButtonBuilder()
-        .setCustomId('department_back_main')
+        .setCustomId('faction_back_main')
         .setLabel('Назад')
         .setStyle(ButtonStyle.Secondary)
     : new ButtonBuilder()
-        .setCustomId(`department_back_detail_${subdivision.id}`)
+        .setCustomId(`faction_back_detail_${subdivision.id}`)
         .setLabel('Назад')
         .setStyle(ButtonStyle.Secondary);
 
@@ -435,7 +463,7 @@ export function buildEmbedPreview(subdivision: Subdivision) {
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`department_settings_${subdivision.id}`)
+      .setCustomId(`faction_settings_${subdivision.id}`)
       .setLabel('Назад к настройкам')
       .setStyle(ButtonStyle.Secondary)
   );
@@ -475,7 +503,7 @@ export function buildVerificationInstructions(instructions: VerificationInstruct
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('department_back_subdivision')
+      .setCustomId('faction_back_subdivision')
       .setLabel('Назад')
       .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary)
@@ -499,12 +527,12 @@ export function buildDeleteConfirmation(subdivision: Subdivision) {
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`department_confirm_delete_${subdivision.id}`)
+      .setCustomId(`faction_confirm_delete_${subdivision.id}`)
       .setLabel('Удалить')
       .setEmoji('🗑️')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId('department_cancel_delete')
+      .setCustomId('faction_cancel_delete')
       .setLabel('Отмена')
       .setEmoji('❌')
       .setStyle(ButtonStyle.Secondary)
@@ -516,10 +544,10 @@ export function buildDeleteConfirmation(subdivision: Subdivision) {
 /**
  * Построить пустой список (нет подразделений)
  */
-export function buildEmptySubdivisionsList(department: Department) {
+export function buildEmptySubdivisionsList(faction: Faction) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle(`📋 Подразделения фракции: ${department.name}`)
+    .setTitle(`📋 Подразделения фракции: ${faction.name}`)
     .setDescription(
       'Подразделения еще не созданы.\n\n' +
         'Создайте первое подразделение нажав кнопку "Добавить подразделение"'
@@ -528,12 +556,12 @@ export function buildEmptySubdivisionsList(department: Department) {
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('department_add_subdivision')
+      .setCustomId('faction_add_subdivision')
       .setLabel('Добавить подразделение')
       .setEmoji('➕')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId('department_back_main')
+      .setCustomId('faction_back_main')
       .setLabel('Назад')
       .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary)

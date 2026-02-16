@@ -1,35 +1,37 @@
 import database from '../db';
 import logger from '../../utils/logger';
-import { Department, CreateDepartmentDTO, UpdateDepartmentDTO } from '../../types/database.types';
+import { Faction, CreateFactionDTO, UpdateFactionDTO } from '../../types/database.types';
 
 /**
- * Модель для работы с таблицей departments
+ * Модель для работы с таблицей factions
  */
-export class DepartmentModel {
+export class FactionModel {
   /**
    * Создать новую фракцию
    */
-  static async create(data: CreateDepartmentDTO): Promise<Department> {
+  static async create(data: CreateFactionDTO, factionTypeId?: number): Promise<Faction> {
     const allowCreate = data.allow_create_subdivisions !== undefined ? data.allow_create_subdivisions : true;
 
     const result = await database.run(
-      `INSERT INTO departments (server_id, name, description, general_leader_role_id, department_role_id, allow_create_subdivisions)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO factions (server_id, name, description, general_leader_role_id, faction_role_id, allow_create_subdivisions, faction_type_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.name,
         data.description || null,
         data.general_leader_role_id,
-        data.department_role_id,
+        data.faction_role_id,
         allowCreate ? 1 : 0,
+        factionTypeId || null,
       ]
     );
 
-    logger.info('Department created', {
+    logger.info('Faction created', {
       factionId: result.lastID,
       name: data.name,
       serverId: data.server_id,
       allowCreate,
+      typeId: factionTypeId || null,
     });
 
     const faction = await this.findById(result.lastID);
@@ -38,6 +40,7 @@ export class DepartmentModel {
     }
 
     // ВСЕГДА создавать дефолтное подразделение
+    // (оно будет удалено если используются шаблоны типа)
     await this.createDefaultSubdivision(faction);
 
     return faction;
@@ -46,16 +49,16 @@ export class DepartmentModel {
   /**
    * Найти фракцию по ID
    */
-  static async findById(id: number): Promise<Department | undefined> {
-    return await database.get<Department>('SELECT * FROM departments WHERE id = ?', [id]);
+  static async findById(id: number): Promise<Faction | undefined> {
+    return await database.get<Faction>('SELECT * FROM factions WHERE id = ?', [id]);
   }
 
   /**
    * Найти фракцию по имени на сервере
    */
-  static async findByName(serverId: number, name: string): Promise<Department | undefined> {
-    return await database.get<Department>(
-      'SELECT * FROM departments WHERE server_id = ? AND name = ?',
+  static async findByName(serverId: number, name: string): Promise<Faction | undefined> {
+    return await database.get<Faction>(
+      'SELECT * FROM factions WHERE server_id = ? AND name = ?',
       [serverId, name]
     );
   }
@@ -67,9 +70,9 @@ export class DepartmentModel {
     serverId: number,
     generalLeaderRoleId: string,
     factionRoleId: string
-  ): Promise<Department | undefined> {
-    return await database.get<Department>(
-      'SELECT * FROM departments WHERE server_id = ? AND general_leader_role_id = ? AND department_role_id = ?',
+  ): Promise<Faction | undefined> {
+    return await database.get<Faction>(
+      'SELECT * FROM factions WHERE server_id = ? AND general_leader_role_id = ? AND faction_role_id = ?',
       [serverId, generalLeaderRoleId, factionRoleId]
     );
   }
@@ -77,12 +80,12 @@ export class DepartmentModel {
   /**
    * Найти фракцию по роли фракции (вторая роль)
    */
-  static async findByDepartmentRole(
+  static async findByFactionRole(
     serverId: number,
     factionRoleId: string
-  ): Promise<Department | undefined> {
-    return await database.get<Department>(
-      'SELECT * FROM departments WHERE server_id = ? AND department_role_id = ?',
+  ): Promise<Faction | undefined> {
+    return await database.get<Faction>(
+      'SELECT * FROM factions WHERE server_id = ? AND faction_role_id = ?',
       [serverId, factionRoleId]
     );
   }
@@ -90,21 +93,21 @@ export class DepartmentModel {
   /**
    * Получить все фракции сервера
    */
-  static async findByServerId(serverId: number, activeOnly = false): Promise<Department[]> {
+  static async findByServerId(serverId: number, activeOnly = false): Promise<Faction[]> {
     const sql = activeOnly
-      ? 'SELECT * FROM departments WHERE server_id = ? AND is_active = 1 ORDER BY name'
-      : 'SELECT * FROM departments WHERE server_id = ? ORDER BY name';
+      ? 'SELECT * FROM factions WHERE server_id = ? AND is_active = 1 ORDER BY name'
+      : 'SELECT * FROM factions WHERE server_id = ? ORDER BY name';
 
-    return await database.all<Department>(sql, [serverId]);
+    return await database.all<Faction>(sql, [serverId]);
   }
 
   /**
    * Обновить фракцию
    */
-  static async update(id: number, data: UpdateDepartmentDTO): Promise<Department | undefined> {
-    const currentDepartment = await this.findById(id);
-    if (!currentDepartment) {
-      throw new Error(`Department with id ${id} not found`);
+  static async update(id: number, data: UpdateFactionDTO): Promise<Faction | undefined> {
+    const currentFaction = await this.findById(id);
+    if (!currentFaction) {
+      throw new Error(`Faction with id ${id} not found`);
     }
 
     const updates: string[] = [];
@@ -122,9 +125,9 @@ export class DepartmentModel {
       updates.push('general_leader_role_id = ?');
       params.push(data.general_leader_role_id);
     }
-    if (data.department_role_id !== undefined) {
-      updates.push('department_role_id = ?');
-      params.push(data.department_role_id);
+    if (data.faction_role_id !== undefined) {
+      updates.push('faction_role_id = ?');
+      params.push(data.faction_role_id);
     }
     if (data.allow_create_subdivisions !== undefined) {
       updates.push('allow_create_subdivisions = ?');
@@ -142,21 +145,21 @@ export class DepartmentModel {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
 
-    await database.run(`UPDATE departments SET ${updates.join(', ')} WHERE id = ?`, params);
+    await database.run(`UPDATE factions SET ${updates.join(', ')} WHERE id = ?`, params);
 
-    logger.info('Department updated', { factionId: id });
+    logger.info('Faction updated', { factionId: id });
 
-    const updatedDepartment = await this.findById(id);
-    if (!updatedDepartment) {
-      throw new Error('Failed to retrieve updated department');
+    const updatedFaction = await this.findById(id);
+    if (!updatedFaction) {
+      throw new Error('Failed to retrieve updated faction');
     }
 
-    // Синхронизировать дефолтное подразделение если изменились name или department_role_id
-    if (data.name !== undefined || data.department_role_id !== undefined) {
-      await this.syncDefaultSubdivision(updatedDepartment);
+    // Синхронизировать дефолтное подразделение если изменились name или faction_role_id
+    if (data.name !== undefined || data.faction_role_id !== undefined) {
+      await this.syncDefaultSubdivision(updatedFaction);
     }
 
-    return updatedDepartment;
+    return updatedFaction;
   }
 
   /**
@@ -164,9 +167,9 @@ export class DepartmentModel {
    */
   static async delete(id: number): Promise<void> {
     const faction = await this.findById(id);
-    await database.run('DELETE FROM departments WHERE id = ?', [id]);
+    await database.run('DELETE FROM factions WHERE id = ?', [id]);
 
-    logger.info('Department deleted', {
+    logger.info('Faction deleted', {
       factionId: id,
       name: faction?.name,
     });
@@ -175,14 +178,14 @@ export class DepartmentModel {
   /**
    * Деактивировать фракцию (soft delete)
    */
-  static async deactivate(id: number): Promise<Department | undefined> {
+  static async deactivate(id: number): Promise<Faction | undefined> {
     return await this.update(id, { is_active: false });
   }
 
   /**
    * Активировать фракцию
    */
-  static async activate(id: number): Promise<Department | undefined> {
+  static async activate(id: number): Promise<Faction | undefined> {
     return await this.update(id, { is_active: true });
   }
 
@@ -199,7 +202,7 @@ export class DepartmentModel {
    */
   static async count(serverId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM departments WHERE server_id = ?',
+      'SELECT COUNT(*) as count FROM factions WHERE server_id = ?',
       [serverId]
     );
     return result?.count || 0;
@@ -208,28 +211,28 @@ export class DepartmentModel {
   /**
    * Получить пару ролей лидера фракции
    */
-  static getLeaderRoles(faction: Department): [string, string] {
-    return [faction.general_leader_role_id, faction.department_role_id];
+  static getLeaderRoles(faction: Faction): [string, string] {
+    return [faction.general_leader_role_id, faction.faction_role_id];
   }
 
   /**
    * Проверить, активна ли фракция
    */
-  static isActive(faction: Department): boolean {
+  static isActive(faction: Faction): boolean {
     return faction.is_active;
   }
 
   /**
-   * Создать дефолтное подразделение для standalone департамента
+   * Создать дефолтное подразделение для standalone фракции
    */
-  private static async createDefaultSubdivision(department: Department): Promise<void> {
+  private static async createDefaultSubdivision(faction: Faction): Promise<void> {
     const { SubdivisionModel } = await import('./Subdivision');
 
     // Проверить, существует ли уже дефолтное подразделение
-    const existingDefault = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+    const existingDefault = await SubdivisionModel.findDefaultByFactionId(faction.id);
     if (existingDefault) {
       logger.debug('Default subdivision already exists', {
-        departmentId: department.id,
+        factionId: faction.id,
         subdivisionId: existingDefault.id,
       });
       return;
@@ -237,48 +240,48 @@ export class DepartmentModel {
 
     // Создать дефолтное подразделение с is_default = 1
     await database.run(
-      `INSERT INTO subdivisions (department_id, server_id, name, discord_role_id, is_default, is_accepting_callouts, is_active)
+      `INSERT INTO subdivisions (faction_id, server_id, name, discord_role_id, is_default, is_accepting_callouts, is_active)
        VALUES (?, ?, ?, ?, 1, 1, 1)`,
       [
-        department.id,
-        department.server_id,
-        department.name,
-        department.department_role_id,
+        faction.id,
+        faction.server_id,
+        faction.name,
+        faction.faction_role_id,
       ]
     );
 
-    logger.info('Default subdivision created for standalone department', {
-      departmentId: department.id,
-      departmentName: department.name,
+    logger.info('Default subdivision created for standalone faction', {
+      factionId: faction.id,
+      factionName: faction.name,
     });
   }
 
   /**
-   * Синхронизировать дефолтное подразделение с департаментом
+   * Синхронизировать дефолтное подразделение с фракцией
    */
-  private static async syncDefaultSubdivision(department: Department): Promise<void> {
+  private static async syncDefaultSubdivision(faction: Faction): Promise<void> {
     const { SubdivisionModel } = await import('./Subdivision');
 
-    const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(department.id);
+    const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
     if (!defaultSubdivision) {
-      logger.warn('Default subdivision not found for standalone department, creating...', {
-        departmentId: department.id,
+      logger.warn('Default subdivision not found for standalone faction, creating...', {
+        factionId: faction.id,
       });
-      await this.createDefaultSubdivision(department);
+      await this.createDefaultSubdivision(faction);
       return;
     }
 
     // Синхронизировать name и discord_role_id
     await SubdivisionModel.update(defaultSubdivision.id, {
-      name: department.name,
-      discord_role_id: department.department_role_id,
+      name: faction.name,
+      discord_role_id: faction.faction_role_id,
     });
 
-    logger.info('Default subdivision synchronized with department', {
-      departmentId: department.id,
+    logger.info('Default subdivision synchronized with faction', {
+      factionId: faction.id,
       subdivisionId: defaultSubdivision.id,
     });
   }
 }
 
-export default DepartmentModel;
+export default FactionModel;

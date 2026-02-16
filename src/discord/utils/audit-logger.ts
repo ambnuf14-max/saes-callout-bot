@@ -11,10 +11,16 @@ export enum AuditEventType {
   CALLOUT_CREATED = 'callout_created',
   CALLOUT_CLOSED = 'callout_closed',
 
-  // Департаменты
-  DEPARTMENT_ADDED = 'department_added',
-  DEPARTMENT_UPDATED = 'department_updated',
-  DEPARTMENT_REMOVED = 'department_removed',
+  // Фракции
+  FACTION_ADDED = 'faction_added',
+  FACTION_UPDATED = 'faction_updated',
+  FACTION_REMOVED = 'faction_removed',
+
+  // Типы фракций
+  FACTION_TYPE_CREATED = 'faction_type_created',
+  FACTION_TYPE_UPDATED = 'faction_type_updated',
+  FACTION_TYPE_DELETED = 'faction_type_deleted',
+  TEMPLATE_ADDED = 'template_added',
 
   // Настройки сервера
   SETTINGS_UPDATED = 'settings_updated',
@@ -37,6 +43,15 @@ export enum AuditEventType {
   SUBDIVISION_ADDED = 'subdivision_added',
   SUBDIVISION_UPDATED = 'subdivision_updated',
   SUBDIVISION_REMOVED = 'subdivision_removed',
+
+  // Система одобрения изменений
+  SUBDIVISION_CREATE_REQUESTED = 'subdivision_create_requested',
+  SUBDIVISION_UPDATE_REQUESTED = 'subdivision_update_requested',
+  SUBDIVISION_DELETE_REQUESTED = 'subdivision_delete_requested',
+  EMBED_UPDATE_REQUESTED = 'embed_update_requested',
+  CHANGE_APPROVED = 'change_approved',
+  CHANGE_REJECTED = 'change_rejected',
+  CHANGE_CANCELLED = 'change_cancelled',
 }
 
 /**
@@ -69,27 +84,27 @@ export interface CalloutClosedData extends BaseAuditEventData {
 }
 
 /**
- * Данные для события добавления департамента
+ * Данные для события добавления фракции
  */
-export interface DepartmentAddedData extends BaseAuditEventData {
-  departmentName: string;
+export interface FactionAddedData extends BaseAuditEventData {
+  factionName: string;
   roleId: string;
   vkChatId: string;
 }
 
 /**
- * Данные для события обновления департамента
+ * Данные для события обновления фракции
  */
-export interface DepartmentUpdatedData extends BaseAuditEventData {
-  departmentName: string;
+export interface FactionUpdatedData extends BaseAuditEventData {
+  factionName: string;
   changes: string[];
 }
 
 /**
- * Данные для события удаления департамента
+ * Данные для события удаления фракции
  */
-export interface DepartmentRemovedData extends BaseAuditEventData {
-  departmentName: string;
+export interface FactionRemovedData extends BaseAuditEventData {
+  factionName: string;
 }
 
 /**
@@ -176,14 +191,67 @@ export interface SubdivisionEventData extends BaseAuditEventData {
 }
 
 /**
+ * Данные для событий типов фракций
+ */
+export interface FactionTypeCreatedData extends BaseAuditEventData {
+  typeName: string;
+  description?: string;
+}
+
+export interface FactionTypeUpdatedData extends BaseAuditEventData {
+  typeName: string;
+  changes: string[];
+}
+
+export interface FactionTypeDeletedData extends BaseAuditEventData {
+  typeName: string;
+}
+
+export interface TemplateAddedData extends BaseAuditEventData {
+  typeName: string;
+  templateName: string;
+}
+
+/**
+ * Данные для событий approval системы
+ */
+export interface ChangeRequestedData extends BaseAuditEventData {
+  changeType: string;
+  departmentName: string;
+  details: string;
+  changeId: number;
+}
+
+export interface ChangeApprovedData extends BaseAuditEventData {
+  changeType: string;
+  departmentName: string;
+  details: string;
+  reviewerName: string;
+}
+
+export interface ChangeRejectedData extends BaseAuditEventData {
+  changeType: string;
+  departmentName: string;
+  details: string;
+  reviewerName: string;
+  reason: string;
+}
+
+export interface ChangeCancelledData extends BaseAuditEventData {
+  changeType: string;
+  departmentName: string;
+  details: string;
+}
+
+/**
  * Объединенный тип данных события
  */
 export type AuditEventData =
   | CalloutCreatedData
   | CalloutClosedData
-  | DepartmentAddedData
-  | DepartmentUpdatedData
-  | DepartmentRemovedData
+  | FactionAddedData
+  | FactionUpdatedData
+  | FactionRemovedData
   | SettingsUpdatedData
   | LeaderRoleAddedData
   | LeaderRoleRemovedData
@@ -193,7 +261,15 @@ export type AuditEventData =
   | VkResponseReceivedData
   | VkChatLinkedData
   | FactionEventData
-  | SubdivisionEventData;
+  | SubdivisionEventData
+  | FactionTypeCreatedData
+  | FactionTypeUpdatedData
+  | FactionTypeDeletedData
+  | TemplateAddedData
+  | ChangeRequestedData
+  | ChangeApprovedData
+  | ChangeRejectedData
+  | ChangeCancelledData;
 
 /**
  * Главная функция для логирования события в audit log канал
@@ -258,14 +334,14 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
     case AuditEventType.CALLOUT_CLOSED:
       return buildCalloutClosedEmbed(embed, data as CalloutClosedData);
 
-    case AuditEventType.DEPARTMENT_ADDED:
-      return buildDepartmentAddedEmbed(embed, data as DepartmentAddedData);
+    case AuditEventType.FACTION_ADDED:
+      return buildFactionAddedEmbed(embed, data as FactionAddedData);
 
-    case AuditEventType.DEPARTMENT_UPDATED:
-      return buildDepartmentUpdatedEmbed(embed, data as DepartmentUpdatedData);
+    case AuditEventType.FACTION_UPDATED:
+      return buildFactionUpdatedEmbed(embed, data as FactionUpdatedData);
 
-    case AuditEventType.DEPARTMENT_REMOVED:
-      return buildDepartmentRemovedEmbed(embed, data as DepartmentRemovedData);
+    case AuditEventType.FACTION_REMOVED:
+      return buildFactionRemovedEmbed(embed, data as FactionRemovedData);
 
     case AuditEventType.SETTINGS_UPDATED:
       return buildSettingsUpdatedEmbed(embed, data as SettingsUpdatedData);
@@ -281,6 +357,35 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
 
     case AuditEventType.VK_RESPONSE_RECEIVED:
       return buildVkResponseReceivedEmbed(embed, data as VkResponseReceivedData);
+
+    // Типы фракций
+    case AuditEventType.FACTION_TYPE_CREATED:
+      return buildFactionTypeCreatedEmbed(embed, data as FactionTypeCreatedData);
+
+    case AuditEventType.FACTION_TYPE_UPDATED:
+      return buildFactionTypeUpdatedEmbed(embed, data as FactionTypeUpdatedData);
+
+    case AuditEventType.FACTION_TYPE_DELETED:
+      return buildFactionTypeDeletedEmbed(embed, data as FactionTypeDeletedData);
+
+    case AuditEventType.TEMPLATE_ADDED:
+      return buildTemplateAddedEmbed(embed, data as TemplateAddedData);
+
+    // Система одобрения изменений
+    case AuditEventType.SUBDIVISION_CREATE_REQUESTED:
+    case AuditEventType.SUBDIVISION_UPDATE_REQUESTED:
+    case AuditEventType.SUBDIVISION_DELETE_REQUESTED:
+    case AuditEventType.EMBED_UPDATE_REQUESTED:
+      return buildChangeRequestedEmbed(embed, data as ChangeRequestedData);
+
+    case AuditEventType.CHANGE_APPROVED:
+      return buildChangeApprovedEmbed(embed, data as ChangeApprovedData);
+
+    case AuditEventType.CHANGE_REJECTED:
+      return buildChangeRejectedEmbed(embed, data as ChangeRejectedData);
+
+    case AuditEventType.CHANGE_CANCELLED:
+      return buildChangeCancelledEmbed(embed, data as ChangeCancelledData);
 
     default:
       return embed.setTitle('❓ Неизвестное событие').setColor(COLORS.INFO);
@@ -299,7 +404,7 @@ function buildCalloutCreatedEmbed(
     .setColor(COLORS.ACTIVE)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-      { name: 'Департамент', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
       { name: 'Канал', value: `<#${data.channelId}>`, inline: true },
       { name: 'Описание', value: data.description.substring(0, 1024), inline: false },
     ]);
@@ -314,7 +419,7 @@ function buildCalloutClosedEmbed(
 ): EmbedBuilder {
   const fields = [
     { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-    { name: 'Департамент', value: data.departmentName, inline: true },
+    { name: 'Фракция', value: data.departmentName, inline: true },
   ];
 
   if (data.channelId) {
@@ -332,49 +437,49 @@ function buildCalloutClosedEmbed(
 }
 
 /**
- * Embed для добавления департамента
+ * Embed для добавления фракции
  */
-function buildDepartmentAddedEmbed(
+function buildFactionAddedEmbed(
   embed: EmbedBuilder,
-  data: DepartmentAddedData
+  data: FactionAddedData
 ): EmbedBuilder {
   return embed
-    .setTitle(`${EMOJI.SUCCESS} Департамент добавлен`)
+    .setTitle(`${EMOJI.SUCCESS} Фракция добавлена`)
     .setColor(COLORS.ACTIVE)
     .addFields([
-      { name: 'Название', value: data.departmentName, inline: true },
+      { name: 'Название', value: data.factionName, inline: true },
       { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
       { name: 'VK Беседа', value: data.vkChatId, inline: true },
     ]);
 }
 
 /**
- * Embed для обновления департамента
+ * Embed для обновления фракции
  */
-function buildDepartmentUpdatedEmbed(
+function buildFactionUpdatedEmbed(
   embed: EmbedBuilder,
-  data: DepartmentUpdatedData
+  data: FactionUpdatedData
 ): EmbedBuilder {
   return embed
-    .setTitle(`${EMOJI.INFO} Департамент обновлен`)
+    .setTitle(`${EMOJI.INFO} Фракция обновлена`)
     .setColor(COLORS.INFO)
     .addFields([
-      { name: 'Департамент', value: data.departmentName, inline: false },
+      { name: 'Фракция', value: data.factionName, inline: false },
       { name: 'Изменения', value: data.changes.join('\n'), inline: false },
     ]);
 }
 
 /**
- * Embed для удаления департамента
+ * Embed для удаления фракции
  */
-function buildDepartmentRemovedEmbed(
+function buildFactionRemovedEmbed(
   embed: EmbedBuilder,
-  data: DepartmentRemovedData
+  data: FactionRemovedData
 ): EmbedBuilder {
   return embed
-    .setTitle(`${EMOJI.WARNING} Департамент удален`)
+    .setTitle(`${EMOJI.WARNING} Фракция удалена`)
     .setColor(COLORS.WARNING)
-    .addFields([{ name: 'Департамент', value: data.departmentName, inline: false }]);
+    .addFields([{ name: 'Фракция', value: data.factionName, inline: false }]);
 }
 
 /**
@@ -441,11 +546,151 @@ function buildVkResponseReceivedEmbed(
     .setColor(COLORS.INFO)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-      { name: 'Департамент', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
       {
         name: 'Пользователь VK',
         value: `${data.vkUserName} (${data.vkUserId})`,
         inline: false,
       },
+    ]);
+}
+
+/**
+ * Embed для создания типа фракции
+ */
+function buildFactionTypeCreatedEmbed(
+  embed: EmbedBuilder,
+  data: FactionTypeCreatedData
+): EmbedBuilder {
+  const fields = [
+    { name: 'Название типа', value: data.typeName, inline: false },
+  ];
+
+  if (data.description) {
+    fields.push({ name: 'Описание', value: data.description, inline: false });
+  }
+
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Тип фракции создан`)
+    .setColor(COLORS.SUCCESS)
+    .addFields(fields);
+}
+
+/**
+ * Embed для обновления типа фракции
+ */
+function buildFactionTypeUpdatedEmbed(
+  embed: EmbedBuilder,
+  data: FactionTypeUpdatedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.INFO} Тип фракции обновлен`)
+    .setColor(COLORS.INFO)
+    .addFields([
+      { name: 'Тип', value: data.typeName, inline: false },
+      { name: 'Изменения', value: data.changes.join('\n'), inline: false },
+    ]);
+}
+
+/**
+ * Embed для удаления типа фракции
+ */
+function buildFactionTypeDeletedEmbed(
+  embed: EmbedBuilder,
+  data: FactionTypeDeletedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.WARNING} Тип фракции удален`)
+    .setColor(COLORS.WARNING)
+    .addFields([
+      { name: 'Тип', value: data.typeName, inline: false },
+    ]);
+}
+
+/**
+ * Embed для добавления шаблона подразделения
+ */
+function buildTemplateAddedEmbed(
+  embed: EmbedBuilder,
+  data: TemplateAddedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Шаблон подразделения добавлен`)
+    .setColor(COLORS.SUCCESS)
+    .addFields([
+      { name: 'Тип фракции', value: data.typeName, inline: true },
+      { name: 'Название шаблона', value: data.templateName, inline: true },
+    ]);
+}
+
+/**
+ * Embed для запроса на изменение
+ */
+function buildChangeRequestedEmbed(
+  embed: EmbedBuilder,
+  data: ChangeRequestedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.PENDING} Запрос на изменение`)
+    .setColor(COLORS.WARNING)
+    .addFields([
+      { name: 'ID запроса', value: `#${data.changeId}`, inline: true },
+      { name: 'Тип', value: data.changeType, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Детали', value: data.details, inline: false },
+    ]);
+}
+
+/**
+ * Embed для одобрения изменения
+ */
+function buildChangeApprovedEmbed(
+  embed: EmbedBuilder,
+  data: ChangeApprovedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.APPROVED} Изменение одобрено`)
+    .setColor(COLORS.SUCCESS)
+    .addFields([
+      { name: 'Тип', value: data.changeType, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Одобрил', value: data.reviewerName, inline: true },
+      { name: 'Детали', value: data.details, inline: false },
+    ]);
+}
+
+/**
+ * Embed для отклонения изменения
+ */
+function buildChangeRejectedEmbed(
+  embed: EmbedBuilder,
+  data: ChangeRejectedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.REJECTED} Изменение отклонено`)
+    .setColor(COLORS.ERROR)
+    .addFields([
+      { name: 'Тип', value: data.changeType, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Отклонил', value: data.reviewerName, inline: true },
+      { name: 'Детали', value: data.details, inline: false },
+      { name: 'Причина отклонения', value: data.reason, inline: false },
+    ]);
+}
+
+/**
+ * Embed для отмены изменения
+ */
+function buildChangeCancelledEmbed(
+  embed: EmbedBuilder,
+  data: ChangeCancelledData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.CANCELLED} Изменение отменено`)
+    .setColor(COLORS.INFO)
+    .addFields([
+      { name: 'Тип', value: data.changeType, inline: true },
+      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Детали', value: data.details, inline: false },
     ]);
 }
