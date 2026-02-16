@@ -3,8 +3,8 @@ import { Command } from '../types';
 import logger from '../../utils/logger';
 import { ServerModel, SubdivisionModel } from '../../database/models';
 import { SubdivisionService } from '../../services/subdivision.service';
-import { getLeaderDepartment } from '../utils/department-permission-checker';
-import { buildMainPanel, buildStandaloneMainPanel } from '../utils/department-panel-builder';
+import { getLeaderFaction } from '../utils/faction-permission-checker';
+import { buildMainPanel, buildStandaloneMainPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -39,7 +39,7 @@ const factionCommand: Command = {
       // Проверить, является ли пользователь лидером фракции
       let faction;
       try {
-        faction = await getLeaderDepartment(member);
+        faction = await getLeaderFaction(member);
       } catch (error) {
         // Если ошибка о множественных фракциях
         if (error instanceof CalloutError && error.code === 'MULTIPLE_DEPARTMENTS') {
@@ -61,7 +61,7 @@ const factionCommand: Command = {
       let panel;
 
       // Получить дефолтное подразделение
-      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(faction.id);
+      const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
       if (!defaultSubdivision) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
@@ -78,7 +78,7 @@ const factionCommand: Command = {
         panel = buildStandaloneMainPanel(faction, defaultSubdivision);
       } else {
         // Есть активные обычные подразделения - показать обычную панель
-        const allSubdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(faction.id, true);
+        const allSubdivisions = await SubdivisionService.getSubdivisionsByFactionId(faction.id, true);
         // Отфильтровать дефолтное подразделение
         const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
         panel = buildMainPanel(faction, subdivisions.length, subdivisions.length);

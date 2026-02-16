@@ -5,9 +5,9 @@ import { Command } from '../types';
 import handleCreateCalloutButton from '../interactions/callout-button';
 import handleCalloutModalSubmit from '../interactions/callout-modal';
 import handleSubdivisionSelect from '../interactions/subdivision-select';
-import handleDepartmentPanelButton from '../interactions/department-panel-button';
-import handleDepartmentPanelModal from '../interactions/department-panel-modal';
-import handleDepartmentSelect from '../interactions/department-select';
+import handleFactionPanelButton from '../interactions/faction-panel-button';
+import handleFactionPanelModal from '../interactions/faction-panel-modal';
+import handleFactionSelect from '../interactions/faction-select';
 import { handleSetupModeSelect } from '../interactions/setup-mode-select';
 import { handleCloseCalloutButton, handleCloseCalloutModal } from '../interactions/close-callout-button';
 import {
@@ -70,7 +70,7 @@ export default async function interactionCreateHandler(
       } else if (interaction.customId.startsWith('admin_')) {
         await handleAdminPanelButton(interaction);
       } else if (interaction.customId.startsWith('department_')) {
-        await handleDepartmentPanelButton(interaction);
+        await handleFactionPanelButton(interaction);
       }
       return;
     }
@@ -90,7 +90,7 @@ export default async function interactionCreateHandler(
       } else if (interaction.customId.startsWith('admin_modal_')) {
         await handleAdminPanelModal(interaction);
       } else if (interaction.customId.startsWith('department_modal_')) {
-        await handleDepartmentPanelModal(interaction);
+        await handleFactionPanelModal(interaction);
       }
       return;
     }
@@ -110,7 +110,7 @@ export default async function interactionCreateHandler(
       } else if (interaction.customId.startsWith('admin_')) {
         await handleAdminStringSelect(interaction);
       } else if (interaction.customId.startsWith('department_')) {
-        await handleDepartmentSelect(interaction);
+        await handleFactionSelect(interaction);
       }
       return;
     }

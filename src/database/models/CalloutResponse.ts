@@ -59,15 +59,15 @@ export class CalloutResponseModel {
   }
 
   /**
-   * Получить ответы департамента на каллаут
+   * Получить ответы подразделения на каллаут
    */
-  static async findByCalloutAndDepartment(
+  static async findByCalloutAndSubdivision(
     calloutId: number,
-    departmentId: number
+    subdivisionId: number
   ): Promise<CalloutResponse[]> {
     return await database.all<CalloutResponse>(
-      'SELECT * FROM callout_responses WHERE callout_id = ? AND department_id = ? ORDER BY created_at ASC',
-      [calloutId, departmentId]
+      'SELECT * FROM callout_responses WHERE callout_id = ? AND subdivision_id = ? ORDER BY created_at ASC',
+      [calloutId, subdivisionId]
     );
   }
 
@@ -97,25 +97,25 @@ export class CalloutResponseModel {
   }
 
   /**
-   * Получить количество уникальных департаментов, ответивших на каллаут
+   * Получить количество уникальных подразделений, ответивших на каллаут
    */
-  static async countUniqueDepartments(calloutId: number): Promise<number> {
+  static async countUniqueSubdivisions(calloutId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(DISTINCT department_id) as count FROM callout_responses WHERE callout_id = ?',
+      'SELECT COUNT(DISTINCT subdivision_id) as count FROM callout_responses WHERE callout_id = ?',
       [calloutId]
     );
     return result?.count || 0;
   }
 
   /**
-   * Получить все департаменты, ответившие на каллаут
+   * Получить все подразделения, ответившие на каллаут
    */
-  static async getRespondedDepartments(calloutId: number): Promise<number[]> {
-    const results = await database.all<{ department_id: number }>(
-      'SELECT DISTINCT department_id FROM callout_responses WHERE callout_id = ?',
+  static async getRespondedSubdivisions(calloutId: number): Promise<number[]> {
+    const results = await database.all<{ subdivision_id: number }>(
+      'SELECT DISTINCT subdivision_id FROM callout_responses WHERE callout_id = ?',
       [calloutId]
     );
-    return results.map((r) => r.department_id);
+    return results.map((r) => r.subdivision_id);
   }
 
   /**
@@ -150,20 +150,20 @@ export class CalloutResponseModel {
   }
 
   /**
-   * Получить статистику ответов департамента
+   * Получить статистику ответов подразделения
    */
-  static async getDepartmentStats(departmentId: number): Promise<{
+  static async getSubdivisionStats(subdivisionId: number): Promise<{
     total: number;
     uniqueCallouts: number;
   }> {
     const total = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM callout_responses WHERE department_id = ?',
-      [departmentId]
+      'SELECT COUNT(*) as count FROM callout_responses WHERE subdivision_id = ?',
+      [subdivisionId]
     );
 
     const uniqueCallouts = await database.get<{ count: number }>(
-      'SELECT COUNT(DISTINCT callout_id) as count FROM callout_responses WHERE department_id = ?',
-      [departmentId]
+      'SELECT COUNT(DISTINCT callout_id) as count FROM callout_responses WHERE subdivision_id = ?',
+      [subdivisionId]
     );
 
     return {

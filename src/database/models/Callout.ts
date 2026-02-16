@@ -80,19 +80,6 @@ export class CalloutModel {
   }
 
   /**
-   * Получить каллауты по департаменту
-   */
-  static async findByDepartmentId(departmentId: number, limit?: number): Promise<Callout[]> {
-    const sql = limit
-      ? 'SELECT * FROM callouts WHERE department_id = ? ORDER BY created_at DESC LIMIT ?'
-      : 'SELECT * FROM callouts WHERE department_id = ? ORDER BY created_at DESC';
-
-    const params = limit ? [departmentId, limit] : [departmentId];
-
-    return await database.all<Callout>(sql, params);
-  }
-
-  /**
    * Получить каллауты по автору
    */
   static async findByAuthorId(authorId: string, limit?: number): Promise<Callout[]> {

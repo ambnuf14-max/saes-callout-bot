@@ -25,7 +25,8 @@
       "Bash(node check-docker-db.js:*)",
       "Bash(pkill:*)",
       "Bash(node:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }

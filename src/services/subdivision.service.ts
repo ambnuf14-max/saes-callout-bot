@@ -25,7 +25,7 @@ export class SubdivisionService {
     }
 
     // Проверка уникальности названия в фракции
-    const existing = await SubdivisionModel.findByName(data.department_id, data.name);
+    const existing = await SubdivisionModel.findByName(data.faction_id, data.name);
     if (existing) {
       throw new CalloutError(
         `Подразделение с названием "${data.name}" уже существует в этой фракции`,
@@ -40,17 +40,17 @@ export class SubdivisionService {
     logger.info('Subdivision created via service', {
       subdivisionId: subdivision.id,
       name: subdivision.name,
-      departmentId: data.department_id,
+      factionId: data.faction_id,
     });
 
     // Если это первое обычное подразделение - деактивировать дефолтное
-    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(data.department_id);
+    const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(data.faction_id);
     if (nonDefaultCount === 1) {
-      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(data.department_id);
+      const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(data.faction_id);
       if (defaultSubdivision && defaultSubdivision.is_active) {
         await SubdivisionModel.update(defaultSubdivision.id, { is_active: false });
         logger.info('Default subdivision deactivated (first regular subdivision created)', {
-          factionId: data.department_id,
+          factionId: data.faction_id,
           defaultSubdivisionId: defaultSubdivision.id,
         });
       }
@@ -62,11 +62,11 @@ export class SubdivisionService {
   /**
    * Получить все подразделения фракции
    */
-  static async getSubdivisionsByDepartmentId(
+  static async getSubdivisionsByFactionId(
     factionId: number,
     activeOnly = false
   ): Promise<Subdivision[]> {
-    return await SubdivisionModel.findByDepartmentId(factionId, activeOnly);
+    return await SubdivisionModel.findByFactionId(factionId, activeOnly);
   }
 
   /**
@@ -201,7 +201,7 @@ export class SubdivisionService {
       );
     }
 
-    const factionId = subdivision.department_id;
+    const factionId = subdivision.faction_id;
 
     await SubdivisionModel.delete(id);
 
@@ -213,7 +213,7 @@ export class SubdivisionService {
     // Если это было последнее обычное подразделение - активировать дефолтное
     const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(factionId);
     if (nonDefaultCount === 0) {
-      const defaultSubdivision = await SubdivisionModel.findDefaultByDepartmentId(factionId);
+      const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(factionId);
       if (defaultSubdivision && !defaultSubdivision.is_active) {
         await SubdivisionModel.update(defaultSubdivision.id, { is_active: true });
         logger.info('Default subdivision reactivated (last regular subdivision deleted)', {

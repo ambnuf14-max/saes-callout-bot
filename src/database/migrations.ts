@@ -5,6 +5,7 @@ import runSubdivisionEmbedsMigration from './migrations/004_subdivision_embeds';
 import runVerificationDiscordMessageMigration from './migrations/005_verification_discord_message';
 import runFactionStandaloneModeMigration from './migrations/006_faction_standalone_mode';
 import runApprovalAndTypesSystemMigration from './migrations/007_approval_and_types_system';
+import runRenameDepartmentToFactionMigration from './migrations/008_rename_department_to_faction';
 
 /**
  * SQL схема для всех таблиц
@@ -158,6 +159,7 @@ export async function runMigrations(): Promise<void> {
     await runVerificationDiscordMessageMigration();
     await runFactionStandaloneModeMigration();
     await runApprovalAndTypesSystemMigration();
+    await runRenameDepartmentToFactionMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

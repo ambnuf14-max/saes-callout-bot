@@ -11,11 +11,6 @@ export enum AuditEventType {
   CALLOUT_CREATED = 'callout_created',
   CALLOUT_CLOSED = 'callout_closed',
 
-  // Фракции
-  FACTION_ADDED = 'faction_added',
-  FACTION_UPDATED = 'faction_updated',
-  FACTION_REMOVED = 'faction_removed',
-
   // Типы фракций
   FACTION_TYPE_CREATED = 'faction_type_created',
   FACTION_TYPE_UPDATED = 'faction_type_updated',
@@ -334,7 +329,7 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
     case AuditEventType.CALLOUT_CLOSED:
       return buildCalloutClosedEmbed(embed, data as CalloutClosedData);
 
-    case AuditEventType.FACTION_ADDED:
+    case AuditEventType.FACTION_CREATED:
       return buildFactionAddedEmbed(embed, data as FactionAddedData);
 
     case AuditEventType.FACTION_UPDATED:
@@ -637,6 +632,7 @@ function buildChangeRequestedEmbed(
       { name: 'ID запроса', value: `#${data.changeId}`, inline: true },
       { name: 'Тип', value: data.changeType, inline: true },
       { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Запрос от', value: `<@${data.userId}>`, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
 }

@@ -11,8 +11,8 @@ import {
 } from 'discord.js';
 import { Server, Faction, FactionType, PendingChangeWithDetails } from '../../types/database.types';
 import { ServerModel } from '../../database/models';
-import { DepartmentService } from '../../services/department.service';
-import { DepartmentTypeService } from '../../services/department-type.service';
+import { FactionService } from '../../services/faction.service';
+import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { COLORS, EMOJI } from '../../config/constants';
 import CalloutService from '../../services/callout.service';
@@ -24,7 +24,7 @@ import { getChangeTypeLabel, formatChangeDetails, formatDate } from './change-fo
 export async function buildAdminMainPanel(server: Server) {
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
   const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
-  const factions = await DepartmentService.getDepartments(server.id);
+  const factions = await FactionService.getFactions(server.id);
   const stats = await CalloutService.getStats(server.id);
 
   const embed = new EmbedBuilder()
@@ -328,13 +328,13 @@ export function buildAuditLogSection(server: Server) {
  * Построить секцию "Фракции"
  */
 export async function buildFactionsSection(server: Server) {
-  const factions = await DepartmentService.getDepartments(server.id);
+  const factions = await FactionService.getFactions(server.id);
   const pendingCount = await PendingChangeService.getPendingCount(server.id);
 
   let description = factions.length > 0
     ? factions.map((d, i) => {
         const statusEmoji = d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
-        return `${statusEmoji} **${d.name}** — Общая: <@&${d.general_leader_role_id}>, Фракция: <@&${d.department_role_id}>`;
+        return `${statusEmoji} **${d.name}** — Общая: <@&${d.general_leader_role_id}>, Фракция: <@&${d.faction_role_id}>`;
       }).join('\n')
     : 'Фракции не созданы.';
 
@@ -432,7 +432,7 @@ export function buildFactionDetailPanel(faction: Faction) {
       },
       {
         name: 'Роль фракции',
-        value: `<@&${faction.department_role_id}>`,
+        value: `<@&${faction.faction_role_id}>`,
         inline: true,
       },
       {
@@ -516,7 +516,7 @@ export function buildFactionDeleteConfirmation(faction: Faction) {
 export async function buildInfoSection(server: Server) {
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
   const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
-  const factions = await DepartmentService.getDepartments(server.id);
+  const factions = await FactionService.getFactions(server.id);
   const stats = await CalloutService.getStats(server.id);
 
   const embed = new EmbedBuilder()
@@ -587,7 +587,7 @@ export async function buildInfoSection(server: Server) {
  * Панель управления типами фракций
  */
 export async function buildFactionTypesSection(server: Server) {
-  const types = await DepartmentTypeService.getDepartmentTypes(server.id, true);
+  const types = await FactionTypeService.getFactionTypes(server.id, true);
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
@@ -603,7 +603,7 @@ export async function buildFactionTypesSection(server: Server) {
   } else {
     let description = '**Доступные типы:**\n\n';
     for (const type of types) {
-      const typeWithTemplates = await DepartmentTypeService.getTypeWithTemplates(type.id);
+      const typeWithTemplates = await FactionTypeService.getTypeWithTemplates(type.id);
       const templateCount = typeWithTemplates?.templates.length || 0;
       description += `📋 **${type.name}**\n`;
       if (type.description) {
@@ -656,7 +656,7 @@ export async function buildFactionTypesSection(server: Server) {
  * Детальная панель типа фракции
  */
 export async function buildFactionTypeDetailPanel(typeId: number) {
-  const typeWithTemplates = await DepartmentTypeService.getTypeWithTemplates(typeId);
+  const typeWithTemplates = await FactionTypeService.getTypeWithTemplates(typeId);
 
   if (!typeWithTemplates) {
     const embed = new EmbedBuilder()
@@ -772,10 +772,10 @@ export async function buildPendingChangesPanel(serverId: number) {
   // Группировать по фракциям
   const byFaction = new Map<string, PendingChangeWithDetails[]>();
   pendingChanges.forEach(change => {
-    if (!byFaction.has(change.department_name)) {
-      byFaction.set(change.department_name, []);
+    if (!byFaction.has(change.faction_name)) {
+      byFaction.set(change.faction_name, []);
     }
-    byFaction.get(change.department_name)!.push(change);
+    byFaction.get(change.faction_name)!.push(change);
   });
 
   let description = `Всего запросов: **${pendingChanges.length}**\n\n`;
@@ -860,7 +860,7 @@ export async function buildReviewChangePanel(changeId: number) {
     .setTitle(`${EMOJI.PENDING} Рассмотрение запроса`)
     .addFields(
       { name: 'Тип', value: typeLabel, inline: true },
-      { name: 'Фракция', value: change.department_name, inline: true },
+      { name: 'Фракция', value: change.faction_name, inline: true },
       { name: 'Запрошено', value: `<@${change.requested_by}>`, inline: true },
       { name: 'Дата', value: formatDate(change.requested_at), inline: true }
     )

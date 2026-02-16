@@ -39,7 +39,7 @@ export class FactionService {
     const existingRoles = await FactionModel.findByRoles(
       data.server_id,
       data.general_leader_role_id,
-      data.department_role_id
+      data.faction_role_id
     );
     if (existingRoles) {
       throw new CalloutError(
@@ -124,7 +124,7 @@ export class FactionService {
         id: f.id,
         name: f.name,
         general_leader_role_id: f.general_leader_role_id,
-        department_role_id: f.department_role_id,
+        faction_role_id: f.faction_role_id,
       })),
     });
 
@@ -133,7 +133,7 @@ export class FactionService {
 
     for (const faction of factions) {
       const hasGeneralRole = userRoleIds.includes(faction.general_leader_role_id);
-      const hasFactionRole = userRoleIds.includes(faction.department_role_id);
+      const hasFactionRole = userRoleIds.includes(faction.faction_role_id);
 
       logger.debug('Checking faction match', {
         factionId: faction.id,
@@ -141,7 +141,7 @@ export class FactionService {
         hasGeneralRole,
         hasFactionRole,
         requiredGeneralRole: faction.general_leader_role_id,
-        requiredFactionRole: faction.department_role_id,
+        requiredFactionRole: faction.faction_role_id,
       });
 
       if (hasGeneralRole && hasFactionRole) {
@@ -197,14 +197,14 @@ export class FactionService {
     }
 
     // Проверка уникальности комбинации ролей, если обновляются
-    if (data.general_leader_role_id || data.department_role_id) {
+    if (data.general_leader_role_id || data.faction_role_id) {
       const currentFaction = await FactionModel.findById(id);
       if (!currentFaction) {
         throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
       }
 
       const generalRole = data.general_leader_role_id || currentFaction.general_leader_role_id;
-      const factionRole = data.department_role_id || currentFaction.department_role_id;
+      const factionRole = data.faction_role_id || currentFaction.faction_role_id;
 
       const existingRoles = await FactionModel.findByRoles(
         currentFaction.server_id,

@@ -305,7 +305,7 @@ export class SyncService {
   static async getRespondedDepartmentsCount(
     calloutId: number
   ): Promise<number> {
-    return await CalloutResponseModel.countUniqueDepartments(calloutId);
+    return await CalloutResponseModel.countUniqueSubdivisions(calloutId);
   }
 }
 

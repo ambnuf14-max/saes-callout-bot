@@ -7,14 +7,14 @@ import logger from '../../utils/logger';
  * - is_default на subdivisions: помечает авто-созданное дефолтное подразделение
  * - режим автоматически определяется по наличию обычных подразделений
  */
-export async function runDepartmentStandaloneModeMigration(): Promise<void> {
+export async function runFactionStandaloneModeMigration(): Promise<void> {
   try {
-    logger.info('Running department standalone mode migration...');
+    logger.info('Running faction standalone mode migration...');
 
-    // Добавить allow_create_subdivisions в departments
+    // Добавить allow_create_subdivisions в factions
     try {
-      await database.run(`ALTER TABLE departments ADD COLUMN allow_create_subdivisions BOOLEAN DEFAULT 1`);
-      logger.debug('Added column allow_create_subdivisions to departments table');
+      await database.run(`ALTER TABLE factions ADD COLUMN allow_create_subdivisions BOOLEAN DEFAULT 1`);
+      logger.debug('Added column allow_create_subdivisions to factions table');
     } catch (error) {
       if (error instanceof Error && error.message.includes('duplicate column')) {
         logger.debug('Column allow_create_subdivisions already exists, skipping');
@@ -35,13 +35,13 @@ export async function runDepartmentStandaloneModeMigration(): Promise<void> {
       }
     }
 
-    logger.info('Department standalone mode migration completed successfully');
+    logger.info('Faction standalone mode migration completed successfully');
   } catch (error) {
-    logger.error('Failed to run department standalone mode migration', {
+    logger.error('Failed to run faction standalone mode migration', {
       error: error instanceof Error ? error.message : error,
     });
     throw error;
   }
 }
 
-export default runDepartmentStandaloneModeMigration;
+export default runFactionStandaloneModeMigration;

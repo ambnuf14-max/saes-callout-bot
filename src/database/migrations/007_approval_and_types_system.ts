@@ -3,19 +3,19 @@ import logger from '../../utils/logger';
 
 /**
  * Миграция для системы одобрения и типов департаментов
- * - department_types: типы департаментов с шаблонами
+ * - faction_types: типы департаментов с шаблонами
  * - subdivision_templates: предопределенные подразделения для типов
  * - pending_changes: ожидающие одобрения изменения от лидеров
- * - department_type_id в departments: связь департамента с типом
+ * - faction_type_id в factions: связь департамента с типом
  */
 export async function runApprovalAndTypesSystemMigration(): Promise<void> {
   try {
     logger.info('Running approval and types system migration...');
 
-    // 1. Создать таблицу department_types
+    // 1. Создать таблицу faction_types
     try {
       await database.run(`
-        CREATE TABLE IF NOT EXISTS department_types (
+        CREATE TABLE IF NOT EXISTS faction_types (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           server_id INTEGER NOT NULL,
           name TEXT NOT NULL,
@@ -27,10 +27,10 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
           UNIQUE(server_id, name)
         )
       `);
-      logger.debug('Created department_types table');
+      logger.debug('Created faction_types table');
     } catch (error) {
       if (error instanceof Error && error.message.includes('already exists')) {
-        logger.debug('Table department_types already exists, skipping');
+        logger.debug('Table faction_types already exists, skipping');
       } else {
         throw error;
       }
@@ -41,7 +41,7 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
       await database.run(`
         CREATE TABLE IF NOT EXISTS subdivision_templates (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          department_type_id INTEGER NOT NULL,
+          faction_type_id INTEGER NOT NULL,
           name TEXT NOT NULL,
           description TEXT,
           embed_author_name TEXT,
@@ -57,7 +57,7 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
           display_order INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (department_type_id) REFERENCES department_types(id) ON DELETE CASCADE
+          FOREIGN KEY (faction_type_id) REFERENCES faction_types(id) ON DELETE CASCADE
         )
       `);
       logger.debug('Created subdivision_templates table');
@@ -75,7 +75,7 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
         CREATE TABLE IF NOT EXISTS pending_changes (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           server_id INTEGER NOT NULL,
-          department_id INTEGER NOT NULL,
+          faction_id INTEGER NOT NULL,
           subdivision_id INTEGER,
           change_type TEXT NOT NULL,
           requested_by TEXT NOT NULL,
@@ -88,7 +88,7 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-          FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
+          FOREIGN KEY (faction_id) REFERENCES factions(id) ON DELETE CASCADE,
           FOREIGN KEY (subdivision_id) REFERENCES subdivisions(id) ON DELETE CASCADE
         )
       `);
@@ -107,7 +107,7 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_pending_changes_status ON pending_changes(status)
       `);
       await database.run(`
-        CREATE INDEX IF NOT EXISTS idx_pending_changes_department ON pending_changes(department_id)
+        CREATE INDEX IF NOT EXISTS idx_pending_changes_department ON pending_changes(faction_id)
       `);
       await database.run(`
         CREATE INDEX IF NOT EXISTS idx_pending_changes_requested_by ON pending_changes(requested_by)
@@ -119,15 +119,15 @@ export async function runApprovalAndTypesSystemMigration(): Promise<void> {
       });
     }
 
-    // 5. Добавить department_type_id в departments
+    // 5. Добавить faction_type_id в factions
     try {
       await database.run(`
-        ALTER TABLE departments ADD COLUMN department_type_id INTEGER REFERENCES department_types(id) ON DELETE SET NULL
+        ALTER TABLE factions ADD COLUMN faction_type_id INTEGER REFERENCES faction_types(id) ON DELETE SET NULL
       `);
-      logger.debug('Added column department_type_id to departments table');
+      logger.debug('Added column faction_type_id to factions table');
     } catch (error) {
       if (error instanceof Error && error.message.includes('duplicate column')) {
-        logger.debug('Column department_type_id already exists, skipping');
+        logger.debug('Column faction_type_id already exists, skipping');
       } else {
         throw error;
       }

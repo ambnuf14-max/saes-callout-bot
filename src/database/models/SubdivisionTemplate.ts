@@ -16,14 +16,14 @@ export class SubdivisionTemplateModel {
   static async create(data: CreateSubdivisionTemplateDTO): Promise<SubdivisionTemplate> {
     const result = await database.run(
       `INSERT INTO subdivision_templates (
-        department_type_id, name, description, display_order,
+        faction_type_id, name, description, display_order,
         embed_author_name, embed_author_url, embed_author_icon_url,
         embed_title, embed_description, embed_color,
         embed_image_url, embed_thumbnail_url,
         embed_footer_text, embed_footer_icon_url
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        data.department_type_id,
+        data.faction_type_id,
         data.name,
         data.description || null,
         data.display_order || 0,
@@ -43,7 +43,7 @@ export class SubdivisionTemplateModel {
     logger.info('Subdivision template created', {
       templateId: result.lastID,
       name: data.name,
-      typeId: data.department_type_id,
+      typeId: data.faction_type_id,
     });
 
     const template = await this.findById(result.lastID);
@@ -65,11 +65,11 @@ export class SubdivisionTemplateModel {
   }
 
   /**
-   * Найти все шаблоны типа департамента
+   * Найти все шаблоны типа фракции
    */
-  static async findByDepartmentTypeId(typeId: number): Promise<SubdivisionTemplate[]> {
+  static async findByFactionTypeId(typeId: number): Promise<SubdivisionTemplate[]> {
     return await database.all<SubdivisionTemplate>(
-      'SELECT * FROM subdivision_templates WHERE department_type_id = ? ORDER BY display_order, name',
+      'SELECT * FROM subdivision_templates WHERE faction_type_id = ? ORDER BY display_order, name',
       [typeId]
     );
   }
@@ -172,8 +172,8 @@ export class SubdivisionTemplateModel {
   /**
    * Удалить все шаблоны типа
    */
-  static async deleteByDepartmentTypeId(typeId: number): Promise<void> {
-    await database.run('DELETE FROM subdivision_templates WHERE department_type_id = ?', [typeId]);
+  static async deleteByFactionTypeId(typeId: number): Promise<void> {
+    await database.run('DELETE FROM subdivision_templates WHERE faction_type_id = ?', [typeId]);
 
     logger.info('All subdivision templates deleted for type', { typeId });
   }
@@ -183,7 +183,7 @@ export class SubdivisionTemplateModel {
    */
   static async count(typeId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM subdivision_templates WHERE department_type_id = ?',
+      'SELECT COUNT(*) as count FROM subdivision_templates WHERE faction_type_id = ?',
       [typeId]
     );
     return result?.count || 0;

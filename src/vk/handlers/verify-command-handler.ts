@@ -174,7 +174,7 @@ async function notifyDiscordAboutVerification(
       const { FactionModel } = await import('../../database/models');
       const { logAuditEvent, AuditEventType } = await import('../../discord/utils/audit-logger');
 
-      const faction = await FactionModel.findById(subdivision.department_id);
+      const faction = await FactionModel.findById(subdivision.faction_id);
       if (!faction) return;
 
       // Получить guild

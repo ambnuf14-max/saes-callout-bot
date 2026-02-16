@@ -58,7 +58,7 @@ export class PendingChangeService {
 
     const change = await PendingChangeModel.create({
       server_id: serverId,
-      department_id: factionId,
+      faction_id: factionId,
       change_type: 'create_subdivision',
       requested_by: requestedBy,
       change_data: data,
@@ -124,7 +124,7 @@ export class PendingChangeService {
 
     const change = await PendingChangeModel.create({
       server_id: serverId,
-      department_id: factionId,
+      faction_id: factionId,
       subdivision_id: subdivisionId,
       change_type: 'update_subdivision',
       requested_by: requestedBy,
@@ -180,7 +180,7 @@ export class PendingChangeService {
 
     const change = await PendingChangeModel.create({
       server_id: serverId,
-      department_id: factionId,
+      faction_id: factionId,
       subdivision_id: subdivisionId,
       change_type: 'delete_subdivision',
       requested_by: requestedBy,
@@ -232,7 +232,7 @@ export class PendingChangeService {
 
     const change = await PendingChangeModel.create({
       server_id: serverId,
-      department_id: factionId,
+      faction_id: factionId,
       subdivision_id: subdivisionId,
       change_type: 'update_embed',
       requested_by: requestedBy,
@@ -271,7 +271,7 @@ export class PendingChangeService {
     }
 
     // Получить детали для audit log
-    const faction = await FactionModel.findById(change.department_id);
+    const faction = await FactionModel.findById(change.faction_id);
     const changeTypeLabel = getChangeTypeLabel(change.change_type);
     const details = await this.getChangeDetails(change);
 
@@ -368,7 +368,7 @@ export class PendingChangeService {
     // Отправить audit log уведомление
     if (guild) {
       try {
-        const faction = await FactionModel.findById(change.department_id);
+        const faction = await FactionModel.findById(change.faction_id);
         if (faction) {
           const reviewer = await guild.members.fetch(reviewedBy);
           const requester = await guild.members.fetch(change.requested_by);
@@ -428,10 +428,10 @@ export class PendingChangeService {
   /**
    * Получить pending запросы фракции
    */
-  static async getPendingChangesForDepartment(
+  static async getPendingChangesForFaction(
     factionId: number
   ): Promise<PendingChangeWithDetails[]> {
-    const changes = await PendingChangeModel.findByDepartmentId(factionId, 'pending');
+    const changes = await PendingChangeModel.findByFactionId(factionId, 'pending');
 
     // Преобразовать в PendingChangeWithDetails
     const withDetails: PendingChangeWithDetails[] = [];
@@ -475,7 +475,7 @@ export class PendingChangeService {
    * Проверить наличие pending изменений для фракции
    */
   static async hasPendingChanges(factionId: number): Promise<boolean> {
-    const changes = await PendingChangeModel.findByDepartmentId(factionId, 'pending');
+    const changes = await PendingChangeModel.findByFactionId(factionId, 'pending');
     return changes.length > 0;
   }
 
@@ -533,7 +533,7 @@ export class PendingChangeService {
     const data = PendingChangeModel.parseChangeData<CreateSubdivisionChangeData>(change);
 
     await SubdivisionService.createSubdivision({
-      department_id: change.department_id,
+      faction_id: change.faction_id,
       server_id: change.server_id,
       name: data.name,
       description: data.description,

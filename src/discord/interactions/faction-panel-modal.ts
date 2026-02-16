@@ -2,21 +2,21 @@ import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { PendingChangeService } from '../../services/pending-change.service';
-import { getLeaderDepartment } from '../utils/department-permission-checker';
-import { buildSubdivisionsList, buildSubdivisionDetailPanel, buildSettingsPanel } from '../utils/department-panel-builder';
+import { getLeaderFaction } from '../utils/faction-permission-checker';
+import { buildSubdivisionsList, buildSubdivisionDetailPanel, buildSettingsPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
  * Обработчик модальных окон лидерской панели
  */
-export async function handleDepartmentPanelModal(interaction: ModalSubmitInteraction) {
+export async function handleFactionPanelModal(interaction: ModalSubmitInteraction) {
   if (!interaction.guild) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
   // Получить фракцию лидера
-  const department = await getLeaderDepartment(member);
+  const department = await getLeaderFaction(member);
   if (!department) {
     await interaction.reply({
       content: MESSAGES.FACTION.NO_FACTION,
@@ -104,14 +104,16 @@ async function handleAddSubdivision(
     throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
   }
 
-  const subdivisions = await SubdivisionService.getSubdivisionsByDepartmentId(departmentId);
+  const subdivisions = await SubdivisionService.getSubdivisionsByFactionId(departmentId);
   const nonDefaultSubdivisions = subdivisions.filter(sub => !sub.is_default);
 
   const panel = buildSubdivisionsList(faction, nonDefaultSubdivisions);
 
-  await interaction.editReply({
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
     content: `${EMOJI.PENDING} Запрос на создание подразделения "${name}" отправлен администратору`,
-    ...panel,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -131,7 +133,7 @@ async function handleEditSubdivision(
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (existingSubdivision.department_id !== departmentId) {
+  if (existingSubdivision.faction_id !== departmentId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -168,9 +170,11 @@ async function handleEditSubdivision(
   // Показать панель подразделения с уведомлением
   const panel = await buildSubdivisionDetailPanel(existingSubdivision);
 
-  await interaction.editReply({
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
     content: `${EMOJI.PENDING} Запрос на обновление подразделения отправлен администратору`,
-    ...panel,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -190,7 +194,7 @@ async function handleConfigureEmbed(
     throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
   }
 
-  if (existingSubdivision.department_id !== departmentId) {
+  if (existingSubdivision.faction_id !== departmentId) {
     throw new CalloutError(
       `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
       'PERMISSION_DENIED',
@@ -262,9 +266,11 @@ async function handleConfigureEmbed(
   // Показать панель настроек с уведомлением
   const panel = buildSettingsPanel(existingSubdivision);
 
-  await interaction.editReply({
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
     content: `${EMOJI.PENDING} Запрос на обновление embed отправлен администратору`,
-    ...panel,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -289,4 +295,4 @@ function isValidHexColor(color: string): boolean {
   return hexPattern.test(color);
 }
 
-export default handleDepartmentPanelModal;
+export default handleFactionPanelModal;

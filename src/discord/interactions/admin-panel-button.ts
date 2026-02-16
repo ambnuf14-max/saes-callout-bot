@@ -16,7 +16,7 @@ import {
 import { COLORS } from '../../config/constants';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import { FactionService } from '../../services/department.service';
+import { FactionService } from '../../services/faction.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
   buildAdminMainPanel,
@@ -24,16 +24,16 @@ import {
   buildLeaderRolesSection,
   buildCalloutRolesSection,
   buildAuditLogSection,
-  buildDepartmentsSection,
-  buildDepartmentDetailPanel,
-  buildDepartmentDeleteConfirmation,
+  buildFactionsSection,
+  buildFactionDetailPanel,
+  buildFactionDeleteConfirmation,
   buildInfoSection,
-  buildDepartmentTypesSection,
-  buildDepartmentTypeDetailPanel,
+  buildFactionTypesSection,
+  buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
   buildReviewChangePanel,
 } from '../utils/admin-panel-builder';
-import { FactionTypeService } from '../../services/department-type.service';
+import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
@@ -141,7 +141,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
     else if (customId === 'admin_factions') {
       await interaction.deferUpdate();
-      const panel = await buildDepartmentsSection(server);
+      const panel = await buildFactionsSection(server);
       await interaction.editReply(panel);
     }
 
@@ -186,7 +186,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Редактирование фракции (показать modal)
     else if (customId.startsWith('admin_edit_faction_')) {
       const factionId = parseInt(customId.replace('admin_edit_faction_', ''));
-      const faction = await FactionService.getDepartmentById(factionId);
+      const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
         await interaction.reply({
@@ -229,7 +229,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_toggle_allow_create_')) {
       await interaction.deferUpdate();
       const factionId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
-      const faction = await FactionService.getDepartmentById(factionId);
+      const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
         await interaction.editReply({
@@ -241,16 +241,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       }
 
       // Переключить allow_create_subdivisions
-      await FactionService.updateDepartment(factionId, {
+      await FactionService.updateFaction(factionId, {
         allow_create_subdivisions: !faction.allow_create_subdivisions,
       });
 
-      const updated = await FactionService.getDepartmentById(factionId);
+      const updated = await FactionService.getFactionById(factionId);
       if (!updated) {
         throw new Error('Failed to retrieve updated faction');
       }
 
-      const panel = buildDepartmentDetailPanel(updated);
+      const panel = buildFactionDetailPanel(updated);
       await interaction.editReply(panel);
     }
 
@@ -258,7 +258,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_delete_faction_')) {
       await interaction.deferUpdate();
       const factionId = parseInt(customId.replace('admin_delete_faction_', ''));
-      const faction = await FactionService.getDepartmentById(factionId);
+      const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
         await interaction.editReply({
@@ -269,7 +269,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         return;
       }
 
-      const panel = buildDepartmentDeleteConfirmation(faction);
+      const panel = buildFactionDeleteConfirmation(faction);
       await interaction.editReply(panel);
     }
 
@@ -277,7 +277,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_confirm_delete_dept_')) {
       await interaction.deferUpdate();
       const factionId = parseInt(customId.replace('admin_confirm_delete_dept_', ''));
-      const faction = await FactionService.getDepartmentById(factionId);
+      const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
         await interaction.editReply({
@@ -288,7 +288,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         return;
       }
 
-      await FactionService.deleteDepartment(factionId);
+      await FactionService.deleteFaction(factionId);
 
       logger.info('Faction deleted via admin panel', {
         factionId,
@@ -297,7 +297,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       });
 
       // Вернуться к списку
-      const panel = await buildDepartmentsSection(server);
+      const panel = await buildFactionsSection(server);
       await interaction.editReply(panel);
     }
 
@@ -306,7 +306,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Открыть секцию управления типами
     else if (customId === 'admin_dept_types') {
       await interaction.deferUpdate();
-      const panel = await buildDepartmentTypesSection(server);
+      const panel = await buildFactionTypesSection(server);
       await interaction.editReply(panel);
     }
 
@@ -314,7 +314,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_view_dept_type_')) {
       await interaction.deferUpdate();
       const typeId = parseInt(customId.replace('admin_view_dept_type_', ''));
-      const panel = await buildDepartmentTypeDetailPanel(typeId);
+      const panel = await buildFactionTypeDetailPanel(typeId);
       await interaction.editReply(panel);
     }
 
@@ -388,7 +388,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = parseInt(customId.replace('admin_delete_dept_type_', ''));
 
       try {
-        await FactionTypeService.deleteDepartmentType(typeId);
+        await FactionTypeService.deleteFactionType(typeId);
 
         logger.info('Faction type deleted via admin panel', {
           typeId,
@@ -396,7 +396,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         });
 
         // Вернуться к списку типов
-        const panel = await buildDepartmentTypesSection(server);
+        const panel = await buildFactionTypesSection(server);
         await interaction.editReply(panel);
       } catch (error) {
         await interaction.editReply({
@@ -424,7 +424,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         });
 
         // Вернуться к деталям типа
-        const panel = await buildDepartmentTypeDetailPanel(typeId);
+        const panel = await buildFactionTypeDetailPanel(typeId);
         await interaction.editReply(panel);
       } catch (error) {
         await interaction.editReply({
@@ -753,7 +753,7 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       state.departmentRoleId = roleId;
 
       // Получить доступные типы фракций
-      const types = await FactionTypeService.getDepartmentTypes(server.id, true);
+      const types = await FactionTypeService.getFactionTypes(server.id, true);
 
       const embed = new EmbedBuilder()
         .setColor(COLORS.INFO)
@@ -899,7 +899,7 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
     if (customId === 'admin_select_faction') {
       await interaction.deferUpdate();
       const factionId = parseInt(interaction.values[0]);
-      const faction = await FactionService.getDepartmentById(factionId);
+      const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
         await interaction.editReply({
@@ -910,7 +910,7 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
         return;
       }
 
-      const panel = buildDepartmentDetailPanel(faction);
+      const panel = buildFactionDetailPanel(faction);
       await interaction.editReply(panel);
     }
 

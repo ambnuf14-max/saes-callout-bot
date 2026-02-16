@@ -1,15 +1,15 @@
 import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import { FactionService } from '../../services/department.service';
-import { FactionTypeService } from '../../services/department-type.service';
+import { FactionService } from '../../services/faction.service';
+import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
-  buildDepartmentsSection,
-  buildDepartmentDetailPanel,
-  buildDepartmentTypesSection,
-  buildDepartmentTypeDetailPanel,
+  buildFactionsSection,
+  buildFactionDetailPanel,
+  buildFactionTypesSection,
+  buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
 } from '../utils/admin-panel-builder';
 import { EMOJI } from '../../config/constants';
@@ -109,12 +109,12 @@ async function handleAddFaction(
   }
 
   // Создать фракцию с типом (если выбран)
-  const faction = await FactionService.createDepartment({
+  const faction = await FactionService.createFaction({
     server_id: serverId,
     name,
     description: description || undefined,
     general_leader_role_id: state.generalLeaderRoleId,
-    department_role_id: state.departmentRoleId,
+    faction_role_id: state.departmentRoleId,
   }, state.selectedTypeId);
 
   // Очистить состояние
@@ -129,7 +129,7 @@ async function handleAddFaction(
   });
 
   // Показать детальную панель новой фракции
-  const panel = buildDepartmentDetailPanel(faction);
+  const panel = buildFactionDetailPanel(faction);
   await interaction.editReply(panel);
 }
 
@@ -146,7 +146,7 @@ async function handleEditFaction(
   const name = interaction.fields.getTextInputValue('dept_name').trim();
   const description = interaction.fields.getTextInputValue('dept_description').trim();
 
-  const faction = await FactionService.updateDepartment(factionId, {
+  const faction = await FactionService.updateFaction(factionId, {
     name,
     description: description || undefined,
   });
@@ -161,7 +161,7 @@ async function handleEditFaction(
     userId: interaction.user.id,
   });
 
-  const panel = buildDepartmentDetailPanel(faction);
+  const panel = buildFactionDetailPanel(faction);
   await interaction.editReply(panel);
 }
 
@@ -177,7 +177,7 @@ async function handleCreateFactionType(
   const name = interaction.fields.getTextInputValue('type_name').trim();
   const description = interaction.fields.getTextInputValue('type_description').trim();
 
-  const factionType = await FactionTypeService.createDepartmentType({
+  const factionType = await FactionTypeService.createFactionType({
     server_id: serverId,
     name,
     description: description || undefined,
@@ -191,7 +191,7 @@ async function handleCreateFactionType(
   });
 
   // Показать детальную панель нового типа
-  const panel = await buildDepartmentTypeDetailPanel(factionType.id);
+  const panel = await buildFactionTypeDetailPanel(factionType.id);
   await interaction.editReply(panel);
 }
 
@@ -220,7 +220,7 @@ async function handleAddTemplate(
   });
 
   // Вернуться к деталям типа фракции
-  const panel = await buildDepartmentTypeDetailPanel(typeId);
+  const panel = await buildFactionTypeDetailPanel(typeId);
   await interaction.editReply(panel);
 }
 
