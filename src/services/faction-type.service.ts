@@ -139,7 +139,10 @@ export class FactionTypeService {
       );
     }
 
-    return await SubdivisionTemplateModel.create(data);
+    return await SubdivisionTemplateModel.create({
+      ...data,
+      faction_type_id: typeId,
+    });
   }
 
   /**

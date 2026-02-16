@@ -11,6 +11,8 @@ export interface Server {
   leader_role_ids: string | null; // JSON string array
   audit_log_channel_id: string | null;
   callout_allowed_role_ids: string | null; // JSON string array
+  bot_created_channel: number; // 0 или 1 (boolean в SQLite)
+  bot_created_category: number; // 0 или 1 (boolean в SQLite)
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +32,8 @@ export interface UpdateServerDTO {
   leader_role_ids?: string[];
   audit_log_channel_id?: string;
   callout_allowed_role_ids?: string[];
+  bot_created_channel?: number;
+  bot_created_category?: number;
 }
 
 export interface Faction {

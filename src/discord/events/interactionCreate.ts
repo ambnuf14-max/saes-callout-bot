@@ -61,15 +61,16 @@ export default async function interactionCreateHandler(
         await handleCreateCalloutButton(interaction);
       } else if (
         interaction.customId.startsWith('setup_mode_') ||
+        interaction.customId.startsWith('setup_confirm_') ||
         interaction.customId === 'setup_keep' ||
         interaction.customId === 'setup_reconfigure'
       ) {
         await handleSetupModeSelect(interaction);
       } else if (interaction.customId.startsWith('close_callout_')) {
         await handleCloseCalloutButton(interaction);
-      } else if (interaction.customId.startsWith('admin_')) {
+      } else if (interaction.customId.startsWith('admin_') || interaction.customId.startsWith('template_')) {
         await handleAdminPanelButton(interaction);
-      } else if (interaction.customId.startsWith('department_')) {
+      } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_')) {
         await handleFactionPanelButton(interaction);
       }
       return;
@@ -87,9 +88,9 @@ export default async function interactionCreateHandler(
         await handleCalloutModalSubmit(interaction);
       } else if (interaction.customId.startsWith('close_callout_modal_')) {
         await handleCloseCalloutModal(interaction);
-      } else if (interaction.customId.startsWith('admin_modal_')) {
+      } else if (interaction.customId.startsWith('admin_modal_') || interaction.customId.startsWith('template_modal_')) {
         await handleAdminPanelModal(interaction);
-      } else if (interaction.customId.startsWith('department_modal_')) {
+      } else if (interaction.customId.startsWith('department_modal_') || interaction.customId.startsWith('subdivision_modal_')) {
         await handleFactionPanelModal(interaction);
       }
       return;

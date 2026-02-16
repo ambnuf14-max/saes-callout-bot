@@ -63,7 +63,7 @@ interface BaseAuditEventData {
  */
 export interface CalloutCreatedData extends BaseAuditEventData {
   calloutId: number;
-  departmentName: string;
+  factionName: string;
   description: string;
   channelId: string;
 }
@@ -73,7 +73,7 @@ export interface CalloutCreatedData extends BaseAuditEventData {
  */
 export interface CalloutClosedData extends BaseAuditEventData {
   calloutId: number;
-  departmentName: string;
+  factionName: string;
   reason?: string;
   channelId?: string;
 }
@@ -135,7 +135,7 @@ export interface AuditLogChannelSetData extends BaseAuditEventData {
  */
 export interface VkResponseReceivedData extends BaseAuditEventData {
   calloutId: number;
-  departmentName: string;
+  factionName: string;
   vkUserId: string;
   vkUserName: string;
 }
@@ -155,7 +155,7 @@ export interface VkChatLinkedData extends BaseAuditEventData {
  */
 export interface TelegramResponseReceivedData extends BaseAuditEventData {
   calloutId: number;
-  departmentName: string;
+  factionName: string;
   telegramUserId: string;
   telegramUserName: string;
 }
@@ -212,21 +212,21 @@ export interface TemplateAddedData extends BaseAuditEventData {
  */
 export interface ChangeRequestedData extends BaseAuditEventData {
   changeType: string;
-  departmentName: string;
+  factionName: string;
   details: string;
   changeId: number;
 }
 
 export interface ChangeApprovedData extends BaseAuditEventData {
   changeType: string;
-  departmentName: string;
+  factionName: string;
   details: string;
   reviewerName: string;
 }
 
 export interface ChangeRejectedData extends BaseAuditEventData {
   changeType: string;
-  departmentName: string;
+  factionName: string;
   details: string;
   reviewerName: string;
   reason: string;
@@ -234,7 +234,7 @@ export interface ChangeRejectedData extends BaseAuditEventData {
 
 export interface ChangeCancelledData extends BaseAuditEventData {
   changeType: string;
-  departmentName: string;
+  factionName: string;
   details: string;
 }
 
@@ -399,7 +399,7 @@ function buildCalloutCreatedEmbed(
     .setColor(COLORS.ACTIVE)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Канал', value: `<#${data.channelId}>`, inline: true },
       { name: 'Описание', value: data.description.substring(0, 1024), inline: false },
     ]);
@@ -414,7 +414,7 @@ function buildCalloutClosedEmbed(
 ): EmbedBuilder {
   const fields = [
     { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-    { name: 'Фракция', value: data.departmentName, inline: true },
+    { name: 'Фракция', value: data.factionName, inline: true },
   ];
 
   if (data.channelId) {
@@ -541,7 +541,7 @@ function buildVkResponseReceivedEmbed(
     .setColor(COLORS.INFO)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       {
         name: 'Пользователь VK',
         value: `${data.vkUserName} (${data.vkUserId})`,
@@ -631,7 +631,7 @@ function buildChangeRequestedEmbed(
     .addFields([
       { name: 'ID запроса', value: `#${data.changeId}`, inline: true },
       { name: 'Тип', value: data.changeType, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Запрос от', value: `<@${data.userId}>`, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
@@ -649,7 +649,7 @@ function buildChangeApprovedEmbed(
     .setColor(COLORS.SUCCESS)
     .addFields([
       { name: 'Тип', value: data.changeType, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Одобрил', value: data.reviewerName, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
@@ -667,7 +667,7 @@ function buildChangeRejectedEmbed(
     .setColor(COLORS.ERROR)
     .addFields([
       { name: 'Тип', value: data.changeType, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Отклонил', value: data.reviewerName, inline: true },
       { name: 'Детали', value: data.details, inline: false },
       { name: 'Причина отклонения', value: data.reason, inline: false },
@@ -686,7 +686,7 @@ function buildChangeCancelledEmbed(
     .setColor(COLORS.INFO)
     .addFields([
       { name: 'Тип', value: data.changeType, inline: true },
-      { name: 'Фракция', value: data.departmentName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
 }

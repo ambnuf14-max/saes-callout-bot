@@ -11,10 +11,29 @@ import {
   buildFactionTypesSection,
   buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
+  buildTemplateEditorPanel,
 } from '../utils/admin-panel-builder';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
+import { SubdivisionTemplate } from '../../types/database.types';
+
+// Временное хранилище для draft изменений шаблонов
+const templateDraftState = new Map<string, Partial<SubdivisionTemplate>>();
+
+export function getTemplateDraft(typeId: number, templateId: number): Partial<SubdivisionTemplate> | undefined {
+  return templateDraftState.get(`${typeId}_${templateId}`);
+}
+
+function setTemplateDraft(typeId: number, templateId: number, data: Partial<SubdivisionTemplate>) {
+  const key = `${typeId}_${templateId}`;
+  const existing = templateDraftState.get(key) || {};
+  templateDraftState.set(key, { ...existing, ...data });
+}
+
+export function clearTemplateDraft(typeId: number, templateId: number) {
+  templateDraftState.delete(`${typeId}_${templateId}`);
+}
 
 /**
  * Обработчик модальных окон админ-панели
@@ -53,13 +72,74 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       await handleEditFaction(interaction, factionId, server.id);
     }
     // Создание типа фракции
-    else if (customId === 'admin_modal_create_dept_type') {
+    else if (customId === 'admin_modal_create_fact_type') {
       await handleCreateFactionType(interaction, server.id);
+    }
+    // Редактирование типа фракции
+    else if (customId.startsWith('admin_modal_edit_fact_type_')) {
+      const typeId = parseInt(customId.replace('admin_modal_edit_fact_type_', ''));
+      await handleEditFactionType(interaction, typeId);
     }
     // Добавление шаблона подразделения
     else if (customId.startsWith('admin_modal_add_template_')) {
       const typeId = parseInt(customId.replace('admin_modal_add_template_', ''));
       await handleAddTemplate(interaction, typeId);
+    }
+    // Редактирование названия шаблона
+    else if (customId.startsWith('template_modal_name_')) {
+      const parts = customId.replace('template_modal_name_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'name');
+    }
+    // Редактирование заголовка embed
+    else if (customId.startsWith('template_modal_title_')) {
+      const parts = customId.replace('template_modal_title_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'title');
+    }
+    // Редактирование описания
+    else if (customId.startsWith('template_modal_description_')) {
+      const parts = customId.replace('template_modal_description_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'description');
+    }
+    // Редактирование цвета
+    else if (customId.startsWith('template_modal_color_')) {
+      const parts = customId.replace('template_modal_color_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'color');
+    }
+    // Редактирование автора
+    else if (customId.startsWith('template_modal_author_')) {
+      const parts = customId.replace('template_modal_author_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'author');
+    }
+    // Редактирование футера
+    else if (customId.startsWith('template_modal_footer_')) {
+      const parts = customId.replace('template_modal_footer_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'footer');
+    }
+    // Редактирование изображения
+    else if (customId.startsWith('template_modal_image_')) {
+      const parts = customId.replace('template_modal_image_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'image');
+    }
+    // Редактирование миниатюры
+    else if (customId.startsWith('template_modal_thumbnail_')) {
+      const parts = customId.replace('template_modal_thumbnail_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'thumbnail');
     }
     // Отклонение изменения с причиной
     else if (customId.startsWith('admin_modal_reject_change_')) {
@@ -196,6 +276,37 @@ async function handleCreateFactionType(
 }
 
 /**
+ * Редактирование типа фракции из modal
+ */
+async function handleEditFactionType(
+  interaction: ModalSubmitInteraction,
+  typeId: number
+) {
+  await interaction.deferUpdate();
+
+  const name = interaction.fields.getTextInputValue('type_name').trim();
+  const description = interaction.fields.getTextInputValue('type_description').trim();
+
+  const factionType = await FactionTypeService.updateFactionType(typeId, {
+    name,
+    description: description || undefined,
+  });
+
+  if (!factionType) {
+    throw new CalloutError('Тип фракции не найден', 'TYPE_NOT_FOUND', 404);
+  }
+
+  logger.info('Faction type updated via admin panel', {
+    typeId,
+    name: factionType.name,
+    userId: interaction.user.id,
+  });
+
+  const panel = await buildFactionTypeDetailPanel(typeId);
+  await interaction.editReply(panel);
+}
+
+/**
  * Добавление шаблона подразделения из modal
  */
 async function handleAddTemplate(
@@ -251,4 +362,88 @@ async function handleRejectChange(
   // Вернуться к списку pending изменений
   const panel = await buildPendingChangesPanel(serverId);
   await interaction.editReply(panel);
+}
+
+/**
+ * Обработка редактирования поля шаблона
+ * Обновляет draft состояние и перерисовывает панель с предпросмотром
+ */
+async function handleTemplateFieldEdit(
+  interaction: ModalSubmitInteraction,
+  typeId: number,
+  templateId: number,
+  field: string
+) {
+  await interaction.deferUpdate();
+
+  const draftData: Partial<SubdivisionTemplate> = {};
+
+  // Получить значения полей в зависимости от типа
+  switch (field) {
+    case 'name':
+      draftData.name = interaction.fields.getTextInputValue('template_name').trim();
+      break;
+    case 'title':
+      const title = interaction.fields.getTextInputValue('embed_title').trim();
+      draftData.embed_title = title || null;
+      break;
+    case 'description':
+      const desc = interaction.fields.getTextInputValue('embed_description').trim();
+      draftData.embed_description = desc || null;
+      break;
+    case 'color':
+      let color = interaction.fields.getTextInputValue('embed_color').trim();
+      if (color) {
+        // Нормализовать цвет (добавить # если нужно)
+        color = color.startsWith('#') ? color : `#${color}`;
+        // Валидация hex цвета
+        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+          await interaction.followUp({
+            content: `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        draftData.embed_color = color;
+      } else {
+        draftData.embed_color = null;
+      }
+      break;
+    case 'author':
+      const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
+      const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
+      const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
+      draftData.embed_author_name = authorName || null;
+      draftData.embed_author_url = authorUrl || null;
+      draftData.embed_author_icon_url = authorIcon || null;
+      break;
+    case 'footer':
+      const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
+      const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
+      draftData.embed_footer_text = footerText || null;
+      draftData.embed_footer_icon_url = footerIcon || null;
+      break;
+    case 'image':
+      const imageUrl = interaction.fields.getTextInputValue('embed_image_url').trim();
+      draftData.embed_image_url = imageUrl || null;
+      break;
+    case 'thumbnail':
+      const thumbnailUrl = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
+      draftData.embed_thumbnail_url = thumbnailUrl || null;
+      break;
+  }
+
+  // Обновить draft состояние
+  setTemplateDraft(typeId, templateId, draftData);
+
+  // Получить текущий draft и перерисовать панель с обновленным предпросмотром
+  const currentDraft = getTemplateDraft(typeId, templateId);
+  const panel = await buildTemplateEditorPanel(typeId, templateId, currentDraft);
+  await interaction.editReply(panel);
+
+  // Показать ephemeral уведомление об изменении
+  await interaction.followUp({
+    content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Сохранить" чтобы применить изменения.`,
+    flags: MessageFlags.Ephemeral,
+  });
 }

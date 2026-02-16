@@ -20,6 +20,8 @@ import { FactionService } from '../../services/faction.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
   buildAdminMainPanel,
+  buildSettingsSection,
+  buildRoleSettingsSection,
   buildSetupSection,
   buildLeaderRolesSection,
   buildCalloutRolesSection,
@@ -27,11 +29,11 @@ import {
   buildFactionsSection,
   buildFactionDetailPanel,
   buildFactionDeleteConfirmation,
-  buildInfoSection,
   buildFactionTypesSection,
   buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
   buildReviewChangePanel,
+  buildTemplateEditorPanel,
 } from '../utils/admin-panel-builder';
 import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
@@ -99,55 +101,120 @@ async function getAdminContext(interaction: ButtonInteraction | StringSelectMenu
  * Обработчик кнопок админ-панели
  */
 export async function handleAdminPanelButton(interaction: ButtonInteraction) {
+  const startTime = Date.now();
+  const customId = interaction.customId;
+
+  logger.debug('Button interaction received', {
+    customId,
+    createdTimestamp: interaction.createdTimestamp,
+    receivedAt: startTime,
+    age: startTime - interaction.createdTimestamp,
+  });
+
+  // Кнопки, которые показывают модальные окна - для них НЕ нужно вызывать deferUpdate
+  const modalButtons = [
+    'admin_create_fact_type',
+    'admin_edit_fact_type_',
+    'admin_add_template_',
+    'admin_reject_change_',
+    'template_edit_name_',
+    'template_edit_title_',
+    'template_edit_description_',
+    'template_edit_color_',
+    'template_edit_author_',
+    'template_edit_footer_',
+    'template_edit_image_',
+    'template_edit_thumbnail_',
+  ];
+  const isModalButton = modalButtons.some(prefix => customId === prefix || customId.startsWith(prefix)) ||
+    customId.startsWith('admin_edit_faction_');
+
+  // Немедленно подтвердить взаимодействие (только если это НЕ модальная кнопка)
+  if (!isModalButton) {
+    const deferStart = Date.now();
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferUpdate();
+        logger.debug('Defer successful', {
+          customId,
+          deferTime: Date.now() - deferStart,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to defer interaction', {
+        error: error instanceof Error ? error.message : error,
+        customId: interaction.customId,
+        deferTime: Date.now() - deferStart,
+        totalTime: Date.now() - startTime,
+      });
+      // Если defer не удался (обычно из-за таймаута), прекратить обработку
+      // так как Discord уже не примет ответ на это взаимодействие
+      return;
+    }
+  }
+
   const ctx = await getAdminContext(interaction);
-  if (!ctx) return;
+  if (!ctx) {
+    try {
+      if (interaction.deferred) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Произошла ошибка. Проверьте настройки сервера.`,
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to send error message', { error: err });
+    }
+    return;
+  }
 
   const { server } = ctx;
-  const customId = interaction.customId;
 
   try {
     if (customId === 'admin_back') {
-      await interaction.deferUpdate();
       const panel = await buildAdminMainPanel(server);
       await interaction.editReply(panel);
     }
 
+    else if (customId === 'admin_settings') {
+      const panel = buildSettingsSection(server);
+      await interaction.editReply(panel);
+    }
+
+    else if (customId === 'admin_role_settings') {
+      const panel = buildRoleSettingsSection(server);
+      await interaction.editReply(panel);
+    }
+
+    else if (customId === 'admin_back_to_settings') {
+      const panel = buildSettingsSection(server);
+      await interaction.editReply(panel);
+    }
+
     else if (customId === 'admin_setup') {
-      await interaction.deferUpdate();
       const panel = buildSetupSection(server);
       await interaction.editReply(panel);
     }
 
     else if (customId === 'admin_leader_roles') {
-      await interaction.deferUpdate();
       const freshServer = await ServerModel.findById(server.id);
       const panel = buildLeaderRolesSection(freshServer || server);
       await interaction.editReply(panel);
     }
 
     else if (customId === 'admin_callout_roles') {
-      await interaction.deferUpdate();
       const freshServer = await ServerModel.findById(server.id);
       const panel = buildCalloutRolesSection(freshServer || server);
       await interaction.editReply(panel);
     }
 
     else if (customId === 'admin_audit_log') {
-      await interaction.deferUpdate();
       const freshServer = await ServerModel.findById(server.id);
       const panel = buildAuditLogSection(freshServer || server);
       await interaction.editReply(panel);
     }
 
-    else if (customId === 'admin_factions') {
-      await interaction.deferUpdate();
+    else if (customId === 'admin_factions' || customId === 'admin_back_to_factions') {
       const panel = await buildFactionsSection(server);
-      await interaction.editReply(panel);
-    }
-
-    else if (customId === 'admin_info') {
-      await interaction.deferUpdate();
-      const panel = await buildInfoSection(server);
       await interaction.editReply(panel);
     }
 
@@ -158,7 +225,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         userId: interaction.user.id,
         createdAt: Date.now(),
       });
-      await interaction.deferUpdate();
 
       const embed = new EmbedBuilder()
         .setColor(COLORS.INFO)
@@ -227,7 +293,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
     // Переключение разрешения на создание подразделений
     else if (customId.startsWith('admin_toggle_allow_create_')) {
-      await interaction.deferUpdate();
       const factionId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
@@ -256,7 +321,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
     // Удаление фракции — показать подтверждение
     else if (customId.startsWith('admin_delete_faction_')) {
-      await interaction.deferUpdate();
       const factionId = parseInt(customId.replace('admin_delete_faction_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
@@ -274,9 +338,8 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     }
 
     // Подтверждение удаления фракции
-    else if (customId.startsWith('admin_confirm_delete_dept_')) {
-      await interaction.deferUpdate();
-      const factionId = parseInt(customId.replace('admin_confirm_delete_dept_', ''));
+    else if (customId.startsWith('admin_confirm_delete_fact_')) {
+      const factionId = parseInt(customId.replace('admin_confirm_delete_fact_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
       if (!faction) {
@@ -304,24 +367,22 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // === Управление типами фракций ===
 
     // Открыть секцию управления типами
-    else if (customId === 'admin_dept_types') {
-      await interaction.deferUpdate();
+    else if (customId === 'admin_fact_types' || customId === 'admin_back_to_fact_types') {
       const panel = await buildFactionTypesSection(server);
       await interaction.editReply(panel);
     }
 
     // Просмотр деталей типа фракции
-    else if (customId.startsWith('admin_view_dept_type_')) {
-      await interaction.deferUpdate();
-      const typeId = parseInt(customId.replace('admin_view_dept_type_', ''));
+    else if (customId.startsWith('admin_view_fact_type_')) {
+      const typeId = parseInt(customId.replace('admin_view_fact_type_', ''));
       const panel = await buildFactionTypeDetailPanel(typeId);
       await interaction.editReply(panel);
     }
 
     // Создание нового типа фракции (показать modal)
-    else if (customId === 'admin_create_dept_type') {
+    else if (customId === 'admin_create_fact_type') {
       const modal = new ModalBuilder()
-        .setCustomId('admin_modal_create_dept_type')
+        .setCustomId('admin_modal_create_fact_type')
         .setTitle('Создание типа фракции');
 
       const nameInput = new TextInputBuilder()
@@ -340,6 +401,48 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
         .setMaxLength(200);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+      );
+
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование типа фракции (показать modal)
+    else if (customId.startsWith('admin_edit_fact_type_')) {
+      const typeId = parseInt(customId.replace('admin_edit_fact_type_', ''));
+      const factionType = await FactionTypeService.getFactionTypeById(typeId);
+
+      if (!factionType) {
+        await interaction.reply({
+          content: `${EMOJI.ERROR} Тип фракции не найден`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_edit_fact_type_${typeId}`)
+        .setTitle(`Редактировать: ${factionType.name}`);
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('type_name')
+        .setLabel('Название типа')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50)
+        .setValue(factionType.name);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('type_description')
+        .setLabel('Описание (опционально)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(200)
+        .setValue(factionType.description || '');
 
       modal.addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
@@ -382,10 +485,19 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.showModal(modal);
     }
 
+    // Открыть интерактивный редактор шаблона
+    else if (customId.startsWith('admin_edit_template_')) {
+      const parts = customId.replace('admin_edit_template_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const panel = await buildTemplateEditorPanel(typeId, templateId);
+      await interaction.editReply(panel);
+    }
+
     // Удаление типа фракции
-    else if (customId.startsWith('admin_delete_dept_type_')) {
-      await interaction.deferUpdate();
-      const typeId = parseInt(customId.replace('admin_delete_dept_type_', ''));
+    else if (customId.startsWith('admin_delete_fact_type_')) {
+      const typeId = parseInt(customId.replace('admin_delete_fact_type_', ''));
 
       try {
         await FactionTypeService.deleteFactionType(typeId);
@@ -409,7 +521,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
     // Удаление шаблона подразделения
     else if (customId.startsWith('admin_delete_template_')) {
-      await interaction.deferUpdate();
       const parts = customId.replace('admin_delete_template_', '').split('_');
       const typeId = parseInt(parts[0]);
       const templateId = parseInt(parts[1]);
@@ -435,18 +546,297 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       }
     }
 
+    // === Редактирование полей шаблона подразделения ===
+
+    // Редактирование названия шаблона
+    else if (customId.startsWith('template_edit_name_')) {
+      const parts = customId.replace('template_edit_name_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_name_${typeId}_${templateId}`)
+        .setTitle('Редактирование названия');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('template_name')
+        .setLabel('Название подразделения')
+        .setPlaceholder('Например: Патруль')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование заголовка embed
+    else if (customId.startsWith('template_edit_title_')) {
+      const parts = customId.replace('template_edit_title_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_title_${typeId}_${templateId}`)
+        .setTitle('Редактирование заголовка Embed');
+
+      const titleInput = new TextInputBuilder()
+        .setCustomId('embed_title')
+        .setLabel('Заголовок Embed')
+        .setPlaceholder('Оставьте пустым для использования названия')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(256);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование описания
+    else if (customId.startsWith('template_edit_description_')) {
+      const parts = customId.replace('template_edit_description_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      logger.debug('Parsing template_edit_description customId', {
+        customId,
+        parts,
+        typeId,
+        templateId,
+        isTypeIdNaN: isNaN(typeId),
+        isTemplateIdNaN: isNaN(templateId),
+      });
+
+      if (isNaN(typeId) || isNaN(templateId)) {
+        throw new Error(`Invalid number value: typeId=${typeId}, templateId=${templateId}`);
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_description_${typeId}_${templateId}`)
+        .setTitle('Редактирование описания');
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('embed_description')
+        .setLabel('Описание Embed')
+        .setPlaceholder('Описание каллаута для этого подразделения')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(4096);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(descInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование цвета
+    else if (customId.startsWith('template_edit_color_')) {
+      const parts = customId.replace('template_edit_color_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_color_${typeId}_${templateId}`)
+        .setTitle('Редактирование цвета Embed');
+
+      const colorInput = new TextInputBuilder()
+        .setCustomId('embed_color')
+        .setLabel('Цвет Embed (HEX)')
+        .setPlaceholder('#FF5733 или FF5733')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMinLength(6)
+        .setMaxLength(7);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(colorInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование автора
+    else if (customId.startsWith('template_edit_author_')) {
+      const parts = customId.replace('template_edit_author_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_author_${typeId}_${templateId}`)
+        .setTitle('Редактирование автора Embed');
+
+      const authorNameInput = new TextInputBuilder()
+        .setCustomId('embed_author_name')
+        .setLabel('Имя автора')
+        .setPlaceholder('Название организации')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(256);
+
+      const authorUrlInput = new TextInputBuilder()
+        .setCustomId('embed_author_url')
+        .setLabel('URL автора (опционально)')
+        .setPlaceholder('https://example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      const authorIconInput = new TextInputBuilder()
+        .setCustomId('embed_author_icon_url')
+        .setLabel('URL иконки автора (опционально)')
+        .setPlaceholder('https://example.com/icon.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorNameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorUrlInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorIconInput)
+      );
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование футера
+    else if (customId.startsWith('template_edit_footer_')) {
+      const parts = customId.replace('template_edit_footer_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_footer_${typeId}_${templateId}`)
+        .setTitle('Редактирование футера Embed');
+
+      const footerTextInput = new TextInputBuilder()
+        .setCustomId('embed_footer_text')
+        .setLabel('Текст футера')
+        .setPlaceholder('Нижний текст Embed')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(2048);
+
+      const footerIconInput = new TextInputBuilder()
+        .setCustomId('embed_footer_icon_url')
+        .setLabel('URL иконки футера (опционально)')
+        .setPlaceholder('https://example.com/icon.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(footerTextInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(footerIconInput)
+      );
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование изображения
+    else if (customId.startsWith('template_edit_image_')) {
+      const parts = customId.replace('template_edit_image_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_image_${typeId}_${templateId}`)
+        .setTitle('Редактирование изображения Embed');
+
+      const imageInput = new TextInputBuilder()
+        .setCustomId('embed_image_url')
+        .setLabel('URL изображения')
+        .setPlaceholder('https://example.com/image.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(imageInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование миниатюры
+    else if (customId.startsWith('template_edit_thumbnail_')) {
+      const parts = customId.replace('template_edit_thumbnail_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_thumbnail_${typeId}_${templateId}`)
+        .setTitle('Редактирование миниатюры Embed');
+
+      const thumbnailInput = new TextInputBuilder()
+        .setCustomId('embed_thumbnail_url')
+        .setLabel('URL миниатюры')
+        .setPlaceholder('https://example.com/thumbnail.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(thumbnailInput));
+      await interaction.showModal(modal);
+    }
+
+    // Сохранение изменений шаблона
+    else if (customId.startsWith('template_save_')) {
+      const parts = customId.replace('template_save_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      try {
+        // Получить draft изменения (импортируем функцию из admin-panel-modal)
+        const { getTemplateDraft, clearTemplateDraft } = await import('./admin-panel-modal');
+        const draftData = getTemplateDraft(typeId, templateId);
+
+        if (!draftData || Object.keys(draftData).length === 0) {
+          await interaction.editReply({
+            content: `${EMOJI.WARNING} Нет изменений для сохранения`,
+            embeds: [],
+            components: [],
+          });
+          return;
+        }
+
+        // Преобразовать null в undefined для совместимости с DTO
+        const updateData: any = {};
+        for (const [key, value] of Object.entries(draftData)) {
+          updateData[key] = value === null ? undefined : value;
+        }
+
+        // Обновить шаблон в БД
+        await FactionTypeService.updateTemplate(templateId, updateData);
+
+        // Очистить draft
+        clearTemplateDraft(typeId, templateId);
+
+        logger.info('Template updated via editor', {
+          templateId,
+          typeId,
+          userId: interaction.user.id,
+          changes: Object.keys(draftData),
+        });
+
+        // Показать обновленную панель типа
+        const panel = await buildFactionTypeDetailPanel(typeId);
+        await interaction.editReply(panel);
+
+        await interaction.followUp({
+          content: `${EMOJI.SUCCESS} Шаблон успешно обновлен!`,
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (error) {
+        logger.error('Failed to save template', {
+          error: error instanceof Error ? error.message : error,
+          typeId,
+          templateId,
+        });
+
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Не удалось сохранить изменения`,
+          embeds: [],
+          components: [],
+        });
+      }
+    }
+
     // === Система одобрения изменений ===
 
     // Открыть список pending изменений
     else if (customId === 'admin_view_pending_changes') {
-      await interaction.deferUpdate();
       const panel = await buildPendingChangesPanel(server.id);
       await interaction.editReply(panel);
     }
 
     // Просмотр деталей конкретного изменения
     else if (customId.startsWith('admin_review_change_')) {
-      await interaction.deferUpdate();
       const changeId = parseInt(customId.replace('admin_review_change_', ''));
       const panel = await buildReviewChangePanel(changeId);
       await interaction.editReply(panel);
@@ -454,7 +844,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
     // Одобрение изменения
     else if (customId.startsWith('admin_approve_change_')) {
-      await interaction.deferUpdate();
       const changeId = parseInt(customId.replace('admin_approve_change_', ''));
 
       try {
@@ -509,8 +898,8 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // === Flow создания фракции - выбор типа ===
 
     // Шаг 3: Выбран конкретный тип фракции
-    else if (customId.startsWith('admin_dept_step3_type_')) {
-      const typeId = parseInt(customId.replace('admin_dept_step3_type_', ''));
+    else if (customId.startsWith('admin_fact_step3_type_')) {
+      const typeId = parseInt(customId.replace('admin_fact_step3_type_', ''));
 
       const state = addFactionStates.get(interaction.user.id);
       if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
@@ -554,7 +943,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     }
 
     // Шаг 3: Без типа фракции
-    else if (customId === 'admin_dept_step3_no_type') {
+    else if (customId === 'admin_fact_step3_no_type') {
       const state = addFactionStates.get(interaction.user.id);
       if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
         await interaction.reply({
@@ -607,10 +996,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       ? error.message
       : `${EMOJI.ERROR} Произошла ошибка`;
 
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content, embeds: [], components: [] });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content, embeds: [], components: [] });
+      } else {
+        await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+      }
+    } catch (replyError) {
+      logger.error('Failed to send error message to user', {
+        error: replyError instanceof Error ? replyError.message : replyError,
+        originalError: error instanceof Error ? error.message : error,
+      });
     }
   }
 }
@@ -619,8 +1015,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
  * Обработчик RoleSelectMenu для админ-панели
  */
 export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteraction) {
+  // Немедленно подтвердить взаимодействие
+  await interaction.deferUpdate();
+
   const ctx = await getAdminContext(interaction);
-  if (!ctx) return;
+  if (!ctx) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Произошла ошибка. Проверьте настройки сервера.`,
+    });
+    return;
+  }
 
   const { server } = ctx;
   const customId = interaction.customId;
@@ -628,7 +1032,6 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
   try {
     // Добавление лидерской роли
     if (customId === 'admin_add_leader_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const freshServer = await ServerModel.findById(server.id);
@@ -667,7 +1070,6 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
 
     // Добавление роли каллаутов
     else if (customId === 'admin_add_callout_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const freshServer = await ServerModel.findById(server.id);
@@ -697,7 +1099,6 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
 
     // Шаг 1 добавления фракции — выбрана общая лидерская роль
     else if (customId === 'admin_fact_step1_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const state = addFactionStates.get(interaction.user.id);
@@ -737,7 +1138,6 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
 
     // Шаг 2 добавления фракции — выбрана роль фракции → выбор типа
     else if (customId === 'admin_fact_step2_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const state = addFactionStates.get(interaction.user.id);
@@ -772,7 +1172,7 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       for (const type of displayTypes) {
         buttons.push(
           new ButtonBuilder()
-            .setCustomId(`admin_dept_step3_type_${type.id}`)
+            .setCustomId(`admin_fact_step3_type_${type.id}`)
             .setLabel(type.name)
             .setStyle(ButtonStyle.Primary)
         );
@@ -781,7 +1181,7 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       // Кнопка "Без типа"
       buttons.push(
         new ButtonBuilder()
-          .setCustomId('admin_dept_step3_no_type')
+          .setCustomId('admin_fact_step3_no_type')
           .setLabel('Без типа')
           .setStyle(ButtonStyle.Secondary)
       );
@@ -833,15 +1233,22 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
  * Обработчик ChannelSelectMenu для админ-панели (audit log)
  */
 export async function handleAdminChannelSelect(interaction: ChannelSelectMenuInteraction) {
+  // Немедленно подтвердить взаимодействие
+  await interaction.deferUpdate();
+
   const ctx = await getAdminContext(interaction);
-  if (!ctx) return;
+  if (!ctx) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Произошла ошибка. Проверьте настройки сервера.`,
+    });
+    return;
+  }
 
   const { server } = ctx;
   const customId = interaction.customId;
 
   try {
     if (customId === 'admin_set_audit_channel') {
-      await interaction.deferUpdate();
       const channelId = interaction.values[0];
 
       await ServerModel.update(server.id, { audit_log_channel_id: channelId });
@@ -888,8 +1295,16 @@ export async function handleAdminChannelSelect(interaction: ChannelSelectMenuInt
  * Обработчик StringSelectMenu для админ-панели
  */
 export async function handleAdminStringSelect(interaction: StringSelectMenuInteraction) {
+  // Немедленно подтвердить взаимодействие
+  await interaction.deferUpdate();
+
   const ctx = await getAdminContext(interaction);
-  if (!ctx) return;
+  if (!ctx) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Произошла ошибка. Проверьте настройки сервера.`,
+    });
+    return;
+  }
 
   const { server } = ctx;
   const customId = interaction.customId;
@@ -897,7 +1312,6 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
   try {
     // Выбор фракции для просмотра
     if (customId === 'admin_select_faction') {
-      await interaction.deferUpdate();
       const factionId = parseInt(interaction.values[0]);
       const faction = await FactionService.getFactionById(factionId);
 
@@ -916,7 +1330,6 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
 
     // Удаление лидерской роли
     else if (customId === 'admin_remove_leader_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const freshServer = await ServerModel.findById(server.id);
@@ -949,7 +1362,6 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
 
     // Удаление роли каллаутов
     else if (customId === 'admin_remove_callout_role') {
-      await interaction.deferUpdate();
       const roleId = interaction.values[0];
 
       const freshServer = await ServerModel.findById(server.id);

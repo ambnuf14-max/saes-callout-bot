@@ -582,3 +582,168 @@ export default {
   buildDeleteConfirmation,
   buildEmptySubdivisionsList,
 };
+
+/**
+ * Интерактивная панель редактирования embed подразделения (для лидеров)
+ * Показывает предпросмотр embed и кнопки для редактирования полей
+ */
+export async function buildSubdivisionEmbedEditorPanel(
+  subdivisionId: number,
+  draftData?: Partial<Subdivision>
+) {
+  const SubdivisionModel = (await import('../../database/models/Subdivision')).default;
+  const subdivision = await SubdivisionModel.findById(subdivisionId);
+
+  if (!subdivision) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.ERROR)
+      .setTitle(`${EMOJI.ERROR} Подразделение не найдено`)
+      .setDescription('Подразделение не найдено или было удалено.');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`faction_back_to_sub_${subdivisionId}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [row] };
+  }
+
+  // Применить draft изменения если есть
+  const currentData = draftData ? { ...subdivision, ...draftData } : subdivision;
+
+  // Построить предпросмотр embed
+  const previewEmbed = new EmbedBuilder()
+    .setTitle(currentData.embed_title || currentData.name)
+    .setDescription(currentData.embed_description || currentData.description || 'Нет описания');
+
+  if (currentData.embed_color) {
+    try {
+      previewEmbed.setColor(currentData.embed_color as any);
+    } catch {
+      // Игнорировать некорректные цвета
+    }
+  }
+
+  if (currentData.embed_author_name) {
+    previewEmbed.setAuthor({
+      name: currentData.embed_author_name,
+      url: currentData.embed_author_url || undefined,
+      iconURL: currentData.embed_author_icon_url || undefined,
+    });
+  }
+
+  if (currentData.embed_image_url) {
+    previewEmbed.setImage(currentData.embed_image_url);
+  }
+
+  if (currentData.embed_thumbnail_url) {
+    previewEmbed.setThumbnail(currentData.embed_thumbnail_url);
+  }
+
+  if (currentData.embed_footer_text) {
+    previewEmbed.setFooter({
+      text: currentData.embed_footer_text,
+      iconURL: currentData.embed_footer_icon_url || undefined,
+    });
+  }
+
+  // Embed с информацией о редактировании
+  const infoEmbed = new EmbedBuilder()
+    .setColor(COLORS.INFO)
+    .setTitle(`✏️ Редактирование embed: ${subdivision.name}`)
+    .setDescription(
+      'Используйте кнопки ниже для редактирования полей embed каллаута.\n' +
+      'Изменения отображаются в предпросмотре ниже.\n\n' +
+      '**После завершения редактирования нажмите "Отправить на одобрение"**\n' +
+      '_(Изменения будут применены после одобрения администратором)_'
+    );
+
+  // Показать текущие значения полей embed
+  const fieldValues = [];
+  if (currentData.embed_title) fieldValues.push(`📝 Заголовок: ${currentData.embed_title.substring(0, 50)}`);
+  if (currentData.embed_color) fieldValues.push(`🎨 Цвет: ${currentData.embed_color}`);
+  if (currentData.embed_author_name) fieldValues.push(`👤 Автор: ${currentData.embed_author_name}`);
+  if (currentData.embed_image_url) fieldValues.push(`🖼️ Изображение: установлено`);
+  if (currentData.embed_thumbnail_url) fieldValues.push(`🖼️ Миниатюра: установлена`);
+  if (currentData.embed_footer_text) fieldValues.push(`📌 Футер: ${currentData.embed_footer_text.substring(0, 50)}`);
+
+  if (fieldValues.length > 0) {
+    infoEmbed.addFields({
+      name: 'Настроенные поля Embed',
+      value: fieldValues.join('\n'),
+      inline: false,
+    });
+  }
+
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  // Кнопки редактирования полей
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_title_${subdivisionId}`)
+      .setLabel('Заголовок')
+      .setEmoji('📝')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_description_${subdivisionId}`)
+      .setLabel('Описание')
+      .setEmoji('📄')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_color_${subdivisionId}`)
+      .setLabel('Цвет')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки редактирования стиля
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_author_${subdivisionId}`)
+      .setLabel('Автор')
+      .setEmoji('👤')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_footer_${subdivisionId}`)
+      .setLabel('Футер')
+      .setEmoji('📌')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки редактирования изображений
+  const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_image_${subdivisionId}`)
+      .setLabel('Изображение')
+      .setEmoji('🖼️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`subdivision_edit_thumbnail_${subdivisionId}`)
+      .setLabel('Миниатюра')
+      .setEmoji('🖼️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки действий
+  const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`subdivision_submit_embed_${subdivisionId}`)
+      .setLabel('Отправить на одобрение')
+      .setEmoji('📤')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`faction_back_to_settings_${subdivisionId}`)
+      .setLabel('Назад')
+      .setEmoji('◀️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  components.push(row1, row2, row3, row4);
+
+  return {
+    embeds: [infoEmbed, previewEmbed],
+    components,
+  };
+}

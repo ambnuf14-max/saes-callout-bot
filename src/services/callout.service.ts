@@ -139,7 +139,7 @@ export class CalloutService {
         userId: data.author_id,
         userName: data.author_name,
         calloutId: callout.id,
-        departmentName: subdivision.name,
+        factionName: subdivision.name,
         description: data.description,
         channelId: channel.id,
       };
@@ -305,7 +305,7 @@ export class CalloutService {
           userId: closedBy,
           userName: closedBy, // TODO: получить username если нужно
           calloutId,
-          departmentName: subdivision.name,
+          factionName: subdivision.name,
           reason: reason,
           channelId: callout.discord_channel_id || undefined,
         };

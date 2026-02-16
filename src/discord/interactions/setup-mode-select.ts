@@ -16,6 +16,75 @@ import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import { EMOJI, COLORS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { Server } from '../../types/database.types';
+import { Guild } from 'discord.js';
+
+/**
+ * Очистить старую настройку системы (удалить сообщение, канал, категорию если были созданы ботом)
+ */
+async function cleanupOldSetup(guild: Guild, server: Server) {
+  logger.info('Cleaning up old setup', { guildId: guild.id });
+
+  try {
+    // 1. Удалить старое сообщение с кнопкой
+    if (server.callout_channel_id && server.callout_message_id) {
+      try {
+        const channel = await guild.channels.fetch(server.callout_channel_id);
+        if (channel?.isTextBased()) {
+          const message = await channel.messages.fetch(server.callout_message_id);
+          await message.delete();
+          logger.info('Deleted old callout panel message', {
+            messageId: server.callout_message_id,
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to delete old callout panel message', {
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
+    // 2. Удалить канал каллаутов (если был создан ботом)
+    if (server.callout_channel_id && server.bot_created_channel) {
+      try {
+        const channel = await guild.channels.fetch(server.callout_channel_id);
+        if (channel) {
+          await channel.delete('Перенастройка системы каллаутов');
+          logger.info('Deleted bot-created callout channel', {
+            channelId: server.callout_channel_id,
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to delete bot-created callout channel', {
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
+    // 3. Удалить категорию (если была создана ботом)
+    if (server.category_id && server.bot_created_category) {
+      try {
+        const category = await guild.channels.fetch(server.category_id);
+        if (category) {
+          await category.delete('Перенастройка системы каллаутов');
+          logger.info('Deleted bot-created category', {
+            categoryId: server.category_id,
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to delete bot-created category', {
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
+    logger.info('Old setup cleaned up successfully');
+  } catch (error) {
+    logger.error('Error during cleanup', {
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+}
 
 /**
  * Главный обработчик для setup mode interactions
@@ -35,12 +104,16 @@ export async function handleSetupModeSelect(
 
   try {
     // Обработка кнопок выбора режима
-    if (customId === 'setup_mode_auto') {
-      await setupModeAuto(interaction as ButtonInteraction);
-    } else if (customId === 'setup_mode_category') {
+    if (customId === 'setup_mode_category') {
       await setupModeCategory(interaction as ButtonInteraction);
     } else if (customId === 'setup_mode_channel') {
       await setupModeChannel(interaction as ButtonInteraction);
+    }
+    // Подтверждение перенастройки
+    else if (customId === 'setup_confirm_category') {
+      await setupModeCategoryConfirmed(interaction as ButtonInteraction);
+    } else if (customId === 'setup_confirm_channel') {
+      await setupModeChannelConfirmed(interaction as ButtonInteraction);
     }
     // Обработка select menu
     else if (customId === 'setup_select_category') {
@@ -80,80 +153,45 @@ export async function handleSetupModeSelect(
 }
 
 /**
- * Режим 1: Автоматическое создание категории и канала
- */
-async function setupModeAuto(interaction: ButtonInteraction) {
-  await interaction.deferUpdate();
-
-  const guild = interaction.guild!;
-
-  logger.info('Setting up callout system (auto mode)', {
-    guildId: guild.id,
-    userId: interaction.user.id,
-  });
-
-  // 1. Создать категорию "🚨 INCIDENTS"
-  const category = await guild.channels.create({
-    name: '🚨 INCIDENTS',
-    type: ChannelType.GuildCategory,
-    position: 0,
-  });
-
-  logger.info('Category created', { categoryId: category.id });
-
-  // 2. Создать канал "callouts" в категории
-  const calloutsChannel = await guild.channels.create({
-    name: 'callouts',
-    type: ChannelType.GuildText,
-    parent: category.id,
-    topic: 'Канал для создания каллаутов экстренных служб',
-    permissionOverwrites: [
-      {
-        id: guild.id, // @everyone
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-        deny: [PermissionFlagsBits.SendMessages],
-      },
-    ],
-  });
-
-  logger.info('Callouts channel created', { channelId: calloutsChannel.id });
-
-  // 3. Создать сообщение с кнопкой
-  const message = await createCalloutPanel(calloutsChannel);
-
-  // 4. Сохранить настройки в БД
-  const existingServer = await ServerModel.findByGuildId(guild.id);
-  if (existingServer) {
-    await ServerModel.update(existingServer.id, {
-      callout_channel_id: calloutsChannel.id,
-      callout_message_id: message.id,
-      category_id: category.id,
-    });
-  } else {
-    await ServerModel.create({
-      guild_id: guild.id,
-      callout_channel_id: calloutsChannel.id,
-      callout_message_id: message.id,
-      category_id: category.id,
-    });
-  }
-
-  logger.info('Server settings saved (auto mode)', { guildId: guild.id });
-
-  await interaction.editReply({
-    content: MESSAGES.SETUP.SUCCESS(calloutsChannel.toString()),
-    embeds: [],
-    components: [],
-  });
-}
-
-/**
- * Режим 2: Использовать существующую категорию
+ * Режим 1: Использовать существующую категорию
  */
 async function setupModeCategory(interaction: ButtonInteraction) {
   await interaction.deferUpdate();
 
   const guild = interaction.guild!;
+
+  // Проверка: система уже настроена?
+  const existingServer = await ServerModel.findByGuildId(guild.id);
+  if (existingServer?.callout_channel_id) {
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.WARNING} Система уже настроена`)
+      .setDescription(
+        `Система каллаутов уже настроена на этом сервере.\n\n` +
+        `**Текущие настройки:**\n` +
+        `Канал каллаутов: <#${existingServer.callout_channel_id}>\n` +
+        `${existingServer.category_id ? `Категория: <#${existingServer.category_id}>` : 'Категория не настроена'}\n\n` +
+        `**Вы уверены, что хотите перенастроить систему?**\n` +
+        `Это заменит текущие настройки.`
+      )
+      .setColor(COLORS.WARNING);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('setup_confirm_category')
+        .setLabel('Продолжить перенастройку')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('admin_setup')
+        .setLabel('Отмена')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({
+      embeds: [embed],
+      components: [row],
+    });
+    return;
+  }
 
   // Получить все категории на сервере
   const categories = guild.channels.cache.filter(
@@ -201,7 +239,14 @@ async function setupModeCategory(interaction: ButtonInteraction) {
     .setPlaceholder('Выберите категорию')
     .addOptions(options.slice(0, 25)); // Discord limit: 25 options
 
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_reconfigure')
+      .setLabel('Назад')
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   const embed = new EmbedBuilder()
     .setTitle('📁 Выбор категории')
@@ -213,17 +258,127 @@ async function setupModeCategory(interaction: ButtonInteraction) {
 
   await interaction.editReply({
     embeds: [embed],
-    components: [row],
+    components: [selectRow, buttonRow],
   });
 }
 
 /**
- * Режим 3: Использовать существующий канал
+ * Режим 1 (подтверждение): Использовать существующую категорию (без проверки)
+ */
+async function setupModeCategoryConfirmed(interaction: ButtonInteraction) {
+  await interaction.deferUpdate();
+
+  const guild = interaction.guild!;
+
+  // Получить все категории на сервере (без проверки настройки)
+  const categories = guild.channels.cache.filter(
+    (ch) => ch.type === ChannelType.GuildCategory
+  );
+
+  if (categories.size === 0) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} На сервере нет категорий.`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  // Валидация: проверить права бота на создание каналов
+  const botMember = await guild.members.fetchMe();
+  const validCategories = categories.filter((cat) => {
+    const category = cat as CategoryChannel;
+    const permissions = category.permissionsFor(botMember);
+    return (
+      permissions?.has(PermissionFlagsBits.ManageChannels) &&
+      permissions?.has(PermissionFlagsBits.ViewChannel)
+    );
+  });
+
+  if (validCategories.size === 0) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} У бота нет прав на создание каналов ни в одной категории. Проверьте права доступа.`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  // Создать select menu с категориями
+  const options = validCategories.map((cat) => ({
+    label: cat.name,
+    value: cat.id,
+    description: `ID: ${cat.id}`,
+  }));
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('setup_select_category')
+    .setPlaceholder('Выберите категорию')
+    .addOptions(options.slice(0, 25)); // Discord limit: 25 options
+
+  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_reconfigure')
+      .setLabel('Назад')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle('📁 Выбор категории')
+    .setDescription(
+      'Выберите категорию, в которой бот создаст канал для каллаутов.\n\n' +
+        `${EMOJI.INFO} Бот создаст текстовый канал **callouts** в выбранной категории.`
+    )
+    .setColor(COLORS.INFO);
+
+  await interaction.editReply({
+    embeds: [embed],
+    components: [selectRow, buttonRow],
+  });
+}
+
+/**
+ * Режим 2: Использовать существующий канал
  */
 async function setupModeChannel(interaction: ButtonInteraction) {
   await interaction.deferUpdate();
 
   const guild = interaction.guild!;
+
+  // Проверка: система уже настроена?
+  const existingServer = await ServerModel.findByGuildId(guild.id);
+  if (existingServer?.callout_channel_id) {
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.WARNING} Система уже настроена`)
+      .setDescription(
+        `Система каллаутов уже настроена на этом сервере.\n\n` +
+        `**Текущие настройки:**\n` +
+        `Канал каллаутов: <#${existingServer.callout_channel_id}>\n` +
+        `${existingServer.category_id ? `Категория: <#${existingServer.category_id}>` : 'Категория не настроена'}\n\n` +
+        `**Вы уверены, что хотите перенастроить систему?**\n` +
+        `Это заменит текущие настройки.`
+      )
+      .setColor(COLORS.WARNING);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('setup_confirm_channel')
+        .setLabel('Продолжить перенастройку')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('admin_setup')
+        .setLabel('Отмена')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({
+      embeds: [embed],
+      components: [row],
+    });
+    return;
+  }
 
   // Получить все текстовые каналы на сервере
   const textChannels = guild.channels.cache.filter(
@@ -272,7 +427,14 @@ async function setupModeChannel(interaction: ButtonInteraction) {
     .setPlaceholder('Выберите канал')
     .addOptions(options.slice(0, 25)); // Discord limit: 25 options
 
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_reconfigure')
+      .setLabel('Назад')
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   const embed = new EmbedBuilder()
     .setTitle('💬 Выбор канала')
@@ -284,7 +446,85 @@ async function setupModeChannel(interaction: ButtonInteraction) {
 
   await interaction.editReply({
     embeds: [embed],
-    components: [row],
+    components: [selectRow, buttonRow],
+  });
+}
+
+/**
+ * Режим 2 (подтверждение): Использовать существующий канал (без проверки)
+ */
+async function setupModeChannelConfirmed(interaction: ButtonInteraction) {
+  await interaction.deferUpdate();
+
+  const guild = interaction.guild!;
+
+  // Получить все текстовые каналы на сервере (без проверки настройки)
+  const textChannels = guild.channels.cache.filter(
+    (ch) => ch.type === ChannelType.GuildText
+  );
+
+  if (textChannels.size === 0) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} На сервере нет текстовых каналов.`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  // Валидация: проверить права бота на отправку сообщений
+  const botMember = await guild.members.fetchMe();
+  const validChannels = textChannels.filter((ch) => {
+    const channel = ch as TextChannel;
+    const permissions = channel.permissionsFor(botMember);
+    return (
+      permissions?.has(PermissionFlagsBits.SendMessages) &&
+      permissions?.has(PermissionFlagsBits.ViewChannel) &&
+      permissions?.has(PermissionFlagsBits.EmbedLinks)
+    );
+  });
+
+  if (validChannels.size === 0) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} У бота нет прав на отправку сообщений ни в одном канале.`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  // Создать select menu с каналами
+  const options = validChannels.map((ch) => ({
+    label: `#${ch.name}`,
+    value: ch.id,
+    description: ch.parent ? `Категория: ${ch.parent.name}` : 'Без категории',
+  }));
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('setup_select_channel')
+    .setPlaceholder('Выберите канал')
+    .addOptions(options.slice(0, 25)); // Discord limit: 25 options
+
+  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_reconfigure')
+      .setLabel('Назад')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle('💬 Выбор канала')
+    .setDescription(
+      'Выберите канал, в который бот разместит сообщение с кнопкой для создания каллаутов.\n\n' +
+        `${EMOJI.INFO} Каналы инцидентов будут создаваться в категории выбранного канала (если есть).`
+    )
+    .setColor(COLORS.INFO);
+
+  await interaction.editReply({
+    embeds: [embed],
+    components: [selectRow, buttonRow],
   });
 }
 
@@ -307,6 +547,12 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
   const category = (await guild.channels.fetch(categoryId)) as CategoryChannel;
   if (!category) {
     throw new CalloutError('Категория не найдена', 'CATEGORY_NOT_FOUND', 404);
+  }
+
+  // Очистить старую настройку (если есть)
+  const existingServer = await ServerModel.findByGuildId(guild.id);
+  if (existingServer) {
+    await cleanupOldSetup(guild, existingServer);
   }
 
   // Создать канал "callouts" в категории
@@ -333,12 +579,13 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
   const message = await createCalloutPanel(calloutsChannel);
 
   // Сохранить настройки
-  const existingServer = await ServerModel.findByGuildId(guild.id);
   if (existingServer) {
     await ServerModel.update(existingServer.id, {
       callout_channel_id: calloutsChannel.id,
       callout_message_id: message.id,
       category_id: categoryId,
+      bot_created_channel: 1, // Канал создан ботом
+      bot_created_category: 0, // Категория выбрана существующая
     });
   } else {
     await ServerModel.create({
@@ -347,6 +594,14 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
       callout_message_id: message.id,
       category_id: categoryId,
     });
+    // Установить флаги после создания
+    const newServer = await ServerModel.findByGuildId(guild.id);
+    if (newServer) {
+      await ServerModel.update(newServer.id, {
+        bot_created_channel: 1,
+        bot_created_category: 0,
+      });
+    }
   }
 
   logger.info('Server settings saved (category mode)', { guildId: guild.id });
@@ -379,6 +634,12 @@ async function setupSelectChannel(interaction: StringSelectMenuInteraction) {
     throw new CalloutError('Канал не найден', 'CHANNEL_NOT_FOUND', 404);
   }
 
+  // Очистить старую настройку (если есть)
+  const existingServer = await ServerModel.findByGuildId(guild.id);
+  if (existingServer) {
+    await cleanupOldSetup(guild, existingServer);
+  }
+
   // Создать сообщение с кнопкой в выбранном канале
   const message = await createCalloutPanel(channel);
 
@@ -386,12 +647,13 @@ async function setupSelectChannel(interaction: StringSelectMenuInteraction) {
   const categoryId = channel.parent?.id || undefined;
 
   // Сохранить настройки
-  const existingServer = await ServerModel.findByGuildId(guild.id);
   if (existingServer) {
     await ServerModel.update(existingServer.id, {
       callout_channel_id: channelId,
       callout_message_id: message.id,
       category_id: categoryId,
+      bot_created_channel: 0, // Канал выбран существующий
+      bot_created_category: 0, // Категория выбрана существующая
     });
   } else {
     await ServerModel.create({
@@ -400,6 +662,14 @@ async function setupSelectChannel(interaction: StringSelectMenuInteraction) {
       callout_message_id: message.id,
       category_id: categoryId,
     });
+    // Установить флаги после создания
+    const newServer = await ServerModel.findByGuildId(guild.id);
+    if (newServer) {
+      await ServerModel.update(newServer.id, {
+        bot_created_channel: 0,
+        bot_created_category: 0,
+      });
+    }
   }
 
   logger.info('Server settings saved (channel mode)', {
@@ -426,10 +696,6 @@ export async function showSetupModeSelection(interaction: ButtonInteraction) {
         .setDescription('Выберите режим настройки:')
         .addFields([
           {
-            name: '🆕 Создать новое',
-            value: 'Бот создаст новую категорию "🚨 INCIDENTS" и канал "callouts"',
-          },
-          {
             name: '📁 Использовать категорию',
             value: 'Выберите существующую категорию, бот создаст канал в ней',
           },
@@ -444,17 +710,13 @@ export async function showSetupModeSelection(interaction: ButtonInteraction) {
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId('setup_mode_auto')
-          .setLabel('🆕 Создать новое')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
           .setCustomId('setup_mode_category')
           .setLabel('📁 Категория')
-          .setStyle(ButtonStyle.Secondary),
+          .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId('setup_mode_channel')
           .setLabel('💬 Канал')
-          .setStyle(ButtonStyle.Secondary)
+          .setStyle(ButtonStyle.Primary)
       ),
     ],
   });

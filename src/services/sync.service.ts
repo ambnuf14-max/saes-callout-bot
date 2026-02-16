@@ -252,7 +252,7 @@ export class SyncService {
         userId: response.vk_user_id,
         userName: response.vk_user_name,
         calloutId: callout.id,
-        departmentName: subdivision.name,
+        factionName: subdivision.name,
         vkUserId: response.vk_user_id,
         vkUserName: response.vk_user_name,
       };

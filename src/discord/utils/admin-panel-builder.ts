@@ -9,7 +9,7 @@ import {
   ChannelSelectMenuBuilder,
   ChannelType,
 } from 'discord.js';
-import { Server, Faction, FactionType, PendingChangeWithDetails } from '../../types/database.types';
+import { Server, Faction, FactionType, PendingChangeWithDetails, SubdivisionTemplate } from '../../types/database.types';
 import { ServerModel } from '../../database/models';
 import { FactionService } from '../../services/faction.service';
 import { FactionTypeService } from '../../services/faction-type.service';
@@ -25,35 +25,48 @@ export async function buildAdminMainPanel(server: Server) {
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
   const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
   const factions = await FactionService.getFactions(server.id);
-  const stats = await CalloutService.getStats(server.id);
+
+  // Форматирование списков
+  const leaderRolesList = leaderRoleIds.length > 0
+    ? leaderRoleIds.map(id => `<@&${id}>`).join('\n')
+    : 'Не настроены';
+
+  const factionsList = factions.length > 0
+    ? factions.map(f => `<@&${f.faction_role_id}>`).join('\n')
+    : 'Не созданы';
+
+  const calloutRolesList = calloutRoleIds.length > 0
+    ? calloutRoleIds.map(id => `<@&${id}>`).join('\n')
+    : 'Любой может создавать';
+
+  // Форматирование статуса системы
+  const systemStatus = server.callout_channel_id
+    ? `Канал каллаутов: <#${server.callout_channel_id}>${server.category_id ? `\nКатегория инцидентов: <#${server.category_id}>` : ''}`
+    : `${EMOJI.ERROR} Система не настроена`;
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle(`${EMOJI.INFO} Панель администрирования`)
-    .setDescription('Используйте кнопки ниже для управления настройками сервера.')
+    .setDescription('Используйте кнопки ниже для управления настройками системы каллаутов.')
     .addFields(
       {
         name: '📊 Статус системы',
-        value: server.callout_channel_id
-          ? `${EMOJI.ACTIVE} Система настроена`
-          : `${EMOJI.ERROR} Система не настроена`,
+        value: systemStatus,
         inline: true,
       },
       {
-        name: '👑 Лидерских ролей',
-        value: leaderRoleIds.length.toString(),
+        name: 'Роли менеджмента',
+        value: leaderRolesList,
         inline: true,
       },
       {
-        name: '🏛️ Фракций',
-        value: factions.length.toString(),
+        name: '🏛️ Фракции',
+        value: factionsList,
         inline: true,
       },
       {
-        name: '📞 Ролей каллаутов',
-        value: calloutRoleIds.length > 0
-          ? calloutRoleIds.length.toString()
-          : 'Любой может создавать',
+        name: '📞 Необходимые роли для подачи каллаута',
+        value: calloutRolesList,
         inline: true,
       },
       {
@@ -62,26 +75,132 @@ export async function buildAdminMainPanel(server: Server) {
           ? `<#${server.audit_log_channel_id}>`
           : 'Не настроен',
         inline: true,
+      }
+    )
+    .setFooter({ text: 'SAES Callout System — Admin Panel' });
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('admin_factions')
+      .setLabel('Фракции')
+      .setEmoji('🏛️')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('admin_settings')
+      .setLabel('Настройки')
+      .setEmoji('⚙️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+/**
+ * Построить секцию "Настройки" с подменю
+ */
+export function buildSettingsSection(server: Server) {
+  const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
+
+  // Форматирование ролей для компактного отображения
+  const leaderRolesMention = leaderRoleIds.length > 0
+    ? leaderRoleIds.map(id => `<@&${id}>`).join(' ')
+    : 'Не настроено';
+
+  const calloutRolesMention = calloutRoleIds.length > 0
+    ? calloutRoleIds.map(id => `<@&${id}>`).join(' ')
+    : 'Любой';
+
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.INFO)
+    .setTitle('⚙️ Настройки системы')
+    .setDescription('Выберите раздел для настройки.')
+    .addFields(
+      {
+        name: '🔧 Основные настройки',
+        value: server.callout_channel_id
+          ? `Канал: <#${server.callout_channel_id}>`
+          : 'Каналы не настроены',
+        inline: true,
       },
       {
-        name: '📊 Каллауты',
-        value: `Активных: ${stats.active} | Всего: ${stats.total}`,
+        name: '👤 Настройки ролей',
+        value: `Менеджмент: ${leaderRolesMention}\nКаллауты: ${calloutRolesMention}`,
+        inline: true,
+      },
+      {
+        name: '📜 Audit Log',
+        value: server.audit_log_channel_id
+          ? `<#${server.audit_log_channel_id}>`
+          : 'Не настроен',
         inline: true,
       }
     )
-    .setTimestamp()
-    .setFooter({ text: 'SAES Callout System — Admin Panel' });
+    .setTimestamp();
 
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId('admin_setup')
-      .setLabel('Настройка')
+      .setLabel('Основные настройки')
       .setEmoji('🔧')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
+      .setCustomId('admin_role_settings')
+      .setLabel('Настройки ролей')
+      .setEmoji('👤')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('admin_audit_log')
+      .setLabel('Audit Log')
+      .setEmoji('📜')
+      .setStyle(ButtonStyle.Primary),
+  );
+
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('admin_back')
+      .setLabel('Назад')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return { embeds: [embed], components: [row1, row2] };
+}
+
+/**
+ * Построить секцию "Настройки ролей"
+ */
+export function buildRoleSettingsSection(server: Server) {
+  const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
+  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
+
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.INFO)
+    .setTitle('👤 Настройки ролей')
+    .setDescription('Управление ролями для доступа к функциям системы.')
+    .addFields(
+      {
+        name: 'Роли менеджмента SAES',
+        value: leaderRoleIds.length > 0
+          ? `Настроено ролей: ${leaderRoleIds.length}\n${leaderRoleIds.map(id => `<@&${id}>`).join(', ')}`
+          : 'Не настроено',
+        inline: false,
+      },
+      {
+        name: '📞 Роли для подачи каллаутов',
+        value: calloutRoleIds.length > 0
+          ? `Настроено ролей: ${calloutRoleIds.length}\n${calloutRoleIds.map(id => `<@&${id}>`).join(', ')}`
+          : 'Любой может создавать каллауты',
+        inline: false,
+      }
+    )
+    .setFooter({ text: 'Роли менеджмента SAES могут управлять всеми фракциями и закрывать любые каллауты' })
+    .setTimestamp();
+
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
       .setCustomId('admin_leader_roles')
-      .setLabel('Лидерские роли')
-      .setEmoji('👑')
+      .setLabel('Менеджмент SAES')
+      .setEmoji('🕵️‍♂️')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('admin_callout_roles')
@@ -92,19 +211,8 @@ export async function buildAdminMainPanel(server: Server) {
 
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('admin_audit_log')
-      .setLabel('Audit Log')
-      .setEmoji('📜')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('admin_factions')
-      .setLabel('Фракции')
-      .setEmoji('🏛️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('admin_info')
-      .setLabel('Инфо')
-      .setEmoji('ℹ️')
+      .setCustomId('admin_settings')
+      .setLabel('Назад')
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -115,10 +223,26 @@ export async function buildAdminMainPanel(server: Server) {
  * Построить секцию "Настройка" (setup)
  */
 export function buildSetupSection(server: Server) {
+  const isConfigured = !!server.callout_channel_id;
+
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle('🔧 Настройка системы каллаутов')
+    .setDescription(
+      'Выберите режим настройки каналов для системы каллаутов.\n\n' +
+      '**📁 Выбрать категорию**\n' +
+      'Бот создаст новый канал `callouts` в выбранной категории. Инциденты будут создаваться в этой же категории.\n\n' +
+      '**💬 Выбрать канал**\n' +
+      'Используется существующий канал для кнопки каллаутов. Инциденты будут создаваться в категории этого канала (если есть).'
+    )
     .addFields(
+      {
+        name: 'Текущий статус',
+        value: isConfigured
+          ? `${EMOJI.ACTIVE} Система настроена`
+          : `${EMOJI.ERROR} Система не настроена`,
+        inline: false,
+      },
       {
         name: 'Канал каллаутов',
         value: server.callout_channel_id
@@ -134,29 +258,22 @@ export function buildSetupSection(server: Server) {
         inline: true,
       },
     )
-    .setDescription('Выберите режим настройки каналов для системы каллаутов.')
     .setTimestamp();
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('setup_mode_auto')
-      .setLabel('Создать новое (auto)')
-      .setEmoji('🆕')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
       .setCustomId('setup_mode_category')
       .setLabel('Выбрать категорию')
       .setEmoji('📁')
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('setup_mode_channel')
       .setLabel('Выбрать канал')
       .setEmoji('💬')
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('admin_back')
+      .setCustomId('admin_settings')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -164,25 +281,25 @@ export function buildSetupSection(server: Server) {
 }
 
 /**
- * Построить секцию "Лидерские роли"
+ * Построить секцию "Роли менеджмента SAES"
  */
 export function buildLeaderRolesSection(server: Server) {
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
 
   const description = leaderRoleIds.length > 0
     ? leaderRoleIds.map((id, i) => `${i + 1}. <@&${id}>`).join('\n')
-    : 'Лидерские роли не настроены.';
+    : 'Роли менеджмента не настроены.';
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
-    .setTitle('👑 Лидерские роли')
+    .setTitle('Роли менеджмента SAES')
     .setDescription(description)
     .addFields({
       name: 'Всего',
       value: leaderRoleIds.length.toString(),
       inline: true,
     })
-    .setFooter({ text: 'Лидеры могут управлять фракциями и закрывать каллауты' })
+    .setFooter({ text: 'Роли менеджмента SAES могут управлять всеми фракциями и закрывать любые каллауты' })
     .setTimestamp();
 
   const components: ActionRowBuilder<any>[] = [];
@@ -190,7 +307,7 @@ export function buildLeaderRolesSection(server: Server) {
   // RoleSelectMenu для добавления роли
   const addRoleSelect = new RoleSelectMenuBuilder()
     .setCustomId('admin_add_leader_role')
-    .setPlaceholder('Добавить лидерскую роль...');
+    .setPlaceholder('Добавить роль менеджмента...');
 
   components.push(
     new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(addRoleSelect)
@@ -207,7 +324,7 @@ export function buildLeaderRolesSection(server: Server) {
 
     const removeSelect = new StringSelectMenuBuilder()
       .setCustomId('admin_remove_leader_role')
-      .setPlaceholder('Удалить лидерскую роль...')
+      .setPlaceholder('Удалить роль менеджмента...')
       .addOptions(removeOptions);
 
     components.push(
@@ -220,7 +337,6 @@ export function buildLeaderRolesSection(server: Server) {
     new ButtonBuilder()
       .setCustomId('admin_back')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
   components.push(buttonRow);
@@ -283,7 +399,6 @@ export function buildCalloutRolesSection(server: Server) {
     new ButtonBuilder()
       .setCustomId('admin_back')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
   components.push(buttonRow);
@@ -315,9 +430,8 @@ export function buildAuditLogSection(server: Server) {
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('admin_back')
+      .setCustomId('admin_settings')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -343,14 +457,19 @@ export async function buildFactionsSection(server: Server) {
     description = `${EMOJI.PENDING} **${pendingCount}** запросов ожидают одобрения\n\n${description}`;
   }
 
+  // Форматирование списка фракций для поля
+  const factionsList = factions.length > 0
+    ? factions.map(f => f.name).join(', ')
+    : 'Не созданы';
+
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle('🏛️ Фракции')
     .setDescription(description)
     .addFields({
-      name: 'Всего',
-      value: factions.length.toString(),
-      inline: true,
+      name: 'Фракции',
+      value: factionsList,
+      inline: false,
     })
     .setTimestamp();
 
@@ -384,7 +503,6 @@ export async function buildFactionsSection(server: Server) {
     new ButtonBuilder()
       .setCustomId('admin_back')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -474,7 +592,6 @@ export function buildFactionDetailPanel(faction: Faction) {
     new ButtonBuilder()
       .setCustomId('admin_factions')
       .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -504,79 +621,6 @@ export function buildFactionDeleteConfirmation(faction: Faction) {
       .setCustomId('admin_factions')
       .setLabel('Отмена')
       .setEmoji('❌')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  return { embeds: [embed], components: [row] };
-}
-
-/**
- * Построить секцию "Инфо"
- */
-export async function buildInfoSection(server: Server) {
-  const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-  const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
-  const factions = await FactionService.getFactions(server.id);
-  const stats = await CalloutService.getStats(server.id);
-
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.INFO)
-    .setTitle(`${EMOJI.INFO} Полная информация о конфигурации`)
-    .addFields(
-      {
-        name: 'Канал каллаутов',
-        value: server.callout_channel_id
-          ? `<#${server.callout_channel_id}>`
-          : 'Не настроен',
-        inline: true,
-      },
-      {
-        name: 'Категория инцидентов',
-        value: server.category_id ? `<#${server.category_id}>` : 'Не настроена',
-        inline: true,
-      },
-      {
-        name: 'Audit Log',
-        value: server.audit_log_channel_id
-          ? `<#${server.audit_log_channel_id}>`
-          : 'Не настроен',
-        inline: true,
-      },
-      {
-        name: '👑 Лидерские роли',
-        value: leaderRoleIds.length > 0
-          ? leaderRoleIds.map((id) => `<@&${id}>`).join(', ')
-          : 'Не настроены',
-        inline: false,
-      },
-      {
-        name: '📞 Роли каллаутов',
-        value: calloutRoleIds.length > 0
-          ? calloutRoleIds.map((id) => `<@&${id}>`).join(', ')
-          : 'Любой может создавать',
-        inline: false,
-      },
-      {
-        name: '🏛️ Фракции',
-        value: factions.length > 0
-          ? factions.map((d) => `${d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR} ${d.name}`).join(', ')
-          : 'Не созданы',
-        inline: false,
-      },
-      {
-        name: '📊 Статистика каллаутов',
-        value: `Активных: ${stats.active} | Закрытых: ${stats.closed} | Всего: ${stats.total}`,
-        inline: false,
-      },
-    )
-    .setTimestamp()
-    .setFooter({ text: 'SAES Callout System' });
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('admin_back')
-      .setLabel('Назад')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -625,7 +669,6 @@ export async function buildFactionTypesSection(server: Server) {
     new ButtonBuilder()
       .setCustomId('admin_back_to_factions')
       .setLabel('Назад к фракциям')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   );
   components.push(buttonRow);
@@ -668,7 +711,6 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
       new ButtonBuilder()
         .setCustomId('admin_back_to_fact_types')
         .setLabel('Назад к типам')
-        .setEmoji('◀️')
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -712,7 +754,32 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
     });
   }
 
-  const buttons = [
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  // Кнопки для редактирования каждого шаблона (максимум 20)
+  if (typeWithTemplates.templates.length > 0) {
+    const templateButtons = typeWithTemplates.templates
+      .sort((a, b) => a.display_order - b.display_order)
+      .slice(0, 20)
+      .map(template =>
+        new ButtonBuilder()
+          .setCustomId(`admin_edit_template_${typeId}_${template.id}`)
+          .setLabel(template.name.substring(0, 30))
+          .setEmoji('✏️')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+    // Разбить на ряды по 5 кнопок
+    for (let i = 0; i < templateButtons.length; i += 5) {
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        ...templateButtons.slice(i, i + 5)
+      );
+      components.push(row);
+    }
+  }
+
+  // Основные кнопки управления
+  const mainButtons = [
     new ButtonBuilder()
       .setCustomId(`admin_add_template_${typeId}`)
       .setLabel('Добавить шаблон')
@@ -723,6 +790,9 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
       .setLabel('Редактировать тип')
       .setEmoji('✏️')
       .setStyle(ButtonStyle.Primary),
+  ];
+
+  const secondRow = [
     new ButtonBuilder()
       .setCustomId(`admin_delete_fact_type_${typeId}`)
       .setLabel('Удалить тип')
@@ -735,9 +805,12 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
       .setStyle(ButtonStyle.Secondary),
   ];
 
+  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...mainButtons));
+  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...secondRow));
+
   return {
     embeds: [embed],
-    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)],
+    components,
   };
 }
 
@@ -846,7 +919,6 @@ export async function buildReviewChangePanel(changeId: number) {
       new ButtonBuilder()
         .setCustomId('admin_view_pending_changes')
         .setLabel('Назад к списку')
-        .setEmoji('◀️')
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -888,12 +960,189 @@ export async function buildReviewChangePanel(changeId: number) {
     new ButtonBuilder()
       .setCustomId('admin_back_to_pending')
       .setLabel('Назад к списку')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
   ];
 
   return {
     embeds: [embed],
     components: [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)],
+  };
+}
+/**
+ * Интерактивная панель редактирования шаблона подразделения
+ * Показывает предпросмотр embed и кнопки для редактирования полей
+ */
+export async function buildTemplateEditorPanel(
+  typeId: number,
+  templateId: number,
+  draftData?: Partial<SubdivisionTemplate>
+) {
+  const SubdivisionTemplateModel = (await import('../../database/models/SubdivisionTemplate')).default;
+  const template = await SubdivisionTemplateModel.findById(templateId);
+
+  if (!template) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.ERROR)
+      .setTitle(`${EMOJI.ERROR} Шаблон не найден`)
+      .setDescription('Шаблон подразделения не найден или был удален.');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`admin_view_fact_type_${typeId}`)
+        .setLabel('Назад к типу')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [row] };
+  }
+
+  // Применить draft изменения если есть
+  const currentData = draftData ? { ...template, ...draftData } : template;
+
+  // Построить предпросмотр embed
+  const previewEmbed = new EmbedBuilder()
+    .setTitle(currentData.embed_title || currentData.name)
+    .setDescription(currentData.embed_description || currentData.description || 'Нет описания');
+
+  if (currentData.embed_color) {
+    try {
+      previewEmbed.setColor(currentData.embed_color as any);
+    } catch {
+      // Игнорировать некорректные цвета
+    }
+  }
+
+  if (currentData.embed_author_name) {
+    previewEmbed.setAuthor({
+      name: currentData.embed_author_name,
+      url: currentData.embed_author_url || undefined,
+      iconURL: currentData.embed_author_icon_url || undefined,
+    });
+  }
+
+  if (currentData.embed_image_url) {
+    previewEmbed.setImage(currentData.embed_image_url);
+  }
+
+  if (currentData.embed_thumbnail_url) {
+    previewEmbed.setThumbnail(currentData.embed_thumbnail_url);
+  }
+
+  if (currentData.embed_footer_text) {
+    previewEmbed.setFooter({
+      text: currentData.embed_footer_text,
+      iconURL: currentData.embed_footer_icon_url || undefined,
+    });
+  }
+
+  // Embed с информацией о редактировании
+  const infoEmbed = new EmbedBuilder()
+    .setColor(COLORS.INFO)
+    .setTitle(`✏️ Редактирование шаблона: ${template.name}`)
+    .setDescription(
+      'Используйте кнопки ниже для редактирования полей embed.\n' +
+      'Изменения отображаются в предпросмотре ниже.\n\n' +
+      '**После завершения редактирования нажмите "Сохранить"**'
+    )
+    .addFields(
+      { name: 'Название', value: currentData.name, inline: true },
+      { name: 'Описание', value: currentData.description || 'Не указано', inline: true }
+    );
+
+  // Показать текущие значения полей embed
+  const fieldValues = [];
+  if (currentData.embed_title) fieldValues.push(`📝 Заголовок: ${currentData.embed_title.substring(0, 50)}`);
+  if (currentData.embed_color) fieldValues.push(`🎨 Цвет: ${currentData.embed_color}`);
+  if (currentData.embed_author_name) fieldValues.push(`👤 Автор: ${currentData.embed_author_name}`);
+  if (currentData.embed_image_url) fieldValues.push(`🖼️ Изображение: установлено`);
+  if (currentData.embed_thumbnail_url) fieldValues.push(`🖼️ Миниатюра: установлена`);
+  if (currentData.embed_footer_text) fieldValues.push(`📌 Футер: ${currentData.embed_footer_text.substring(0, 50)}`);
+
+  if (fieldValues.length > 0) {
+    infoEmbed.addFields({
+      name: 'Настроенные поля Embed',
+      value: fieldValues.join('\n'),
+      inline: false,
+    });
+  }
+
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  // Кнопки редактирования основных полей
+  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`template_edit_name_${typeId}_${templateId}`)
+      .setLabel('Название')
+      .setEmoji('📝')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`template_edit_title_${typeId}_${templateId}`)
+      .setLabel('Заголовок Embed')
+      .setEmoji('📝')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`template_edit_description_${typeId}_${templateId}`)
+      .setLabel('Описание')
+      .setEmoji('📄')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки редактирования стиля
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`template_edit_color_${typeId}_${templateId}`)
+      .setLabel('Цвет')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`template_edit_author_${typeId}_${templateId}`)
+      .setLabel('Автор')
+      .setEmoji('👤')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`template_edit_footer_${typeId}_${templateId}`)
+      .setLabel('Футер')
+      .setEmoji('📌')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки редактирования изображений
+  const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`template_edit_image_${typeId}_${templateId}`)
+      .setLabel('Изображение')
+      .setEmoji('🖼️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`template_edit_thumbnail_${typeId}_${templateId}`)
+      .setLabel('Миниатюра')
+      .setEmoji('🖼️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Кнопки действий
+  const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`template_save_${typeId}_${templateId}`)
+      .setLabel('Сохранить')
+      .setEmoji('💾')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`admin_delete_template_${typeId}_${templateId}`)
+      .setLabel('Удалить')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`admin_view_fact_type_${typeId}`)
+      .setLabel('Назад')
+      .setEmoji('◀️')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  components.push(row1, row2, row3, row4);
+
+  return {
+    embeds: [infoEmbed, previewEmbed],
+    components,
   };
 }

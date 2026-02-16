@@ -26,7 +26,10 @@
       "Bash(pkill:*)",
       "Bash(node:*)",
       "Bash(git mv:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/admin-panel-modal.ts:*)",
+      "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/faction-panel-button.ts:*)",
+      "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/faction-panel-modal.ts:*)"
     ]
   }
 }

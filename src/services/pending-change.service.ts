@@ -72,7 +72,7 @@ export class PendingChangeService {
         userId: requestedBy,
         userName: user.user.tag,
         changeType: getChangeTypeLabel('create_subdivision'),
-        departmentName: faction.name,
+        factionName: faction.name,
         details: `Название: ${data.name}`,
         changeId: change.id,
       };
@@ -140,7 +140,7 @@ export class PendingChangeService {
         userId: requestedBy,
         userName: user.user.tag,
         changeType: getChangeTypeLabel('update_subdivision'),
-        departmentName: faction.name,
+        factionName: faction.name,
         details: `Подразделение: ${subdivision.name}\n${details}`,
         changeId: change.id,
       };
@@ -195,7 +195,7 @@ export class PendingChangeService {
         userId: requestedBy,
         userName: user.user.tag,
         changeType: getChangeTypeLabel('delete_subdivision'),
-        departmentName: faction.name,
+        factionName: faction.name,
         details: `Подразделение: ${subdivision.name}`,
         changeId: change.id,
       };
@@ -247,7 +247,7 @@ export class PendingChangeService {
         userId: requestedBy,
         userName: user.user.tag,
         changeType: getChangeTypeLabel('update_embed'),
-        departmentName: faction.name,
+        factionName: faction.name,
         details: `Подразделение: ${subdivision.name}\nНастройка embed сообщения`,
         changeId: change.id,
       };
@@ -324,7 +324,7 @@ export class PendingChangeService {
           userId: change.requested_by,
           userName: requester.user.tag,
           changeType: changeTypeLabel,
-          departmentName: faction.name,
+          factionName: faction.name,
           details,
           reviewerName: reviewer.user.tag,
         };
@@ -378,7 +378,7 @@ export class PendingChangeService {
             userId: change.requested_by,
             userName: requester.user.tag,
             changeType: changeTypeLabel,
-            departmentName: faction.name,
+            factionName: faction.name,
             details,
             reviewerName: reviewer.user.tag,
             reason: reason || 'Не указана',

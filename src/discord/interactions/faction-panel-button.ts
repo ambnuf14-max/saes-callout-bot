@@ -14,6 +14,7 @@ import {
   buildEmbedPreview,
   buildVerificationInstructions,
   buildDeleteConfirmation,
+  buildSubdivisionEmbedEditorPanel,
 } from '../utils/faction-panel-builder';
 import { FactionModel, SubdivisionModel } from '../../database/models';
 import { EMOJI, MESSAGES } from '../../config/constants';
@@ -120,10 +121,12 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
       const subdivisionId = parseInt(customId.split('_')[3]);
       await handlePreviewEmbed(interaction, subdivisionId);
     }
-    // Настройка embed подразделения
+    // Настройка embed подразделения - открыть интерактивную панель
     else if (customId.startsWith('faction_configure_embed_')) {
+      await interaction.deferUpdate();
       const subdivisionId = parseInt(customId.split('_')[3]);
-      await showConfigureEmbedModal(interaction, subdivisionId);
+      const panel = await buildSubdivisionEmbedEditorPanel(subdivisionId);
+      await interaction.editReply(panel);
     }
     // Удаление подразделения (показать подтверждение)
     else if (customId.startsWith('faction_delete_sub_')) {
@@ -148,6 +151,59 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('faction_cancel_change_')) {
       const changeId = parseInt(customId.replace('faction_cancel_change_', ''));
       await handleCancelChange(interaction, changeId, faction.id);
+    }
+    // === Редактирование полей embed подразделения ===
+
+    // Редактирование заголовка
+    else if (customId.startsWith('subdivision_edit_title_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditTitleModal(interaction, subdivisionId);
+    }
+    // Редактирование описания
+    else if (customId.startsWith('subdivision_edit_description_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditDescriptionModal(interaction, subdivisionId);
+    }
+    // Редактирование цвета
+    else if (customId.startsWith('subdivision_edit_color_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditColorModal(interaction, subdivisionId);
+    }
+    // Редактирование автора
+    else if (customId.startsWith('subdivision_edit_author_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditAuthorModal(interaction, subdivisionId);
+    }
+    // Редактирование футера
+    else if (customId.startsWith('subdivision_edit_footer_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditFooterModal(interaction, subdivisionId);
+    }
+    // Редактирование изображения
+    else if (customId.startsWith('subdivision_edit_image_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditImageModal(interaction, subdivisionId);
+    }
+    // Редактирование миниатюры
+    else if (customId.startsWith('subdivision_edit_thumbnail_')) {
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await showEditThumbnailModal(interaction, subdivisionId);
+    }
+    // Отправка на одобрение
+    else if (customId.startsWith('subdivision_submit_embed_')) {
+      await interaction.deferUpdate();
+      const subdivisionId = parseInt(customId.split('_')[3]);
+      await handleSubmitEmbedChanges(interaction, subdivisionId, faction.id);
+    }
+    // Возврат к настройкам из редактора embed
+    else if (customId.startsWith('faction_back_to_settings_')) {
+      await interaction.deferUpdate();
+      const subdivisionId = parseInt(customId.split('_')[4]);
+      const subdivision = await SubdivisionModel.findById(subdivisionId);
+      if (subdivision) {
+        const panel = buildSettingsPanel(subdivision);
+        await interaction.editReply(panel);
+      }
     }
   } catch (error) {
     logger.error('Error handling faction panel button', {
@@ -858,3 +914,225 @@ async function handleCancelChange(
 }
 
 export default handleFactionPanelButton;
+
+// === Функции для показа модалов редактирования embed полей ===
+
+async function showEditTitleModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_title_${subdivisionId}`)
+    .setTitle('Редактирование заголовка');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('embed_title')
+    .setLabel('Заголовок Embed')
+    .setPlaceholder('Оставьте пустым для использования названия')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(256);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput));
+  await interaction.showModal(modal);
+}
+
+async function showEditDescriptionModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_description_${subdivisionId}`)
+    .setTitle('Редактирование описания');
+
+  const descInput = new TextInputBuilder()
+    .setCustomId('embed_description')
+    .setLabel('Описание Embed')
+    .setPlaceholder('Описание каллаута для этого подразделения')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMaxLength(4096);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(descInput));
+  await interaction.showModal(modal);
+}
+
+async function showEditColorModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_color_${subdivisionId}`)
+    .setTitle('Редактирование цвета');
+
+  const colorInput = new TextInputBuilder()
+    .setCustomId('embed_color')
+    .setLabel('Цвет Embed (HEX)')
+    .setPlaceholder('#FF5733 или FF5733')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMinLength(6)
+    .setMaxLength(7);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(colorInput));
+  await interaction.showModal(modal);
+}
+
+async function showEditAuthorModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_author_${subdivisionId}`)
+    .setTitle('Редактирование автора');
+
+  const authorNameInput = new TextInputBuilder()
+    .setCustomId('embed_author_name')
+    .setLabel('Имя автора')
+    .setPlaceholder('Название организации')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(256);
+
+  const authorUrlInput = new TextInputBuilder()
+    .setCustomId('embed_author_url')
+    .setLabel('URL автора (опционально)')
+    .setPlaceholder('https://example.com')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  const authorIconInput = new TextInputBuilder()
+    .setCustomId('embed_author_icon_url')
+    .setLabel('URL иконки автора (опционально)')
+    .setPlaceholder('https://example.com/icon.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(authorNameInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(authorUrlInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(authorIconInput)
+  );
+  await interaction.showModal(modal);
+}
+
+async function showEditFooterModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_footer_${subdivisionId}`)
+    .setTitle('Редактирование футера');
+
+  const footerTextInput = new TextInputBuilder()
+    .setCustomId('embed_footer_text')
+    .setLabel('Текст футера')
+    .setPlaceholder('Нижний текст Embed')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(2048);
+
+  const footerIconInput = new TextInputBuilder()
+    .setCustomId('embed_footer_icon_url')
+    .setLabel('URL иконки футера (опционально)')
+    .setPlaceholder('https://example.com/icon.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(footerTextInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(footerIconInput)
+  );
+  await interaction.showModal(modal);
+}
+
+async function showEditImageModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_image_${subdivisionId}`)
+    .setTitle('Редактирование изображения');
+
+  const imageInput = new TextInputBuilder()
+    .setCustomId('embed_image_url')
+    .setLabel('URL изображения')
+    .setPlaceholder('https://example.com/image.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(imageInput));
+  await interaction.showModal(modal);
+}
+
+async function showEditThumbnailModal(interaction: ButtonInteraction, subdivisionId: number) {
+  const modal = new ModalBuilder()
+    .setCustomId(`subdivision_modal_thumbnail_${subdivisionId}`)
+    .setTitle('Редактирование миниатюры');
+
+  const thumbnailInput = new TextInputBuilder()
+    .setCustomId('embed_thumbnail_url')
+    .setLabel('URL миниатюры')
+    .setPlaceholder('https://example.com/thumbnail.png')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(thumbnailInput));
+  await interaction.showModal(modal);
+}
+
+async function handleSubmitEmbedChanges(
+  interaction: ButtonInteraction,
+  subdivisionId: number,
+  factionId: number
+) {
+  try {
+    // Получить draft изменения
+    const { getSubdivisionDraft, clearSubdivisionDraft } = await import('./faction-panel-modal');
+    const draftData = getSubdivisionDraft(subdivisionId);
+
+    if (!draftData || Object.keys(draftData).length === 0) {
+      await interaction.editReply({
+        content: `${EMOJI.WARNING} Нет изменений для отправки`,
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+
+    // Получить подразделение
+    const subdivision = await SubdivisionModel.findById(subdivisionId);
+    if (!subdivision) {
+      throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+    }
+
+    // Преобразовать null в undefined для совместимости с DTO
+    const updateData: any = {};
+    for (const [key, value] of Object.entries(draftData)) {
+      updateData[key] = value === null ? undefined : value;
+    }
+
+    // Отправить pending запрос на обновление embed
+    await PendingChangeService.requestUpdateEmbed(
+      subdivisionId,
+      factionId,
+      subdivision.server_id,
+      interaction.user.id,
+      updateData,
+      interaction.guild!
+    );
+
+    // Очистить draft
+    clearSubdivisionDraft(subdivisionId);
+
+    logger.info('Embed update requested via interactive editor', {
+      subdivisionId,
+      factionId,
+      userId: interaction.user.id,
+      changes: Object.keys(draftData),
+    });
+
+    // Вернуться к панели настроек
+    const panel = buildSettingsPanel(subdivision);
+    await interaction.editReply(panel);
+
+    await interaction.followUp({
+      content: `${EMOJI.PENDING} Запрос на обновление embed отправлен администратору`,
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    logger.error('Failed to submit embed changes', {
+      error: error instanceof Error ? error.message : error,
+      subdivisionId,
+      factionId,
+    });
+
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Не удалось отправить запрос`,
+      embeds: [],
+      components: [],
+    });
+  }
+}
