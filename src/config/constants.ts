@@ -1,10 +1,10 @@
 // Цвета для Discord Embeds (hex)
 export const COLORS = {
   ACTIVE: 0xdc143c,  // Темно-красный (crimson) - активный каллаут
-  SUCCESS: 0xdc143c, // Темно-красный (crimson) - успех
-  CLOSED: 0xdc143c,  // Темно-красный (crimson) - закрытый каллаут
+  SUCCESS: 0x2ecc71, // Зелёный - успех
+  CLOSED: 0x95a5a6,  // Серый - закрытый каллаут
   INFO: 0x3498db,    // Синий-голубой - информационный
-  WARNING: 0xdc143c, // Темно-красный (crimson) - предупреждение
+  WARNING: 0xf39c12, // Оранжевый - предупреждение
   ERROR: 0xdc143c,   // Темно-красный (crimson) - ошибка
 } as const;
 
@@ -99,7 +99,7 @@ export const MESSAGES = {
     ERROR_ALREADY_EXISTS: (name: string) =>
       `${EMOJI.ERROR} Фракция "${name}" уже существует`,
     ERROR_ROLES_EXIST: `${EMOJI.ERROR} Фракция с такой комбинацией ролей уже существует`,
-    ERROR_INVALID_NAME: `${EMOJI.ERROR} Название должно быть от 2 до 50 символов`,
+    ERROR_INVALID_NAME: `${EMOJI.ERROR} Название должно быть от ${LIMITS.FACTION_NAME_MIN} до ${LIMITS.FACTION_NAME_MAX} символов (только заглавные латинские буквы и цифры)`,
   },
 
   SUBDIVISION: {

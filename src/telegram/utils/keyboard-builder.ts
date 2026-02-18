@@ -1,5 +1,4 @@
 import { InlineKeyboardMarkup } from 'node-telegram-bot-api';
-import { MESSAGES } from '../../config/constants';
 
 /**
  * Утилиты для создания Telegram inline клавиатур
@@ -12,69 +11,59 @@ export interface CalloutResponsePayload {
   action: 'respond';
   callout_id: number;
   subdivision_id: number;
+  type?: 'acknowledged' | 'on_way';
 }
 
 /**
- * Создать inline клавиатуру для каллаута с кнопкой "Отреагировать"
- */
-export function buildCalloutKeyboard(
-  calloutId: number,
-  subdivisionId: number
-): InlineKeyboardMarkup {
-  const payload: CalloutResponsePayload = {
-    action: 'respond',
-    callout_id: calloutId,
-    subdivision_id: subdivisionId,
-  };
-
-  return {
-    inline_keyboard: [
-      [
-        {
-          text: MESSAGES.CALLOUT.BUTTON_RESPOND_TELEGRAM || '✅ Отреагировать',
-          callback_data: JSON.stringify(payload),
-        },
-      ],
-    ],
-  };
-}
-
-/**
- * Создать клавиатуру с несколькими типами ответа (опционально для будущего)
+ * Создать клавиатуру с кнопками "Принято" и "В пути"
+ * Используем компактный формат callback_data для соблюдения лимита Telegram (64 байта):
+ * r:{callout_id}:{subdivision_id}:{type_short}
  */
 export function buildDetailedCalloutKeyboard(
   calloutId: number,
   subdivisionId: number
 ): InlineKeyboardMarkup {
-  const acknowledgedPayload: CalloutResponsePayload = {
-    action: 'respond',
-    callout_id: calloutId,
-    subdivision_id: subdivisionId,
-  };
-
   return {
     inline_keyboard: [
       [
         {
           text: '✅ Принято',
-          callback_data: JSON.stringify({ ...acknowledgedPayload, type: 'acknowledged' }),
+          callback_data: `r:${calloutId}:${subdivisionId}:a`,
         },
         {
           text: '🚗 В пути',
-          callback_data: JSON.stringify({ ...acknowledgedPayload, type: 'on_way' }),
-        },
-      ],
-      [
-        {
-          text: '📍 Прибыли',
-          callback_data: JSON.stringify({ ...acknowledgedPayload, type: 'arrived' }),
+          callback_data: `r:${calloutId}:${subdivisionId}:w`,
         },
       ],
     ],
   };
 }
 
+/**
+ * Распарсить компактный callback_data в CalloutResponsePayload
+ */
+export function parseCompactCallbackData(data: string): (CalloutResponsePayload & { type?: 'acknowledged' | 'on_way' }) | null {
+  // Компактный формат: r:{callout_id}:{subdivision_id}:{type_short}
+  if (data.startsWith('r:')) {
+    const parts = data.split(':');
+    if (parts.length < 3) return null;
+    const typeMap: Record<string, 'acknowledged' | 'on_way'> = { a: 'acknowledged', w: 'on_way' };
+    return {
+      action: 'respond',
+      callout_id: parseInt(parts[1], 10),
+      subdivision_id: parseInt(parts[2], 10),
+      type: parts[3] ? typeMap[parts[3]] : undefined,
+    };
+  }
+
+  // JSON fallback (старые кнопки)
+  try {
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
 export default {
-  buildCalloutKeyboard,
   buildDetailedCalloutKeyboard,
 };

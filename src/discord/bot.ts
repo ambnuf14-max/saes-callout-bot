@@ -14,6 +14,7 @@ import { Command } from './types';
 // Импорт команд
 import settingsCommand from './commands/settings';
 import factionCommand from './commands/faction';
+import historyCommand from './commands/history';
 
 // Импорт обработчиков событий
 import readyHandler from './events/ready';
@@ -46,6 +47,7 @@ class DiscordBot {
   private registerCommands() {
     this.commands.set(settingsCommand.data.name, settingsCommand);
     this.commands.set(factionCommand.data.name, factionCommand);
+    this.commands.set(historyCommand.data.name, historyCommand);
 
     logger.info('Commands registered', {
       count: this.commands.size,

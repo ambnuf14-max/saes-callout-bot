@@ -29,7 +29,11 @@
       "Bash(sqlite3:*)",
       "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/admin-panel-modal.ts:*)",
       "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/faction-panel-button.ts:*)",
-      "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/faction-panel-modal.ts:*)"
+      "Bash(/c/Users/sexorcist/Desktop/saes-callout-bot/src/discord/interactions/faction-panel-modal.ts:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\sexorcist\\\\Desktop\\\\saes-callout-bot\\\\src\\\\discord\\\\commands\"\" 2>/dev/null || echo \"Directory listing failed \")",
+      "Bash(echo:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(node_modules/.bin/tsc:*)"
     ]
   }
 }

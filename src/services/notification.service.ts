@@ -2,7 +2,7 @@ import vkBot from '../vk/bot';
 import telegramBot from '../telegram/bot';
 import logger from '../utils/logger';
 import { Callout, Subdivision } from '../types/database.types';
-import { CalloutModel } from '../database/models';
+import { CalloutModel, SubdivisionModel } from '../database/models';
 import { sendCalloutNotification as sendVkCallout, formatCalloutClosedMessage as formatVkClosed } from '../vk/utils/message-sender';
 import { sendCalloutNotification as sendTelegramCallout, formatCalloutClosedMessage as formatTelegramClosed, editMessage } from '../telegram/utils/message-sender';
 import { EMOJI } from '../config/constants';
@@ -92,9 +92,7 @@ export class NotificationService {
     }
 
     try {
-      const subdivision = await (
-        await import('../database/models')
-      ).SubdivisionModel.findById(callout.subdivision_id);
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
 
       if (!subdivision) {
         logger.warn('Subdivision not found for VK update', {
@@ -121,11 +119,22 @@ export class NotificationService {
       }
 
       // Обновить сообщение в VK
-      await vkBot.getApi().api.messages.edit({
+      const editParams: { peer_id: number; message_id: number; message: string; keyboard?: string } = {
         peer_id: parseInt(subdivision.vk_chat_id),
         message_id: parseInt(callout.vk_message_id),
         message: message,
-      });
+      };
+
+      if (status === 'closed') {
+        // Удалить клавиатуру при закрытии
+        editParams.keyboard = JSON.stringify({ buttons: [], inline: true });
+      } else {
+        // Сохранить клавиатуру при обновлении статуса
+        const { buildDetailedCalloutKeyboard } = await import('../vk/utils/keyboard-builder');
+        editParams.keyboard = buildDetailedCalloutKeyboard(callout.id, callout.subdivision_id);
+      }
+
+      await vkBot.getApi().api.messages.edit(editParams);
 
       logger.info('VK callout status updated', {
         calloutId: callout.id,
@@ -226,9 +235,7 @@ export class NotificationService {
     }
 
     try {
-      const subdivision = await (
-        await import('../database/models')
-      ).SubdivisionModel.findById(callout.subdivision_id);
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
 
       if (!subdivision) {
         logger.warn('Subdivision not found for Telegram update', {
@@ -254,12 +261,13 @@ export class NotificationService {
         message = `${EMOJI.INFO} Статус каллаута #${callout.id} обновлен: ${status}`;
       }
 
-      // Обновить сообщение в Telegram
+      // Обновить сообщение в Telegram (удалить клавиатуру при закрытии)
       await editMessage(
         telegramBot.getApi(),
         subdivision.telegram_chat_id,
         parseInt(callout.telegram_message_id),
-        message
+        message,
+        status === 'closed'
       );
 
       logger.info('Telegram callout status updated', {

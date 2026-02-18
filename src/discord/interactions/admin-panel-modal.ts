@@ -4,6 +4,7 @@ import { ServerModel } from '../../database/models';
 import { FactionService } from '../../services/faction.service';
 import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
+import { SubdivisionService } from '../../services/subdivision.service';
 import { isAdministrator } from '../utils/permission-checker';
 import {
   buildFactionsSection,
@@ -12,11 +13,15 @@ import {
   buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
   buildTemplateEditorPanel,
+  buildFactionSubdivisionsPanel,
+  buildAdminSubdivisionSettingsPanel,
+  buildAdminSubdivisionEditorPanel,
 } from '../utils/admin-panel-builder';
+import { parseSubdivisionSettingsData, isValidDiscordEmoji } from '../utils/subdivision-settings-helper';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
-import { SubdivisionTemplate } from '../../types/database.types';
+import { SubdivisionTemplate, Subdivision } from '../../types/database.types';
 
 // Временное хранилище для draft изменений шаблонов
 const templateDraftState = new Map<string, Partial<SubdivisionTemplate>>();
@@ -25,7 +30,7 @@ export function getTemplateDraft(typeId: number, templateId: number): Partial<Su
   return templateDraftState.get(`${typeId}_${templateId}`);
 }
 
-function setTemplateDraft(typeId: number, templateId: number, data: Partial<SubdivisionTemplate>) {
+export function setTemplateDraft(typeId: number, templateId: number, data: Partial<SubdivisionTemplate>) {
   const key = `${typeId}_${templateId}`;
   const existing = templateDraftState.get(key) || {};
   templateDraftState.set(key, { ...existing, ...data });
@@ -33,6 +38,23 @@ function setTemplateDraft(typeId: number, templateId: number, data: Partial<Subd
 
 export function clearTemplateDraft(typeId: number, templateId: number) {
   templateDraftState.delete(`${typeId}_${templateId}`);
+}
+
+// Временное хранилище для draft изменений подразделений (администратор, прямое редактирование)
+const adminSubDraftState = new Map<string, Partial<Subdivision>>();
+
+export function getAdminSubDraft(subdivisionId: number): Partial<Subdivision> | undefined {
+  return adminSubDraftState.get(subdivisionId.toString());
+}
+
+export function setAdminSubDraft(subdivisionId: number, data: Partial<Subdivision>) {
+  const key = subdivisionId.toString();
+  const existing = adminSubDraftState.get(key) || {};
+  adminSubDraftState.set(key, { ...existing, ...data });
+}
+
+export function clearAdminSubDraft(subdivisionId: number) {
+  adminSubDraftState.delete(subdivisionId.toString());
 }
 
 /**
@@ -92,7 +114,7 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       const templateId = parseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'name');
     }
-    // Редактирование заголовка embed
+    // Редактирование заголовка embed (объединённый модал: заголовок + URL)
     else if (customId.startsWith('template_modal_title_')) {
       const parts = customId.replace('template_modal_title_', '').split('_');
       const typeId = parseInt(parts[0]);
@@ -141,10 +163,70 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       const templateId = parseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'thumbnail');
     }
+    // Редактирование краткого описания шаблона
+    else if (customId.startsWith('template_modal_short_desc_')) {
+      const parts = customId.replace('template_modal_short_desc_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'short_desc');
+    }
+    // Редактирование логотипа шаблона
+    else if (customId.startsWith('template_modal_logo_')) {
+      const parts = customId.replace('template_modal_logo_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      await handleTemplateFieldEdit(interaction, typeId, templateId, 'logo');
+    }
     // Отклонение изменения с причиной
     else if (customId.startsWith('admin_modal_reject_change_')) {
       const changeId = parseInt(customId.replace('admin_modal_reject_change_', ''));
       await handleRejectChange(interaction, changeId, server.id);
+    }
+    // Прямое редактирование настроек подразделения администратором (без pending)
+    else if (customId.startsWith('admin_modal_sub_settings_')) {
+      const subdivisionId = parseInt(customId.replace('admin_modal_sub_settings_', ''));
+      await handleAdminEditSubdivisionSettings(interaction, subdivisionId);
+    }
+    // Редактор подразделения (admin): редактирование полей (draft-based)
+    else if (customId.startsWith('admin_modal_sub_edit_name_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_name_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'name');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_logo_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_logo_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'logo');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_short_desc_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_short_desc_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'short_desc');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_author_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_author_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'author');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_title_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_title_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'title');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_thumbnail_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_thumbnail_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'thumbnail');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_description_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_description_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'description');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_image_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_image_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'image');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_color_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_color_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'color');
+    }
+    else if (customId.startsWith('admin_modal_sub_edit_footer_')) {
+      const subId = parseInt(customId.replace('admin_modal_sub_edit_footer_', ''));
+      await handleSubEditorFieldEdit(interaction, subId, 'footer');
     }
   } catch (error) {
     logger.error('Error handling admin panel modal', {
@@ -225,10 +307,12 @@ async function handleEditFaction(
 
   const name = interaction.fields.getTextInputValue('dept_name').trim();
   const description = interaction.fields.getTextInputValue('dept_description').trim();
+  const logoUrl = interaction.fields.getTextInputValue('faction_logo_url').trim();
 
   const faction = await FactionService.updateFaction(factionId, {
     name,
     description: description || undefined,
+    logo_url: logoUrl || null,
   });
 
   if (!faction) {
@@ -386,6 +470,15 @@ async function handleTemplateFieldEdit(
     case 'title':
       const title = interaction.fields.getTextInputValue('embed_title').trim();
       draftData.embed_title = title || null;
+      const titleUrl = interaction.fields.getTextInputValue('embed_title_url').trim();
+      if (titleUrl && !isValidUrl(titleUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL заголовка. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_title_url = titleUrl || null;
       break;
     case 'description':
       const desc = interaction.fields.getTextInputValue('embed_description').trim();
@@ -413,6 +506,20 @@ async function handleTemplateFieldEdit(
       const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
       const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
       const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
+      if (authorUrl && !isValidUrl(authorUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL автора. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (authorIcon && !isValidUrl(authorIcon)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL иконки автора. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       draftData.embed_author_name = authorName || null;
       draftData.embed_author_url = authorUrl || null;
       draftData.embed_author_icon_url = authorIcon || null;
@@ -420,16 +527,52 @@ async function handleTemplateFieldEdit(
     case 'footer':
       const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
       const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
+      if (footerIcon && !isValidUrl(footerIcon)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL иконки футера. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       draftData.embed_footer_text = footerText || null;
       draftData.embed_footer_icon_url = footerIcon || null;
       break;
     case 'image':
       const imageUrl = interaction.fields.getTextInputValue('embed_image_url').trim();
+      if (imageUrl && !isValidUrl(imageUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL изображения. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       draftData.embed_image_url = imageUrl || null;
       break;
     case 'thumbnail':
       const thumbnailUrl = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
+      if (thumbnailUrl && !isValidUrl(thumbnailUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL миниатюры. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       draftData.embed_thumbnail_url = thumbnailUrl || null;
+      break;
+    case 'short_desc':
+      const shortDesc = interaction.fields.getTextInputValue('short_description').trim();
+      draftData.short_description = shortDesc || null;
+      break;
+    case 'logo':
+      const logoUrl = interaction.fields.getTextInputValue('logo_url').trim();
+      if (logoUrl && !isValidDiscordEmoji(logoUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректное эмодзи. Укажите кастомное Discord-эмодзи (<:name:id>) или unicode-эмодзи.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.logo_url = logoUrl || null;
       break;
   }
 
@@ -446,4 +589,213 @@ async function handleTemplateFieldEdit(
     content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Сохранить" чтобы применить изменения.`,
     flags: MessageFlags.Ephemeral,
   });
+}
+
+/**
+ * Прямое редактирование настроек подразделения администратором.
+ * Использует shared helper — тот же парсер что и в лидерской панели.
+ * Применяет изменения немедленно, без pending запроса.
+ */
+async function handleAdminEditSubdivisionSettings(
+  interaction: ModalSubmitInteraction,
+  subdivisionId: number
+) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  // Парсинг и валидация через shared helper
+  const settingsData = parseSubdivisionSettingsData(interaction);
+
+  await SubdivisionService.updateSubdivision(subdivisionId, {
+    short_description: settingsData.short_description ?? undefined,
+    logo_url: settingsData.logo_url ?? undefined,
+    discord_role_id: settingsData.discord_role_id ?? undefined,
+  });
+
+  logger.info('Subdivision settings updated directly by admin', {
+    subdivisionId,
+    userId: interaction.user.id,
+    changes: settingsData,
+  });
+
+  // Вернуться на панель настроек подразделения
+  const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (updatedSubdivision) {
+    const panel = buildAdminSubdivisionSettingsPanel(updatedSubdivision, updatedSubdivision.faction_id);
+    await interaction.editReply(panel);
+  }
+
+  await interaction.followUp({
+    content: `${EMOJI.SUCCESS} Настройки подразделения **${subdivision.name}** обновлены`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+/**
+ * Обработка редактирования поля подразделения (admin editor, draft-based)
+ * Обновляет draft состояние и перерисовывает панель с предпросмотром
+ */
+async function handleSubEditorFieldEdit(
+  interaction: ModalSubmitInteraction,
+  subdivisionId: number,
+  field: string
+) {
+  await interaction.deferUpdate();
+
+  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (!subdivision) {
+    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  }
+
+  const draftData: Partial<Subdivision> = {};
+
+  switch (field) {
+    case 'name': {
+      const val = interaction.fields.getTextInputValue('sub_name').trim();
+      if (val) draftData.name = val;
+      break;
+    }
+    case 'logo': {
+      const val = interaction.fields.getTextInputValue('logo_url').trim();
+      if (val && !isValidDiscordEmoji(val)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректное эмодзи. Укажите кастомное Discord-эмодзи (<:name:id>) или unicode-эмодзи.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.logo_url = val || null;
+      break;
+    }
+    case 'short_desc': {
+      const val = interaction.fields.getTextInputValue('short_description').trim();
+      draftData.short_description = val || null;
+      break;
+    }
+    case 'title': {
+      const titleVal = interaction.fields.getTextInputValue('embed_title').trim();
+      draftData.embed_title = titleVal || null;
+      const titleUrl = interaction.fields.getTextInputValue('embed_title_url').trim();
+      if (titleUrl && !isValidUrl(titleUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL заголовка. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_title_url = titleUrl || null;
+      break;
+    }
+    case 'description': {
+      const val = interaction.fields.getTextInputValue('embed_description').trim();
+      draftData.embed_description = val || null;
+      break;
+    }
+    case 'color': {
+      let color = interaction.fields.getTextInputValue('embed_color').trim();
+      if (color) {
+        color = color.startsWith('#') ? color : `#${color}`;
+        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+          await interaction.followUp({
+            content: `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        draftData.embed_color = color;
+      } else {
+        draftData.embed_color = null;
+      }
+      break;
+    }
+    case 'author': {
+      const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
+      const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
+      const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
+      if (authorUrl && !isValidUrl(authorUrl)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL автора. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (authorIcon && !isValidUrl(authorIcon)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL иконки автора. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_author_name = authorName || null;
+      draftData.embed_author_url = authorUrl || null;
+      draftData.embed_author_icon_url = authorIcon || null;
+      break;
+    }
+    case 'footer': {
+      const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
+      const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
+      if (footerIcon && !isValidUrl(footerIcon)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL иконки футера. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_footer_text = footerText || null;
+      draftData.embed_footer_icon_url = footerIcon || null;
+      break;
+    }
+    case 'image': {
+      const val = interaction.fields.getTextInputValue('embed_image_url').trim();
+      if (val && !isValidUrl(val)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL изображения. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_image_url = val || null;
+      break;
+    }
+    case 'thumbnail': {
+      const val = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
+      if (val && !isValidUrl(val)) {
+        await interaction.followUp({
+          content: `${EMOJI.ERROR} Некорректный URL миниатюры. Используйте полный URL (https://...)`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      draftData.embed_thumbnail_url = val || null;
+      break;
+    }
+  }
+
+  setAdminSubDraft(subdivisionId, draftData);
+
+  const currentDraft = getAdminSubDraft(subdivisionId);
+  const panel = await buildAdminSubdivisionEditorPanel(subdivision.faction_id, subdivision, currentDraft);
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
+    content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Сохранить" чтобы применить изменения.`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+/**
+ * Проверка валидности URL
+ */
+function isValidUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }

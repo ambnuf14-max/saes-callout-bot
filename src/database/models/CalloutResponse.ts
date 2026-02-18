@@ -150,6 +150,21 @@ export class CalloutResponseModel {
   }
 
   /**
+   * Обновить тип ответа
+   */
+  static async updateResponseType(
+    id: number,
+    responseType: 'acknowledged' | 'on_way' | 'arrived'
+  ): Promise<CalloutResponse | undefined> {
+    await database.run(
+      'UPDATE callout_responses SET response_type = ? WHERE id = ?',
+      [responseType, id]
+    );
+    logger.info('Response type updated', { responseId: id, responseType });
+    return await this.findById(id);
+  }
+
+  /**
    * Получить статистику ответов подразделения
    */
   static async getSubdivisionStats(subdivisionId: number): Promise<{

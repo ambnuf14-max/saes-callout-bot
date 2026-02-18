@@ -41,6 +41,7 @@ export interface Faction {
   server_id: number;
   name: string;
   description: string | null;
+  logo_url: string | null;
   general_leader_role_id: string;  // Общая лидерская роль (State Faction Leader)
   faction_role_id: string;       // Роль конкретной фракции (LSPD, Sheriff, etc)
   allow_create_subdivisions: boolean; // Может ли лидер создавать подразделения (контроль администратора)
@@ -62,6 +63,7 @@ export interface CreateFactionDTO {
 export interface UpdateFactionDTO {
   name?: string;
   description?: string;
+  logo_url?: string | null;
   general_leader_role_id?: string;
   faction_role_id?: string;
   allow_create_subdivisions?: boolean;
@@ -144,6 +146,8 @@ export interface Subdivision {
   server_id: number;
   name: string;
   description: string | null;
+  short_description: string | null;
+  logo_url: string | null;
   discord_role_id: string | null;
   vk_chat_id: string | null;
   telegram_chat_id: string | null;
@@ -155,6 +159,7 @@ export interface Subdivision {
   embed_author_url: string | null;
   embed_author_icon_url: string | null;
   embed_title: string | null;
+  embed_title_url: string | null;
   embed_description: string | null;
   embed_color: string | null;
   embed_image_url: string | null;
@@ -176,22 +181,25 @@ export interface CreateSubdivisionDTO {
 export interface UpdateSubdivisionDTO {
   name?: string;
   description?: string;
-  discord_role_id?: string;
+  short_description?: string | null;
+  logo_url?: string | null;
+  discord_role_id?: string | null;
   vk_chat_id?: string | null;
   telegram_chat_id?: string | null;
   is_accepting_callouts?: boolean;
   is_active?: boolean;
   // Embed настройки
-  embed_author_name?: string;
-  embed_author_url?: string;
-  embed_author_icon_url?: string;
-  embed_title?: string;
-  embed_description?: string;
-  embed_color?: string;
-  embed_image_url?: string;
-  embed_thumbnail_url?: string;
-  embed_footer_text?: string;
-  embed_footer_icon_url?: string;
+  embed_author_name?: string | null;
+  embed_author_url?: string | null;
+  embed_author_icon_url?: string | null;
+  embed_title?: string | null;
+  embed_title_url?: string | null;
+  embed_description?: string | null;
+  embed_color?: string | null;
+  embed_image_url?: string | null;
+  embed_thumbnail_url?: string | null;
+  embed_footer_text?: string | null;
+  embed_footer_icon_url?: string | null;
 }
 
 // ============ VERIFICATION TOKENS ============
@@ -271,10 +279,14 @@ export interface SubdivisionTemplate {
   faction_type_id: number;
   name: string;
   description: string | null;
+  short_description: string | null;
+  logo_url: string | null;
+  discord_role_id: string | null;
   embed_author_name: string | null;
   embed_author_url: string | null;
   embed_author_icon_url: string | null;
   embed_title: string | null;
+  embed_title_url: string | null;
   embed_description: string | null;
   embed_color: string | null;
   embed_image_url: string | null;
@@ -291,11 +303,13 @@ export interface CreateSubdivisionTemplateDTO {
   name: string;
   description?: string;
   display_order?: number;
+  discord_role_id?: string;
   // Все embed поля опциональны
   embed_author_name?: string;
   embed_author_url?: string;
   embed_author_icon_url?: string;
   embed_title?: string;
+  embed_title_url?: string;
   embed_description?: string;
   embed_color?: string;
   embed_image_url?: string;
@@ -307,11 +321,15 @@ export interface CreateSubdivisionTemplateDTO {
 export interface UpdateSubdivisionTemplateDTO {
   name?: string;
   description?: string;
+  short_description?: string | null;
+  logo_url?: string | null;
+  discord_role_id?: string | null;
   display_order?: number;
   embed_author_name?: string;
   embed_author_url?: string;
   embed_author_icon_url?: string;
   embed_title?: string;
+  embed_title_url?: string;
   embed_description?: string;
   embed_color?: string;
   embed_image_url?: string;
@@ -365,6 +383,9 @@ export interface CreateSubdivisionChangeData {
 export interface UpdateSubdivisionChangeData {
   name?: string;
   description?: string;
+  short_description?: string | null;
+  logo_url?: string | null;
+  discord_role_id?: string | null;
 }
 
 export interface DeleteSubdivisionChangeData {
@@ -372,6 +393,7 @@ export interface DeleteSubdivisionChangeData {
 }
 
 export interface UpdateEmbedChangeData {
+  name?: string;
   embed_author_name?: string;
   embed_author_url?: string;
   embed_author_icon_url?: string;
@@ -382,6 +404,10 @@ export interface UpdateEmbedChangeData {
   embed_thumbnail_url?: string;
   embed_footer_text?: string;
   embed_footer_icon_url?: string;
+  // Настройки подразделения (могут быть изменены вместе с embed)
+  short_description?: string | null;
+  logo_url?: string | null;
+  discord_role_id?: string | null;
 }
 
 // ============ EXTENDED TYPES FOR NEW FEATURES ============

@@ -25,7 +25,7 @@ class VkBot {
   private registerEventHandlers() {
     // Логирование всех входящих обновлений для отладки
     this.vk.updates.use(async (context, next) => {
-      logger.info('VK update received', {
+      logger.debug('VK update received', {
         type: context.type,
         subTypes: context.subTypes,
       });
@@ -49,13 +49,6 @@ class VkBot {
 
     // Обработка текстовых сообщений и приглашения бота в беседу
     this.vk.updates.on('message_new', async (context) => {
-      // Проверка приглашения бота в беседу
-      const action = (context as any).messagePayload?.source_act
-        || (context as any).$groupId
-        ? undefined
-        : undefined;
-
-      // vk-io: action доступен через context.eventPayload или напрямую
       const msgAction = (context as any).action;
       if (msgAction && msgAction.type === 'chat_invite_user') {
         // Проверяем, что пригласили именно нашего бота (group id с минусом)

@@ -1,7 +1,7 @@
 import { VK } from 'vk-io';
 import logger from '../../utils/logger';
 import { Callout, Subdivision } from '../../types/database.types';
-import { buildCalloutKeyboard } from './keyboard-builder';
+import { buildDetailedCalloutKeyboard } from './keyboard-builder';
 import { EMOJI } from '../../config/constants';
 
 /**
@@ -21,15 +21,15 @@ export async function sendCalloutNotification(
     // Форматировать сообщение
     const message = formatCalloutMessage(callout, subdivision);
 
-    // Создать клавиатуру с кнопкой
-    const keyboard = buildCalloutKeyboard(callout.id, subdivision.id);
+    // Создать клавиатуру с кнопками
+    const keyboard = buildDetailedCalloutKeyboard(callout.id, subdivision.id);
 
     // Отправить сообщение
     const response = await vk.api.messages.send({
       peer_id: parseInt(chatId),
       message: message,
       keyboard: keyboard,
-      random_id: Math.floor(Math.random() * 1000000000),
+      random_id: Date.now() + Math.floor(Math.random() * 100000),
     });
 
     // VK API возвращает число или объект в зависимости от параметров
@@ -94,7 +94,7 @@ export async function sendConfirmation(
     await vk.api.messages.send({
       user_id: userId,
       message: text,
-      random_id: Math.floor(Math.random() * 1000000000),
+      random_id: Date.now() + Math.floor(Math.random() * 100000),
     });
 
     logger.info('VK confirmation sent', { userId });

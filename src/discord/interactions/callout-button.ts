@@ -3,14 +3,11 @@ import {
   StringSelectMenuBuilder,
   ActionRowBuilder,
   MessageFlags,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import SubdivisionService from '../../services/subdivision.service';
-import { EMOJI, LIMITS, MESSAGES } from '../../config/constants';
+import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { buildSubdivisionEmbeds } from '../utils/subdivision-embed-builder';
 
@@ -51,62 +48,7 @@ export async function handleCreateCalloutButton(
       );
     }
 
-    // Если активное подразделение только одно - сразу показать модалку
-    if (subdivisions.length === 1) {
-      const subdivision = subdivisions[0];
-
-      logger.info('Only one active subdivision, showing modal directly', {
-        userId: interaction.user.id,
-        subdivisionId: subdivision.id,
-        subdivisionName: subdivision.name,
-      });
-
-      // Сохранить выбор в модуле subdivision-select
-      const { subdivisionSelections, SELECTION_TTL_MS } = await import('./subdivision-select');
-      subdivisionSelections.set(interaction.user.id, {
-        subdivisionId: subdivision.id,
-        expiresAt: Date.now() + SELECTION_TTL_MS,
-      });
-
-      // Создать модальное окно
-      const modal = new ModalBuilder()
-        .setCustomId('callout_modal')
-        .setTitle('Создание каллаута');
-
-      const locationInput = new TextInputBuilder()
-        .setCustomId('location_input')
-        .setLabel('Место инцидента')
-        .setPlaceholder('Например: Grove Street, перекресток Main St.')
-        .setStyle(TextInputStyle.Short)
-        .setMinLength(LIMITS.LOCATION_MIN)
-        .setMaxLength(LIMITS.LOCATION_MAX)
-        .setRequired(true);
-
-      const descriptionInput = new TextInputBuilder()
-        .setCustomId('description_input')
-        .setLabel('Подробности инцидента')
-        .setPlaceholder('Опишите ситуацию подробно...')
-        .setStyle(TextInputStyle.Paragraph)
-        .setMinLength(LIMITS.DESCRIPTION_MIN)
-        .setMaxLength(LIMITS.DESCRIPTION_MAX)
-        .setRequired(true);
-
-      const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(locationInput);
-      const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput);
-
-      modal.addComponents(row1, row2);
-
-      await interaction.showModal(modal);
-
-      logger.info('Callout modal shown directly (single subdivision)', {
-        userId: interaction.user.id,
-        subdivisionId: subdivision.id,
-      });
-
-      return;
-    }
-
-    // Несколько подразделений - показать меню выбора
+    // Показать меню выбора подразделения
     logger.info('Creating subdivision select menu', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
@@ -123,7 +65,7 @@ export async function handleCreateCalloutButton(
       .addOptions(
         subdivisions.map((subdivision: any) => ({
           label: (subdivision.is_accepting_callouts ? '' : '⏸️ ') + subdivision.name,
-          description: subdivision.description || 'Нет описания',
+          description: subdivision.short_description || subdivision.description || 'Нет описания',
           value: subdivision.id.toString(),
           emoji: subdivision.is_accepting_callouts ? '🏢' : undefined,
         }))

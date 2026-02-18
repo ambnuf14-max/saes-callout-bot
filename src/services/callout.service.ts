@@ -86,9 +86,10 @@ export class CalloutService {
       );
     }
 
+    let callout: Callout | undefined;
     try {
       // 1. Создать запись в БД
-      const callout = await CalloutModel.create(data);
+      callout = await CalloutModel.create(data);
 
       logger.info('Callout created in database', {
         calloutId: callout.id,
@@ -145,9 +146,11 @@ export class CalloutService {
       };
       await logAuditEvent(guild, AuditEventType.CALLOUT_CREATED, auditData);
 
-      // Отправить уведомления в VK и Telegram (не критично, ошибки обрабатываются внутри)
-      await NotificationService.notifyVkAboutCallout(callout, subdivision);
-      await NotificationService.notifyTelegramAboutCallout(callout, subdivision);
+      // Отправить уведомления в VK и Telegram параллельно (не критично, ошибки обрабатываются внутри)
+      await Promise.all([
+        NotificationService.notifyVkAboutCallout(callout, subdivision),
+        NotificationService.notifyTelegramAboutCallout(callout, subdivision),
+      ]);
 
       // Получить обновленный каллаут
       const updatedCallout = await CalloutModel.findById(callout.id);
@@ -164,8 +167,18 @@ export class CalloutService {
         authorId: data.author_id,
       });
 
-      // Попытаться удалить каллаут из БД если что-то пошло не так
-      // (канал удалится автоматически при следующей попытке или вручную)
+      // Удалить осиротевшую запись каллаута из БД
+      if (callout) {
+        try {
+          await CalloutModel.delete(callout.id);
+          logger.info('Cleaned up orphaned callout from DB', { calloutId: callout.id });
+        } catch (cleanupError) {
+          logger.error('Failed to cleanup orphaned callout', {
+            error: cleanupError instanceof Error ? cleanupError.message : cleanupError,
+            calloutId: callout.id,
+          });
+        }
+      }
 
       throw error;
     }
@@ -395,8 +408,7 @@ export class CalloutService {
    * Получить количество активных каллаутов (для всех серверов)
    */
   static async getActiveCalloutsCount(): Promise<number> {
-    const callouts = await CalloutModel.findActive();
-    return callouts.length;
+    return await CalloutModel.countActive();
   }
 }
 

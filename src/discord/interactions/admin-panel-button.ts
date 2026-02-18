@@ -34,7 +34,14 @@ import {
   buildPendingChangesPanel,
   buildReviewChangePanel,
   buildTemplateEditorPanel,
+  buildFactionSubdivisionsPanel,
+  buildTemplateRolePanel,
+  buildAdminSubdivisionSettingsPanel,
+  buildAdminSubdivisionEditorPanel,
+  buildAdminSubEditorRolePanel,
 } from '../utils/admin-panel-builder';
+import { buildSubdivisionSettingsModal } from '../utils/subdivision-settings-helper';
+import { SubdivisionService } from '../../services/subdivision.service';
 import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { EMOJI } from '../../config/constants';
@@ -125,9 +132,24 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     'template_edit_footer_',
     'template_edit_image_',
     'template_edit_thumbnail_',
+    'template_edit_short_desc_',
+    'template_edit_logo_',
+    'admin_fact_step3_type_',
+    'admin_fact_step3_no_type',
+    'admin_sub_edit_name_',
+    'admin_sub_edit_logo_',
+    'admin_sub_edit_short_desc_',
+    'admin_sub_edit_author_',
+    'admin_sub_edit_title_',
+    'admin_sub_edit_thumbnail_',
+    'admin_sub_edit_description_',
+    'admin_sub_edit_image_',
+    'admin_sub_edit_color_',
+    'admin_sub_edit_footer_',
   ];
   const isModalButton = modalButtons.some(prefix => customId === prefix || customId.startsWith(prefix)) ||
-    customId.startsWith('admin_edit_faction_');
+    customId.startsWith('admin_edit_faction_') ||
+    customId.startsWith('admin_sub_other_settings_');
 
   // Немедленно подтвердить взаимодействие (только если это НЕ модальная кнопка)
   if (!isModalButton) {
@@ -283,40 +305,20 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setMaxLength(200)
         .setValue(faction.description || '');
 
+      const logoInput = new TextInputBuilder()
+        .setCustomId('faction_logo_url')
+        .setLabel('Эмодзи фракции (ID, <:name:id> или 🏢)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(faction.logo_url || '');
+
       modal.addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
         new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(logoInput),
       );
 
       await interaction.showModal(modal);
-    }
-
-    // Переключение разрешения на создание подразделений
-    else if (customId.startsWith('admin_toggle_allow_create_')) {
-      const factionId = parseInt(customId.replace('admin_toggle_allow_create_', ''));
-      const faction = await FactionService.getFactionById(factionId);
-
-      if (!faction) {
-        await interaction.editReply({
-          content: `${EMOJI.ERROR} Фракция не найдена`,
-          embeds: [],
-          components: [],
-        });
-        return;
-      }
-
-      // Переключить allow_create_subdivisions
-      await FactionService.updateFaction(factionId, {
-        allow_create_subdivisions: !faction.allow_create_subdivisions,
-      });
-
-      const updated = await FactionService.getFactionById(factionId);
-      if (!updated) {
-        throw new Error('Failed to retrieve updated faction');
-      }
-
-      const panel = buildFactionDetailPanel(updated);
-      await interaction.editReply(panel);
     }
 
     // Удаление фракции — показать подтверждение
@@ -361,6 +363,473 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
       // Вернуться к списку
       const panel = await buildFactionsSection(server);
+      await interaction.editReply(panel);
+    }
+
+    // === Управление подразделениями фракции (прямое редактирование) ===
+
+    // Открыть список подразделений фракции
+    else if (customId.startsWith('admin_faction_subdivisions_')) {
+      const factionId = parseInt(customId.replace('admin_faction_subdivisions_', ''));
+      const faction = await FactionService.getFactionById(factionId);
+      if (!faction) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Фракция не найдена`, embeds: [], components: [] });
+        return;
+      }
+      const { SubdivisionModel } = await import('../../database/models');
+      const allSubs = await SubdivisionModel.findByFactionId(factionId);
+      const nonDefault = allSubs.filter((s: any) => !s.is_default);
+      const panel = buildFactionSubdivisionsPanel(faction, nonDefault);
+      await interaction.editReply(panel);
+    }
+
+    // Открыть редактор подразделения (полный embed-редактор, прямое сохранение)
+    else if (customId.startsWith('admin_edit_sub_settings_')) {
+      const subdivisionId = parseInt(customId.replace('admin_edit_sub_settings_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subdivisionId);
+      const panel = await buildAdminSubdivisionEditorPanel(subdivision.faction_id, subdivision, draft);
+      await interaction.editReply(panel);
+    }
+
+    // Кнопка "Очистить роль" в панели настроек подразделения (прямое обновление без pending)
+    else if (customId.startsWith('admin_sub_role_clear_')) {
+      const subdivisionId = parseInt(customId.replace('admin_sub_role_clear_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+      await SubdivisionService.updateSubdivision(subdivisionId, { discord_role_id: undefined });
+      const updated = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (updated) {
+        const panel = buildAdminSubdivisionSettingsPanel(updated, updated.faction_id);
+        await interaction.editReply(panel);
+      }
+    }
+
+    // Кнопка "Описание / Эмодзи" — открывает модал (без discord_role_id, только short_description + logo_url)
+    else if (customId.startsWith('admin_sub_other_settings_')) {
+      const subdivisionId = parseInt(customId.replace('admin_sub_other_settings_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+      const modal = buildSubdivisionSettingsModal(subdivision, `admin_modal_sub_settings_${subdivisionId}`);
+      await interaction.showModal(modal);
+    }
+
+    // === Редактор подразделения (admin, draft-based, прямое сохранение) ===
+
+    // Редактирование названия подразделения
+    else if (customId.startsWith('admin_sub_edit_name_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_name_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_name_${subId}`)
+        .setTitle('Редактирование названия');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('sub_name')
+        .setLabel('Название подразделения')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMinLength(2)
+        .setMaxLength(50)
+        .setValue(draft?.name ?? subdivision?.name ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование эмодзи подразделения
+    else if (customId.startsWith('admin_sub_edit_logo_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_logo_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_logo_${subId}`)
+        .setTitle('Эмодзи подразделения');
+
+      const input = new TextInputBuilder()
+        .setCustomId('logo_url')
+        .setLabel('Эмодзи подразделения')
+        .setPlaceholder('ID, <:name:id> или 🏢')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.logo_url ?? subdivision?.logo_url ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование краткого описания подразделения
+    else if (customId.startsWith('admin_sub_edit_short_desc_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_short_desc_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_short_desc_${subId}`)
+        .setTitle('Краткое описание подразделения');
+
+      const input = new TextInputBuilder()
+        .setCustomId('short_description')
+        .setLabel('Краткое описание')
+        .setPlaceholder('Отображается в списке каллаутов (до 100 символов)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(100)
+        .setValue(draft?.short_description ?? subdivision?.short_description ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование автора embed подразделения
+    else if (customId.startsWith('admin_sub_edit_author_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_author_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_author_${subId}`)
+        .setTitle('Редактирование автора Embed');
+
+      const authorNameInput = new TextInputBuilder()
+        .setCustomId('embed_author_name')
+        .setLabel('Имя автора')
+        .setPlaceholder('Название организации')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(256)
+        .setValue(draft?.embed_author_name ?? subdivision?.embed_author_name ?? '');
+
+      const authorUrlInput = new TextInputBuilder()
+        .setCustomId('embed_author_url')
+        .setLabel('URL автора (опционально)')
+        .setPlaceholder('https://example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_author_url ?? subdivision?.embed_author_url ?? '');
+
+      const authorIconInput = new TextInputBuilder()
+        .setCustomId('embed_author_icon_url')
+        .setLabel('URL иконки автора (опционально)')
+        .setPlaceholder('https://example.com/icon.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_author_icon_url ?? subdivision?.embed_author_icon_url ?? '');
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorNameInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorUrlInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(authorIconInput),
+      );
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование заголовка embed подразделения
+    else if (customId.startsWith('admin_sub_edit_title_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_title_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_title_${subId}`)
+        .setTitle('Редактирование заголовка Embed');
+
+      const titleInput = new TextInputBuilder()
+        .setCustomId('embed_title')
+        .setLabel('Заголовок Embed')
+        .setPlaceholder('Оставьте пустым для использования названия')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(256)
+        .setValue(draft?.embed_title ?? subdivision?.embed_title ?? '');
+
+      const titleUrlInput = new TextInputBuilder()
+        .setCustomId('embed_title_url')
+        .setLabel('URL заголовка (кликабельная ссылка)')
+        .setPlaceholder('https://example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_title_url ?? subdivision?.embed_title_url ?? '');
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(titleUrlInput),
+      );
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование миниатюры embed подразделения
+    else if (customId.startsWith('admin_sub_edit_thumbnail_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_thumbnail_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_thumbnail_${subId}`)
+        .setTitle('Редактирование миниатюры Embed');
+
+      const input = new TextInputBuilder()
+        .setCustomId('embed_thumbnail_url')
+        .setLabel('URL миниатюры')
+        .setPlaceholder('https://example.com/thumbnail.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_thumbnail_url ?? subdivision?.embed_thumbnail_url ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование описания embed подразделения
+    else if (customId.startsWith('admin_sub_edit_description_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_description_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_description_${subId}`)
+        .setTitle('Редактирование описания Embed');
+
+      const input = new TextInputBuilder()
+        .setCustomId('embed_description')
+        .setLabel('Описание Embed')
+        .setPlaceholder('Описание каллаута для этого подразделения')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(4000)
+        .setValue(draft?.embed_description ?? subdivision?.embed_description ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование изображения embed подразделения
+    else if (customId.startsWith('admin_sub_edit_image_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_image_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_image_${subId}`)
+        .setTitle('Редактирование изображения Embed');
+
+      const input = new TextInputBuilder()
+        .setCustomId('embed_image_url')
+        .setLabel('URL изображения')
+        .setPlaceholder('https://example.com/image.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_image_url ?? subdivision?.embed_image_url ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование цвета embed подразделения
+    else if (customId.startsWith('admin_sub_edit_color_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_color_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_color_${subId}`)
+        .setTitle('Редактирование цвета Embed');
+
+      const input = new TextInputBuilder()
+        .setCustomId('embed_color')
+        .setLabel('Цвет Embed (HEX)')
+        .setPlaceholder('#FF5733 или FF5733')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMinLength(6)
+        .setMaxLength(7)
+        .setValue(draft?.embed_color ?? subdivision?.embed_color ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование футера embed подразделения
+    else if (customId.startsWith('admin_sub_edit_footer_')) {
+      const subId = parseInt(customId.replace('admin_sub_edit_footer_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_edit_footer_${subId}`)
+        .setTitle('Редактирование футера Embed');
+
+      const footerTextInput = new TextInputBuilder()
+        .setCustomId('embed_footer_text')
+        .setLabel('Текст футера')
+        .setPlaceholder('Нижний текст Embed')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(2048)
+        .setValue(draft?.embed_footer_text ?? subdivision?.embed_footer_text ?? '');
+
+      const footerIconInput = new TextInputBuilder()
+        .setCustomId('embed_footer_icon_url')
+        .setLabel('URL иконки футера (опционально)')
+        .setPlaceholder('https://example.com/icon.png')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(draft?.embed_footer_icon_url ?? subdivision?.embed_footer_icon_url ?? '');
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(footerTextInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(footerIconInput),
+      );
+      await interaction.showModal(modal);
+    }
+
+    // Кнопка "Роль" в редакторе подразделения — переход на панель выбора роли
+    else if (customId.startsWith('admin_sub_edit_role_')) {
+      const parts = customId.replace('admin_sub_edit_role_', '').split('_');
+      const factionId = parseInt(parts[0]);
+      const subId = parseInt(parts[1]);
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subId);
+      const draftRoleId = draft?.discord_role_id;
+      const panel = await buildAdminSubEditorRolePanel(factionId, subId, draftRoleId);
+      await interaction.editReply(panel);
+    }
+
+    // Кнопка "Назад к редактору" из панели выбора роли подразделения
+    else if (customId.startsWith('admin_sub_editor_role_back_')) {
+      const parts = customId.replace('admin_sub_editor_role_back_', '').split('_');
+      const factionId = parseInt(parts[0]);
+      const subId = parseInt(parts[1]);
+      const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draftData = getAdminSubDraft(subId);
+      const panel = await buildAdminSubdivisionEditorPanel(factionId, subdivision, draftData);
+      await interaction.editReply(panel);
+    }
+
+    // Кнопка "Очистить роль" в панели выбора роли подразделения
+    else if (customId.startsWith('admin_sub_editor_role_clear_')) {
+      const parts = customId.replace('admin_sub_editor_role_clear_', '').split('_');
+      const factionId = parseInt(parts[0]);
+      const subId = parseInt(parts[1]);
+      const { setAdminSubDraft } = await import('./admin-panel-modal');
+      setAdminSubDraft(subId, { discord_role_id: null });
+      const panel = await buildAdminSubEditorRolePanel(factionId, subId, null);
+      await interaction.editReply(panel);
+    }
+
+    // Сохранение изменений подразделения (применить draft в БД)
+    else if (customId.startsWith('admin_sub_editor_save_')) {
+      const parts = customId.replace('admin_sub_editor_save_', '').split('_');
+      const factionId = parseInt(parts[0]);
+      const subId = parseInt(parts[1]);
+
+      const { getAdminSubDraft, clearAdminSubDraft } = await import('./admin-panel-modal');
+      const draftData = getAdminSubDraft(subId);
+
+      if (!draftData || Object.keys(draftData).length === 0) {
+        await interaction.editReply({
+          content: `${EMOJI.WARNING} Нет изменений для сохранения`,
+          embeds: [],
+          components: [],
+        });
+        return;
+      }
+
+      await SubdivisionService.updateSubdivision(subId, draftData as any);
+      clearAdminSubDraft(subId);
+
+      logger.info('Subdivision updated via admin editor', {
+        subdivisionId: subId,
+        factionId,
+        userId: interaction.user.id,
+        changes: Object.keys(draftData),
+      });
+
+      // Вернуться к списку подразделений
+      const faction = await FactionService.getFactionById(factionId);
+      if (!faction) {
+        throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+      }
+      const { SubdivisionModel } = await import('../../database/models');
+      const allSubs = await SubdivisionModel.findByFactionId(factionId);
+      const nonDefault = allSubs.filter((s: any) => !s.is_default);
+      const panel = buildFactionSubdivisionsPanel(faction, nonDefault);
+      await interaction.editReply(panel);
+
+      await interaction.followUp({
+        content: `${EMOJI.SUCCESS} Подразделение успешно обновлено!`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Кнопка "Роль" в редакторе шаблона — переход на панель выбора роли
+    else if (customId.startsWith('template_set_role_')) {
+      const parts = customId.replace('template_set_role_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      const { getTemplateDraft } = await import('./admin-panel-modal');
+      const draft = getTemplateDraft(typeId, templateId);
+      const draftRoleId = draft?.discord_role_id;
+      const panel = await buildTemplateRolePanel(typeId, templateId, draftRoleId);
+      await interaction.editReply(panel);
+    }
+
+    // Кнопка "Назад к шаблону" в панели выбора роли шаблона
+    else if (customId.startsWith('admin_template_role_back_')) {
+      const parts = customId.replace('admin_template_role_back_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      const { getTemplateDraft } = await import('./admin-panel-modal');
+      const draftData = getTemplateDraft(typeId, templateId);
+      const panel = await buildTemplateEditorPanel(typeId, templateId, draftData || undefined);
+      await interaction.editReply(panel);
+    }
+
+    // Кнопка "Очистить роль" в панели выбора роли шаблона
+    else if (customId.startsWith('admin_template_role_clear_')) {
+      const parts = customId.replace('admin_template_role_clear_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      const { setTemplateDraft } = await import('./admin-panel-modal');
+      setTemplateDraft(typeId, templateId, { discord_role_id: null });
+      const panel = await buildTemplateRolePanel(typeId, templateId, null);
+      await interaction.editReply(panel);
+    }
+
+    // Обработчик кнопки "Назад" из панели подразделений к деталям фракции
+    else if (customId.startsWith('admin_faction_')) {
+      const factionId = parseInt(customId.replace('admin_faction_', ''));
+      const faction = await FactionService.getFactionById(factionId);
+      if (!faction) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Фракция не найдена`, embeds: [], components: [] });
+        return;
+      }
+      const panel = buildFactionDetailPanel(faction);
       await interaction.editReply(panel);
     }
 
@@ -571,7 +1040,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.showModal(modal);
     }
 
-    // Редактирование заголовка embed
+    // Редактирование заголовка embed (объединённый модал: заголовок + URL заголовка)
     else if (customId.startsWith('template_edit_title_')) {
       const parts = customId.replace('template_edit_title_', '').split('_');
       const typeId = parseInt(parts[0]);
@@ -589,7 +1058,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setRequired(false)
         .setMaxLength(256);
 
-      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput));
+      const titleUrlInput = new TextInputBuilder()
+        .setCustomId('embed_title_url')
+        .setLabel('URL заголовка (кликабельная ссылка)')
+        .setPlaceholder('https://example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(titleUrlInput),
+      );
       await interaction.showModal(modal);
     }
 
@@ -622,7 +1101,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setPlaceholder('Описание каллаута для этого подразделения')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
-        .setMaxLength(4096);
+        .setMaxLength(4000);
 
       modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(descInput));
       await interaction.showModal(modal);
@@ -762,6 +1241,57 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         .setRequired(false);
 
       modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(thumbnailInput));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование краткого описания шаблона
+    else if (customId.startsWith('template_edit_short_desc_')) {
+      const parts = customId.replace('template_edit_short_desc_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const { SubdivisionTemplateModel } = await import('../../database/models/SubdivisionTemplate');
+      const template = await SubdivisionTemplateModel.findById(templateId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_short_desc_${typeId}_${templateId}`)
+        .setTitle('Краткое описание шаблона');
+
+      const input = new TextInputBuilder()
+        .setCustomId('short_description')
+        .setLabel('Краткое описание')
+        .setPlaceholder('Отображается в списке каллаутов (до 100 символов)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(100)
+        .setValue(template?.short_description ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      await interaction.showModal(modal);
+    }
+
+    // Редактирование логотипа шаблона
+    else if (customId.startsWith('template_edit_logo_')) {
+      const parts = customId.replace('template_edit_logo_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+
+      const { SubdivisionTemplateModel } = await import('../../database/models/SubdivisionTemplate');
+      const template = await SubdivisionTemplateModel.findById(templateId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`template_modal_logo_${typeId}_${templateId}`)
+        .setTitle('Эмодзи шаблона');
+
+      const input = new TextInputBuilder()
+        .setCustomId('logo_url')
+        .setLabel('Эмодзи шаблона')
+        .setPlaceholder('ID, <:name:id> или 🏢')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(template?.logo_url ?? '');
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
       await interaction.showModal(modal);
     }
 
@@ -1210,6 +1740,68 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       await interaction.editReply({ embeds: [embed], components: rows });
     }
 
+    // Выбор роли для шаблона подразделения
+    else if (customId.startsWith('admin_template_role_')) {
+      const parts = customId.replace('admin_template_role_', '').split('_');
+      const typeId = parseInt(parts[0]);
+      const templateId = parseInt(parts[1]);
+      const roleId = interaction.values[0];
+
+      const { setTemplateDraft } = await import('./admin-panel-modal');
+      setTemplateDraft(typeId, templateId, { discord_role_id: roleId });
+
+      logger.info('Template role set via admin panel', { templateId, roleId, userId: interaction.user.id });
+
+      const panel = await buildTemplateRolePanel(typeId, templateId, roleId);
+      await interaction.editReply(panel);
+
+      await interaction.followUp({
+        content: `${EMOJI.SUCCESS} Роль <@&${roleId}> установлена. Нажмите "Сохранить" в редакторе шаблона.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Выбор роли для подразделения в редакторе (draft-based, сохраняется вместе с остальными данными)
+    else if (customId.startsWith('admin_sub_editor_role_')) {
+      const parts = customId.replace('admin_sub_editor_role_', '').split('_');
+      const factionId = parseInt(parts[0]);
+      const subId = parseInt(parts[1]);
+      const roleId = interaction.values[0];
+
+      const { setAdminSubDraft } = await import('./admin-panel-modal');
+      setAdminSubDraft(subId, { discord_role_id: roleId });
+
+      logger.info('Admin sub editor role set via draft', { subdivisionId: subId, roleId, userId: interaction.user.id });
+
+      const panel = await buildAdminSubEditorRolePanel(factionId, subId, roleId);
+      await interaction.editReply(panel);
+
+      await interaction.followUp({
+        content: `${EMOJI.SUCCESS} Роль <@&${roleId}> установлена. Нажмите "Назад к редактору" и "Сохранить" для применения.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Выбор роли для подразделения (прямое обновление администратором без pending)
+    else if (customId.startsWith('admin_sub_role_')) {
+      const subdivisionId = parseInt(customId.replace('admin_sub_role_', ''));
+      const roleId = interaction.values[0];
+
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+
+      await SubdivisionService.updateSubdivision(subdivisionId, { discord_role_id: roleId });
+      logger.info('Subdivision role set directly via admin panel', { subdivisionId, roleId, userId: interaction.user.id });
+
+      const updated = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (updated) {
+        const panel = buildAdminSubdivisionSettingsPanel(updated, updated.faction_id);
+        await interaction.editReply(panel);
+      }
+    }
+
   } catch (error) {
     logger.error('Error handling admin role select', {
       error: error instanceof Error ? error.message : error,
@@ -1310,8 +1902,38 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
   const customId = interaction.customId;
 
   try {
+    // Выбор типа фракции для просмотра
+    if (customId === 'admin_select_fact_type') {
+      const typeId = parseInt(interaction.values[0]);
+      const panel = await buildFactionTypeDetailPanel(typeId);
+      await interaction.editReply(panel);
+    }
+
+    // Выбор шаблона подразделения для редактирования
+    else if (customId.startsWith('admin_select_template_')) {
+      const typeId = parseInt(customId.replace('admin_select_template_', ''));
+      const templateId = parseInt(interaction.values[0]);
+      const panel = await buildTemplateEditorPanel(typeId, templateId);
+      await interaction.editReply(panel);
+    }
+
+    // Выбор подразделения для редактирования (из StringSelectMenu в панели подразделений фракции)
+    else if (customId.startsWith('admin_sub_select_')) {
+      const factionId = parseInt(customId.replace('admin_sub_select_', ''));
+      const subdivisionId = parseInt(interaction.values[0]);
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
+        return;
+      }
+      const { getAdminSubDraft } = await import('./admin-panel-modal');
+      const draft = getAdminSubDraft(subdivisionId);
+      const panel = await buildAdminSubdivisionEditorPanel(factionId, subdivision, draft);
+      await interaction.editReply(panel);
+    }
+
     // Выбор фракции для просмотра
-    if (customId === 'admin_select_faction') {
+    else if (customId === 'admin_select_faction') {
       const factionId = parseInt(interaction.values[0]);
       const faction = await FactionService.getFactionById(factionId);
 

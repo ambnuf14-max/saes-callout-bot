@@ -50,10 +50,13 @@ export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): E
 
   // Добавить информацию о закрытии, если каллаут закрыт
   if (!isActive && callout.closed_by) {
+    const closedByValue = callout.closed_by === 'system'
+      ? 'System (авто-закрытие)'
+      : `<@${callout.closed_by}>`;
     embed.addFields([
       {
         name: `${EMOJI.INFO} Закрыл`,
-        value: `<@${callout.closed_by}>`,
+        value: closedByValue,
         inline: true,
       },
     ]);
@@ -77,8 +80,11 @@ export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): E
  */
 export function buildResponseEmbed(
   response: CalloutResponse,
-  subdivision: Subdivision
+  subdivision: Subdivision,
+  platform: 'vk' | 'telegram' = 'vk'
 ): EmbedBuilder {
+  const platformName = platform === 'vk' ? 'VK' : 'Telegram';
+
   return new EmbedBuilder()
     .setTitle(`${EMOJI.SUCCESS} Подразделение отреагировало`)
     .setColor(COLORS.ACTIVE)
@@ -89,7 +95,7 @@ export function buildResponseEmbed(
         inline: true,
       },
       {
-        name: 'Ответил (VK)',
+        name: `Ответил (${platformName})`,
         value: response.vk_user_name,
         inline: true,
       },
@@ -99,7 +105,7 @@ export function buildResponseEmbed(
         inline: true,
       },
     ])
-    .setFooter({ text: 'Ответ из VK' })
+    .setFooter({ text: `Ответ из ${platformName}` })
     .setTimestamp(new Date(response.created_at));
 }
 
@@ -110,20 +116,9 @@ export function buildClosedCalloutEmbed(
   callout: Callout,
   subdivision: Subdivision
 ): EmbedBuilder {
-  const embed = buildCalloutEmbed(callout, subdivision);
-
-  // Изменить цвет на красный
-  embed.setColor(COLORS.CLOSED);
-
-  // Обновить статус
-  const statusFieldIndex = embed.data.fields?.findIndex((f) =>
-    f.name.includes('Статус')
-  );
-  if (statusFieldIndex !== undefined && statusFieldIndex >= 0 && embed.data.fields) {
-    embed.data.fields[statusFieldIndex].value = 'Closed';
-  }
-
-  return embed;
+  // buildCalloutEmbed уже корректно обрабатывает закрытый статус:
+  // устанавливает цвет COLORS.CLOSED, статус "Closed", поля "Закрыл" и "Причина"
+  return buildCalloutEmbed(callout, subdivision);
 }
 
 /**
@@ -138,13 +133,18 @@ export function addResponsesToEmbed(
     return embed;
   }
 
-  const responseText = responses
+  let responseText = responses
     .map((r) => {
       const subdiv = subdivisions.get(r.subdivision_id);
       const subdivName = subdiv?.name || 'Unknown';
       return `• **${subdivName}** - ${r.vk_user_name} (${getResponseTypeLabel(r.response_type)})`;
     })
     .join('\n');
+
+  // Discord ограничивает значение поля embed до 1024 символов
+  if (responseText.length > 1024) {
+    responseText = responseText.substring(0, 1021) + '...';
+  }
 
   embed.addFields([
     {

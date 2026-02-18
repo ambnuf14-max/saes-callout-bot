@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import logger from '../../utils/logger';
 import SyncService from '../../services/sync.service';
-import { CalloutResponsePayload } from '../utils/keyboard-builder';
+import { CalloutResponsePayload, parseCompactCallbackData } from '../utils/keyboard-builder';
 import { handleTelegramError } from '../../utils/error-handler';
 import { EMOJI } from '../../config/constants';
 
@@ -33,21 +33,8 @@ export async function handleCallbackQuery(
       return;
     }
 
-    // Парсинг payload
-    let payload: CalloutResponsePayload;
-    try {
-      payload = JSON.parse(query.data);
-    } catch (error) {
-      logger.warn('Invalid callback payload JSON', {
-        data: query.data,
-        error,
-      });
-      await bot.answerCallbackQuery(query.id, {
-        text: `${EMOJI.ERROR} Ошибка парсинга данных`,
-        show_alert: true,
-      });
-      return;
-    }
+    // Парсинг payload (поддерживает компактный формат r:id:id:type и JSON fallback)
+    const payload = parseCompactCallbackData(query.data);
 
     if (!payload || payload.action !== 'respond') {
       logger.warn('Invalid callback payload', { payload });
@@ -66,20 +53,26 @@ export async function handleCallbackQuery(
     });
 
     // Обработать ответ через SyncService
+    const responseType = payload.type || 'acknowledged';
     const response = await SyncService.handleTelegramResponse(
       payload,
       `telegram_${userId}`,
-      userName
+      userName,
+      responseType
     );
 
     logger.info('Telegram response processed successfully', {
       responseId: response.id,
       calloutId: payload.callout_id,
+      responseType,
     });
 
     // Отправить подтверждение пользователю
+    const answerText = responseType === 'on_way'
+      ? `${EMOJI.SUCCESS} Статус "В пути" отправлен в Discord!`
+      : `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`;
     await bot.answerCallbackQuery(query.id, {
-      text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`,
+      text: answerText,
       show_alert: false,
     });
   } catch (error) {

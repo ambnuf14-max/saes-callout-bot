@@ -60,28 +60,24 @@ const factionCommand: Command = {
 
       let panel;
 
-      // Получить дефолтное подразделение
-      const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
-      if (!defaultSubdivision) {
-        await interaction.editReply({
-          content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
-        });
-        return;
-      }
-
       // Подсчитать активные НЕ дефолтные подразделения
       const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(faction.id);
 
-      // Выбрать режим панели автоматически
-      if (activeNonDefaultCount === 0) {
-        // Нет активных обычных подразделений - показать standalone панель
-        panel = buildStandaloneMainPanel(faction, defaultSubdivision);
-      } else {
-        // Есть активные обычные подразделения - показать обычную панель
+      if (activeNonDefaultCount > 0) {
+        // Есть подразделения (в т.ч. из шаблонов типа) — показать обычную панель
         const allSubdivisions = await SubdivisionService.getSubdivisionsByFactionId(faction.id, true);
-        // Отфильтровать дефолтное подразделение
         const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
         panel = buildMainPanel(faction, subdivisions.length, subdivisions.length);
+      } else {
+        // Нет обычных подразделений — standalone режим, нужно дефолтное
+        const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
+        if (!defaultSubdivision) {
+          await interaction.editReply({
+            content: `${EMOJI.ERROR} Ошибка конфигурации: дефолтное подразделение не найдено. Обратитесь к администратору.`,
+          });
+          return;
+        }
+        panel = buildStandaloneMainPanel(faction, defaultSubdivision);
       }
 
       await interaction.editReply(panel);

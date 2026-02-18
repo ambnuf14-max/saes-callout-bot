@@ -5,11 +5,12 @@ import { Command } from '../types';
 import handleCreateCalloutButton from '../interactions/callout-button';
 import handleCalloutModalSubmit from '../interactions/callout-modal';
 import handleSubdivisionSelect from '../interactions/subdivision-select';
-import handleFactionPanelButton from '../interactions/faction-panel-button';
+import handleFactionPanelButton, { handleFactionRoleSelect, handleFactionSettingsRoleSelect, handleFactionSubdivisionSelect } from '../interactions/faction-panel-button';
 import handleFactionPanelModal from '../interactions/faction-panel-modal';
 import handleFactionSelect from '../interactions/faction-select';
 import { handleSetupModeSelect } from '../interactions/setup-mode-select';
 import { handleCloseCalloutButton, handleCloseCalloutModal } from '../interactions/close-callout-button';
+import handleHistoryButton from '../interactions/history-button';
 import {
   handleAdminPanelButton,
   handleAdminRoleSelect,
@@ -70,8 +71,10 @@ export default async function interactionCreateHandler(
         await handleCloseCalloutButton(interaction);
       } else if (interaction.customId.startsWith('admin_') || interaction.customId.startsWith('template_')) {
         await handleAdminPanelButton(interaction);
-      } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_')) {
+      } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_') || interaction.customId.startsWith('faction_')) {
         await handleFactionPanelButton(interaction);
+      } else if (interaction.customId.startsWith('history_')) {
+        await handleHistoryButton(interaction);
       }
       return;
     }
@@ -90,7 +93,7 @@ export default async function interactionCreateHandler(
         await handleCloseCalloutModal(interaction);
       } else if (interaction.customId.startsWith('admin_modal_') || interaction.customId.startsWith('template_modal_')) {
         await handleAdminPanelModal(interaction);
-      } else if (interaction.customId.startsWith('department_modal_') || interaction.customId.startsWith('subdivision_modal_')) {
+      } else if (interaction.customId.startsWith('department_modal_') || interaction.customId.startsWith('subdivision_modal_') || interaction.customId.startsWith('faction_modal_')) {
         await handleFactionPanelModal(interaction);
       }
       return;
@@ -104,7 +107,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId === 'subdivision_select') {
+      if (interaction.customId === 'subdivision_list_preview' || interaction.customId === 'template_list_preview') {
+        await interaction.deferUpdate();
+      } else if (interaction.customId === 'subdivision_select') {
         await handleSubdivisionSelect(interaction);
       } else if (interaction.customId.startsWith('setup_select_')) {
         await handleSetupModeSelect(interaction);
@@ -112,6 +117,8 @@ export default async function interactionCreateHandler(
         await handleAdminStringSelect(interaction);
       } else if (interaction.customId.startsWith('department_')) {
         await handleFactionSelect(interaction);
+      } else if (interaction.customId === 'faction_select_subdivision') {
+        await handleFactionSubdivisionSelect(interaction);
       }
       return;
     }
@@ -126,6 +133,10 @@ export default async function interactionCreateHandler(
 
       if (interaction.customId.startsWith('admin_')) {
         await handleAdminRoleSelect(interaction);
+      } else if (interaction.customId.startsWith('subdivision_role_')) {
+        await handleFactionRoleSelect(interaction);
+      } else if (interaction.customId.startsWith('faction_settings_role_')) {
+        await handleFactionSettingsRoleSelect(interaction);
       }
       return;
     }

@@ -19,6 +19,9 @@ interface Config {
   telegram: {
     token: string;
     botUsername: string;
+    webhookUrl: string | null;
+    webhookPort: number;
+    webhookSecret: string | null;
   };
 
   // Database
@@ -36,6 +39,7 @@ interface Config {
   features: {
     autoDeleteChannels: boolean;
     channelDeleteDelay: number;
+    calloutAutoCloseMs: number;
   };
 }
 
@@ -72,6 +76,9 @@ function getConfig(): Config {
     telegram: {
       token: process.env.TELEGRAM_BOT_TOKEN!,
       botUsername: process.env.TELEGRAM_BOT_USERNAME!,
+      webhookUrl: process.env.TELEGRAM_WEBHOOK_URL || null,
+      webhookPort: parseInt(process.env.TELEGRAM_WEBHOOK_PORT || '8443', 10),
+      webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || null,
     },
 
     database: {
@@ -86,6 +93,7 @@ function getConfig(): Config {
     features: {
       autoDeleteChannels: process.env.AUTO_DELETE_CHANNELS === 'true',
       channelDeleteDelay: parseInt(process.env.CHANNEL_DELETE_DELAY || '300000', 10),
+      calloutAutoCloseMs: parseInt(process.env.CALLOUT_AUTO_CLOSE_DELAY || '3600000', 10),
     },
   };
 }

@@ -111,6 +111,10 @@ export class CalloutModel {
       updates.push('vk_message_id = ?');
       params.push(data.vk_message_id);
     }
+    if (data.telegram_message_id !== undefined) {
+      updates.push('telegram_message_id = ?');
+      params.push(data.telegram_message_id);
+    }
     if (data.status !== undefined) {
       updates.push('status = ?');
       params.push(data.status);
@@ -176,26 +180,62 @@ export class CalloutModel {
     active: number;
     closed: number;
   }> {
-    const total = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM callouts WHERE server_id = ?',
-      [serverId]
-    );
-
-    const active = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM callouts WHERE server_id = ? AND status = ?',
-      [serverId, CALLOUT_STATUS.ACTIVE]
-    );
-
-    const closed = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM callouts WHERE server_id = ? AND status = ?',
-      [serverId, CALLOUT_STATUS.CLOSED]
+    const result = await database.get<{ total: number; active: number; closed: number }>(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as closed
+      FROM callouts WHERE server_id = ?`,
+      [CALLOUT_STATUS.ACTIVE, CALLOUT_STATUS.CLOSED, serverId]
     );
 
     return {
-      total: total?.count || 0,
-      active: active?.count || 0,
-      closed: closed?.count || 0,
+      total: result?.total || 0,
+      active: result?.active || 0,
+      closed: result?.closed || 0,
     };
+  }
+
+  /**
+   * Получить каллауты с фильтрацией и пагинацией
+   */
+  static async findFiltered(
+    serverId: number,
+    filters: { subdivisionId?: number; authorId?: string; status?: string },
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<{ callouts: Callout[]; total: number }> {
+    const conditions: string[] = ['server_id = ?'];
+    const params: any[] = [serverId];
+
+    if (filters.subdivisionId != null) {
+      conditions.push('subdivision_id = ?');
+      params.push(filters.subdivisionId);
+    }
+    if (filters.authorId != null) {
+      conditions.push('author_id = ?');
+      params.push(filters.authorId);
+    }
+    if (filters.status && filters.status !== 'all') {
+      conditions.push('status = ?');
+      params.push(filters.status);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const countResult = await database.get<{ count: number }>(
+      `SELECT COUNT(*) as count FROM callouts WHERE ${whereClause}`,
+      params
+    );
+    const total = countResult?.count || 0;
+
+    const offset = (page - 1) * pageSize;
+    const callouts = await database.all<Callout>(
+      `SELECT * FROM callouts WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset]
+    );
+
+    return { callouts, total };
   }
 
   /**
@@ -225,6 +265,17 @@ export class CalloutModel {
   }
 
   /**
+   * Найти активные каллауты, созданные раньше чем timeoutMs миллисекунд назад
+   */
+  static async findExpiredActive(timeoutMs: number): Promise<Callout[]> {
+    const cutoff = new Date(Date.now() - timeoutMs).toISOString();
+    return await database.all<Callout>(
+      'SELECT * FROM callouts WHERE status = ? AND created_at < ?',
+      [CALLOUT_STATUS.ACTIVE, cutoff]
+    );
+  }
+
+  /**
    * Получить все активные каллауты (для всех серверов)
    */
   static async findActive(): Promise<Callout[]> {
@@ -232,6 +283,17 @@ export class CalloutModel {
       'SELECT * FROM callouts WHERE status = ? ORDER BY created_at DESC',
       [CALLOUT_STATUS.ACTIVE]
     );
+  }
+
+  /**
+   * Получить количество активных каллаутов (для всех серверов)
+   */
+  static async countActive(): Promise<number> {
+    const result = await database.get<{ count: number }>(
+      'SELECT COUNT(*) as count FROM callouts WHERE status = ?',
+      [CALLOUT_STATUS.ACTIVE]
+    );
+    return result?.count || 0;
   }
 }
 

@@ -46,21 +46,27 @@ export async function handleCallbackEvent(
     });
 
     // Обработать ответ через SyncService
+    const responseType = payload.type || 'acknowledged';
     const response = await SyncService.handleVkResponse(
       payload,
       context.userId.toString(),
-      userName
+      userName,
+      responseType
     );
 
     logger.info('VK response processed successfully', {
       responseId: response.id,
       calloutId: payload.callout_id,
+      responseType,
     });
 
     // Отправить подтверждение пользователю
+    const snackbarText = responseType === 'on_way'
+      ? `${EMOJI.SUCCESS} Статус "В пути" отправлен в Discord!`
+      : `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`;
     await context.answerEvent({
       type: 'show_snackbar',
-      text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`,
+      text: snackbarText,
     });
   } catch (error) {
     logger.error('Error handling VK callback', {

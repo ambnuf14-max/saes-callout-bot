@@ -16,21 +16,23 @@ export class SubdivisionTemplateModel {
   static async create(data: CreateSubdivisionTemplateDTO): Promise<SubdivisionTemplate> {
     const result = await database.run(
       `INSERT INTO subdivision_templates (
-        faction_type_id, name, description, display_order,
+        faction_type_id, name, description, display_order, discord_role_id,
         embed_author_name, embed_author_url, embed_author_icon_url,
-        embed_title, embed_description, embed_color,
+        embed_title, embed_title_url, embed_description, embed_color,
         embed_image_url, embed_thumbnail_url,
         embed_footer_text, embed_footer_icon_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.faction_type_id,
         data.name,
         data.description || null,
         data.display_order || 0,
+        data.discord_role_id || null,
         data.embed_author_name || null,
         data.embed_author_url || null,
         data.embed_author_icon_url || null,
         data.embed_title || null,
+        data.embed_title_url || null,
         data.embed_description || null,
         data.embed_color || null,
         data.embed_image_url || null,
@@ -92,6 +94,18 @@ export class SubdivisionTemplateModel {
       updates.push('description = ?');
       params.push(data.description);
     }
+    if (data.short_description !== undefined) {
+      updates.push('short_description = ?');
+      params.push(data.short_description);
+    }
+    if (data.logo_url !== undefined) {
+      updates.push('logo_url = ?');
+      params.push(data.logo_url);
+    }
+    if (data.discord_role_id !== undefined) {
+      updates.push('discord_role_id = ?');
+      params.push(data.discord_role_id);
+    }
     if (data.display_order !== undefined) {
       updates.push('display_order = ?');
       params.push(data.display_order);
@@ -113,6 +127,10 @@ export class SubdivisionTemplateModel {
     if (data.embed_title !== undefined) {
       updates.push('embed_title = ?');
       params.push(data.embed_title);
+    }
+    if (data.embed_title_url !== undefined) {
+      updates.push('embed_title_url = ?');
+      params.push(data.embed_title_url);
     }
     if (data.embed_description !== undefined) {
       updates.push('embed_description = ?');

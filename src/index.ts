@@ -1,8 +1,15 @@
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import logger from './utils/logger';
 import database from './database/db';
-import { runMigrations, checkTables } from './database/migrations';
+import { runMigrations } from './database/migrations';
 import { VerificationTokenModel } from './database/models/VerificationToken';
 import { COLORS, EMOJI } from './config/constants';
+import { VerificationService } from './services/verification.service';
+import { CalloutGatewayService } from './services/callout-gateway.service';
+import { CalloutModel } from './database/models/Callout';
+import { ServerModel } from './database/models/Server';
+import { CalloutService } from './services/callout.service';
+import config from './config/config';
 
 async function main() {
   try {
@@ -34,6 +41,14 @@ async function main() {
     // Запустить периодическую проверку истёкших токенов (каждые 30 секунд)
     setInterval(() => notifyExpiredTokens(discordBot), 30 * 1000);
 
+    // Периодическая очистка БД (каждые 30 минут)
+    setInterval(runScheduledCleanup, 30 * 60 * 1000);
+    // Запустить очистку через 10 секунд после старта
+    setTimeout(runScheduledCleanup, 10_000);
+
+    // Авто-закрытие просроченных каллаутов (каждую минуту)
+    setInterval(() => autoCloseExpiredCallouts(discordBot), 60_000);
+
     logger.info('Bot initialized successfully');
   } catch (error) {
     logger.error('Failed to start bot', error);
@@ -49,8 +64,6 @@ async function notifyExpiredTokens(discordBot: any): Promise<void> {
     const expiredTokens = await VerificationTokenModel.findExpiredWithInteractionToken();
     if (expiredTokens.length === 0) return;
 
-    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
-
     for (const token of expiredTokens) {
       try {
         const expiredEmbed = new EmbedBuilder()
@@ -62,7 +75,7 @@ async function notifyExpiredTokens(discordBot: any): Promise<void> {
           )
           .setTimestamp();
 
-        const backButton = new ActionRowBuilder().addComponents(
+        const backButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
             .setCustomId('department_back_list')
             .setLabel('Назад')
@@ -90,6 +103,59 @@ async function notifyExpiredTokens(discordBot: any): Promise<void> {
     }
   } catch (error) {
     logger.error('Error in notifyExpiredTokens', {
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+}
+
+/**
+ * Авто-закрытие каллаутов, которые были активны дольше заданного таймаута
+ */
+async function autoCloseExpiredCallouts(discordBot: any): Promise<void> {
+  try {
+    const expiredCallouts = await CalloutModel.findExpiredActive(config.features.calloutAutoCloseMs);
+    if (expiredCallouts.length === 0) return;
+
+    for (const callout of expiredCallouts) {
+      try {
+        const server = await ServerModel.findById(callout.server_id);
+        if (!server) continue;
+
+        const guild = discordBot.client.guilds.cache.get(server.guild_id);
+        if (!guild) continue;
+
+        await CalloutService.closeCallout(guild, callout.id, 'system', 'Автоматическое закрытие по таймауту');
+        logger.info('Auto-closed expired callout', { calloutId: callout.id });
+      } catch (error) {
+        logger.error('Failed to auto-close callout', {
+          calloutId: callout.id,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+  } catch (error) {
+    logger.error('Error in autoCloseExpiredCallouts', {
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+}
+
+/**
+ * Периодическая очистка БД: удаление просроченных/использованных токенов и старых rate limits
+ */
+async function runScheduledCleanup(): Promise<void> {
+  try {
+    const [expiredTokens, usedTokens] = await Promise.all([
+      VerificationService.cleanupExpiredTokens(),
+      VerificationService.cleanupUsedTokens(24),
+      CalloutGatewayService.cleanupOldRateLimits(30),
+    ]);
+
+    if (expiredTokens > 0 || usedTokens > 0) {
+      logger.info('Scheduled cleanup completed', { expiredTokens, usedTokens });
+    }
+  } catch (error) {
+    logger.error('Error in scheduled cleanup', {
       error: error instanceof Error ? error.message : error,
     });
   }

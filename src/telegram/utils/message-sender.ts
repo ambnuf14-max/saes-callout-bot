@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Callout, Subdivision } from '../../types/database.types';
 import { EMOJI } from '../../config/constants';
-import { buildCalloutKeyboard } from './keyboard-builder';
+import { buildDetailedCalloutKeyboard } from './keyboard-builder';
 import logger from '../../utils/logger';
 
 /**
@@ -19,7 +19,7 @@ export async function sendCalloutNotification(
 ): Promise<number> {
   try {
     const message = formatCalloutMessage(callout, subdivision);
-    const keyboard = buildCalloutKeyboard(callout.id, subdivision.id);
+    const keyboard = buildDetailedCalloutKeyboard(callout.id, subdivision.id);
 
     const sentMessage = await bot.sendMessage(chatId, message, {
       parse_mode: 'HTML',
@@ -67,7 +67,8 @@ function formatCalloutMessage(callout: Callout, subdivision: Subdivision): strin
  */
 export function formatCalloutClosedMessage(callout: Callout): string {
   const header = `${EMOJI.SUCCESS} <b>Каллаут #${callout.id} закрыт</b>`;
-  const closedBy = callout.closed_by ? `👤 Закрыл: ${callout.closed_by}` : '';
+  const closedByText = callout.closed_by === 'system' ? 'System (авто-закрытие)' : callout.closed_by;
+  const closedBy = closedByText ? `👤 Закрыл: ${closedByText}` : '';
   const reason = callout.closed_reason ? `📝 Причина: ${callout.closed_reason}` : '';
 
   const parts = [header];
@@ -84,15 +85,22 @@ export async function editMessage(
   bot: TelegramBot,
   chatId: string,
   messageId: number,
-  newText: string
+  newText: string,
+  removeKeyboard: boolean = false
 ): Promise<void> {
   try {
-    await bot.editMessageText(newText, {
+    const options: TelegramBot.EditMessageTextOptions = {
       chat_id: chatId,
       message_id: messageId,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-    });
+    };
+
+    if (removeKeyboard) {
+      options.reply_markup = { inline_keyboard: [] };
+    }
+
+    await bot.editMessageText(newText, options);
 
     logger.info('Telegram message edited', {
       chatId,

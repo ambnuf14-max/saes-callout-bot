@@ -130,6 +130,14 @@ export class SubdivisionModel {
       updates.push('description = ?');
       params.push(data.description);
     }
+    if (data.short_description !== undefined) {
+      updates.push('short_description = ?');
+      params.push(data.short_description);
+    }
+    if (data.logo_url !== undefined) {
+      updates.push('logo_url = ?');
+      params.push(data.logo_url);
+    }
     if (data.discord_role_id !== undefined) {
       updates.push('discord_role_id = ?');
       params.push(data.discord_role_id);
@@ -167,6 +175,10 @@ export class SubdivisionModel {
     if (data.embed_title !== undefined) {
       updates.push('embed_title = ?');
       params.push(data.embed_title);
+    }
+    if (data.embed_title_url !== undefined) {
+      updates.push('embed_title_url = ?');
+      params.push(data.embed_title_url);
     }
     if (data.embed_description !== undefined) {
       updates.push('embed_description = ?');

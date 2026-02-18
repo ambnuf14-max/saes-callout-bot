@@ -210,16 +210,26 @@ export class SubdivisionService {
       name: subdivision.name,
     });
 
-    // Если это было последнее обычное подразделение - активировать дефолтное
+    // Если это было последнее обычное подразделение - восстановить standalone режим
     const nonDefaultCount = await SubdivisionModel.countActiveNonDefault(factionId);
     if (nonDefaultCount === 0) {
       const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(factionId);
-      if (defaultSubdivision && !defaultSubdivision.is_active) {
-        await SubdivisionModel.update(defaultSubdivision.id, { is_active: true });
-        logger.info('Default subdivision reactivated (last regular subdivision deleted)', {
-          factionId,
-          defaultSubdivisionId: defaultSubdivision.id,
-        });
+      if (defaultSubdivision) {
+        if (!defaultSubdivision.is_active) {
+          await SubdivisionModel.update(defaultSubdivision.id, { is_active: true });
+          logger.info('Default subdivision reactivated (last regular subdivision deleted)', {
+            factionId,
+            defaultSubdivisionId: defaultSubdivision.id,
+          });
+        }
+      } else {
+        // Дефолтного нет (фракция была с типом) — создать из данных фракции
+        const { FactionModel } = await import('../database/models/Faction');
+        const faction = await FactionModel.findById(factionId);
+        if (faction) {
+          await FactionModel.createDefaultSubdivision(faction);
+          logger.info('Default subdivision created after last template subdivision deleted', { factionId });
+        }
       }
     }
   }

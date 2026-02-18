@@ -1,5 +1,4 @@
 import { Keyboard } from 'vk-io';
-import { MESSAGES } from '../../config/constants';
 
 /**
  * Утилиты для создания VK клавиатур
@@ -12,32 +11,11 @@ export interface CalloutResponsePayload {
   action: 'respond';
   callout_id: number;
   subdivision_id: number;
+  type?: 'acknowledged' | 'on_way';
 }
 
 /**
- * Создать клавиатуру для каллаута с кнопкой "Отреагировать"
- */
-export function buildCalloutKeyboard(calloutId: number, subdivisionId: number): string {
-  const payload: CalloutResponsePayload = {
-    action: 'respond',
-    callout_id: calloutId,
-    subdivision_id: subdivisionId,
-  };
-
-  const keyboard = Keyboard.builder()
-    .callbackButton({
-      label: MESSAGES.CALLOUT.BUTTON_RESPOND_VK,
-      payload: JSON.stringify(payload),
-      color: Keyboard.PRIMARY_COLOR,
-    })
-    .inline()
-    .toString();
-
-  return keyboard;
-}
-
-/**
- * Создать клавиатуру с несколькими типами ответа (опционально для будущего)
+ * Создать клавиатуру с кнопками "Принято" и "В пути"
  */
 export function buildDetailedCalloutKeyboard(
   calloutId: number,
@@ -60,12 +38,6 @@ export function buildDetailedCalloutKeyboard(
       payload: JSON.stringify({ ...acknowledgedPayload, type: 'on_way' }),
       color: Keyboard.PRIMARY_COLOR,
     })
-    .row()
-    .callbackButton({
-      label: '📍 Прибыли',
-      payload: JSON.stringify({ ...acknowledgedPayload, type: 'arrived' }),
-      color: Keyboard.POSITIVE_COLOR,
-    })
     .inline()
     .toString();
 
@@ -73,6 +45,5 @@ export function buildDetailedCalloutKeyboard(
 }
 
 export default {
-  buildCalloutKeyboard,
   buildDetailedCalloutKeyboard,
 };

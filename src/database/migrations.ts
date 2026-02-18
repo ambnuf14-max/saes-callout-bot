@@ -7,6 +7,10 @@ import runFactionStandaloneModeMigration from './migrations/006_faction_standalo
 import runApprovalAndTypesSystemMigration from './migrations/007_approval_and_types_system';
 import runRenameDepartmentToFactionMigration from './migrations/008_rename_department_to_faction';
 import runTrackBotCreatedObjectsMigration from './migrations/009_track_bot_created_objects';
+import runEmbedTitleUrlMigration from './migrations/010_embed_title_url';
+import runTemplateShortDescLogoMigration from './migrations/011_template_short_desc_logo';
+import runTemplateDiscordRoleMigration from './migrations/012_template_discord_role';
+import runFactionLogoUrlMigration from './migrations/013_faction_logo_url';
 
 /**
  * SQL схема для всех таблиц
@@ -162,6 +166,10 @@ export async function runMigrations(): Promise<void> {
     await runApprovalAndTypesSystemMigration();
     await runRenameDepartmentToFactionMigration();
     await runTrackBotCreatedObjectsMigration();
+    await runEmbedTitleUrlMigration();
+    await runTemplateShortDescLogoMigration();
+    await runTemplateDiscordRoleMigration();
+    await runFactionLogoUrlMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

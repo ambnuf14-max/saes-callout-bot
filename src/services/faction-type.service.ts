@@ -237,6 +237,7 @@ export class FactionTypeService {
         server_id: serverId,
         name: template.name,
         description: template.description || undefined,
+        discord_role_id: template.discord_role_id || undefined,
       });
 
       // Обновить embed настройки если они есть в шаблоне
@@ -252,6 +253,14 @@ export class FactionTypeService {
           embed_thumbnail_url: template.embed_thumbnail_url || undefined,
           embed_footer_text: template.embed_footer_text || undefined,
           embed_footer_icon_url: template.embed_footer_icon_url || undefined,
+        });
+      }
+
+      // Скопировать short_description и logo_url если есть
+      if (template.short_description || template.logo_url) {
+        await SubdivisionModel.update(subdivision.id, {
+          short_description: template.short_description || undefined,
+          logo_url: template.logo_url || undefined,
         });
       }
 

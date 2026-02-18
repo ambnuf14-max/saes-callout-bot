@@ -121,6 +121,10 @@ export class FactionModel {
       updates.push('description = ?');
       params.push(data.description);
     }
+    if (data.logo_url !== undefined) {
+      updates.push('logo_url = ?');
+      params.push(data.logo_url);
+    }
     if (data.general_leader_role_id !== undefined) {
       updates.push('general_leader_role_id = ?');
       params.push(data.general_leader_role_id);
@@ -225,7 +229,7 @@ export class FactionModel {
   /**
    * Создать дефолтное подразделение для standalone фракции
    */
-  private static async createDefaultSubdivision(faction: Faction): Promise<void> {
+  static async createDefaultSubdivision(faction: Faction): Promise<void> {
     const { SubdivisionModel } = await import('./Subdivision');
 
     // Проверить, существует ли уже дефолтное подразделение

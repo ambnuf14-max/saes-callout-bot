@@ -11,11 +11,24 @@ import handleVerifyCommand from './handlers/verify-command-handler';
 class TelegramBotClient {
   public bot: TelegramBot;
   private isRunning: boolean = false;
+  private useWebhook: boolean;
 
   constructor() {
-    this.bot = new TelegramBot(config.telegram.token, {
-      polling: false, // Запустим позже в start()
-    });
+    this.useWebhook = !!config.telegram.webhookUrl;
+
+    if (this.useWebhook) {
+      this.bot = new TelegramBot(config.telegram.token, {
+        webHook: {
+          port: config.telegram.webhookPort,
+          host: '0.0.0.0',
+        },
+      });
+    } else {
+      this.bot = new TelegramBot(config.telegram.token, {
+        polling: false,
+        onlyFirstMatch: true,
+      });
+    }
   }
 
   /**
@@ -153,16 +166,26 @@ class TelegramBotClient {
       // Регистрация обработчиков
       this.registerEventHandlers();
 
-      // Запуск Long Polling
-      await this.bot.startPolling({
-        restart: true,
-        onlyFirstMatch: true,
-      });
+      if (this.useWebhook) {
+        // Webhook режим
+        const webhookUrl = config.telegram.webhookUrl!;
+        const setWebHookOptions: TelegramBot.SetWebHookOptions = {};
+        if (config.telegram.webhookSecret) {
+          setWebHookOptions.secret_token = config.telegram.webhookSecret;
+        }
+        await this.bot.setWebHook(`${webhookUrl}/telegram-webhook`, setWebHookOptions);
+        logger.info('Telegram webhook set', { url: `${webhookUrl}/telegram-webhook` });
+      } else {
+        // Long Polling режим
+        await this.bot.startPolling({
+          restart: true,
+        });
+      }
 
       this.isRunning = true;
 
       logger.info('Telegram bot started successfully', {
-        mode: 'Long Poll',
+        mode: this.useWebhook ? 'Webhook' : 'Long Poll',
         botUsername: me.username,
       });
     } catch (error) {
@@ -187,7 +210,12 @@ class TelegramBotClient {
     logger.info('Stopping Telegram bot...');
 
     try {
-      await this.bot.stopPolling();
+      if (this.useWebhook) {
+        await this.bot.deleteWebHook();
+        await this.bot.closeWebHook();
+      } else {
+        await this.bot.stopPolling();
+      }
       this.isRunning = false;
       logger.info('Telegram bot stopped');
     } catch (error) {

@@ -565,7 +565,14 @@ export class PendingChangeService {
 
     const data = PendingChangeModel.parseChangeData<UpdateSubdivisionChangeData>(change);
 
-    await SubdivisionService.updateSubdivision(change.subdivision_id, data);
+    // Конвертировать null в undefined (UpdateSubdivisionDTO не принимает null)
+    await SubdivisionService.updateSubdivision(change.subdivision_id, {
+      name: data.name,
+      description: data.description,
+      short_description: data.short_description ?? undefined,
+      logo_url: data.logo_url ?? undefined,
+      discord_role_id: data.discord_role_id ?? undefined,
+    });
 
     logger.debug('Applied update_subdivision change', {
       changeId: change.id,
@@ -620,7 +627,14 @@ export class PendingChangeService {
 
     const data = PendingChangeModel.parseChangeData<UpdateEmbedChangeData>(change);
 
-    await SubdivisionService.updateSubdivision(change.subdivision_id, data);
+    // Конвертировать null в undefined для SubdivisionDTO, передать все поля включая настройки
+    await SubdivisionService.updateSubdivision(change.subdivision_id, {
+      ...data,
+      name: data.name ?? undefined,
+      short_description: data.short_description ?? undefined,
+      logo_url: data.logo_url ?? undefined,
+      discord_role_id: data.discord_role_id ?? undefined,
+    });
 
     logger.debug('Applied update_embed change', {
       changeId: change.id,

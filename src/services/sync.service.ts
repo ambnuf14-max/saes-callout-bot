@@ -15,6 +15,7 @@ import {
   AuditEventType,
   VkResponseReceivedData,
 } from '../discord/utils/audit-logger';
+import { buildCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
 
 /**
  * Сервис синхронизации между VK, Telegram и Discord
@@ -26,7 +27,8 @@ export class SyncService {
   static async handleVkResponse(
     payload: CalloutResponsePayload,
     vkUserId: string,
-    vkUserName: string
+    vkUserName: string,
+    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
   ): Promise<CalloutResponse> {
     logger.info('Processing VK response', {
       calloutId: payload.callout_id,
@@ -64,24 +66,33 @@ export class SyncService {
     }
 
     // 4. Проверить, не отвечал ли уже этот пользователь
-    const hasResponded = await CalloutResponseModel.hasUserResponded(
+    const existingResponse = await CalloutResponseModel.getLastUserResponse(
       callout.id,
       vkUserId
     );
 
-    if (hasResponded) {
+    if (existingResponse) {
+      // Если пользователь уже ответил acknowledged и шлёт on_way — обновить
+      if (existingResponse.response_type === 'acknowledged' && responseType === 'on_way') {
+        const updated = await CalloutResponseModel.updateResponseType(existingResponse.id, 'on_way');
+        if (updated) {
+          // Отправить уведомление об обновлении в Discord
+          try {
+            await this.notifyDiscordAboutResponse(updated, callout, subdivision);
+          } catch (error) {
+            logger.error('Failed to notify Discord about updated VK response', {
+              error: error instanceof Error ? error.message : error,
+            });
+          }
+          return updated;
+        }
+      }
+      // Тот же или ниже статус — вернуть существующий
       logger.info('User already responded to this callout', {
         calloutId: callout.id,
         vkUserId,
       });
-      // Не бросаем ошибку, просто возвращаем существующий ответ
-      const existingResponse = await CalloutResponseModel.getLastUserResponse(
-        callout.id,
-        vkUserId
-      );
-      if (existingResponse) {
-        return existingResponse;
-      }
+      return existingResponse;
     }
 
     // 5. Создать запись ответа в БД
@@ -90,13 +101,14 @@ export class SyncService {
       subdivision_id: subdivision.id,
       vk_user_id: vkUserId,
       vk_user_name: vkUserName,
-      response_type: 'acknowledged',
+      response_type: responseType,
     });
 
     logger.info('VK response saved to database', {
       responseId: response.id,
       calloutId: callout.id,
       vkUserId,
+      responseType,
     });
 
     // 6. Отправить уведомление в Discord
@@ -119,7 +131,8 @@ export class SyncService {
   static async handleTelegramResponse(
     payload: CalloutResponsePayload,
     telegramUserId: string,
-    telegramUserName: string
+    telegramUserName: string,
+    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
   ): Promise<CalloutResponse> {
     logger.info('Processing Telegram response', {
       calloutId: payload.callout_id,
@@ -157,39 +170,48 @@ export class SyncService {
     }
 
     // 4. Проверить, не отвечал ли уже этот пользователь
-    const hasResponded = await CalloutResponseModel.hasUserResponded(
+    const existingTgResponse = await CalloutResponseModel.getLastUserResponse(
       callout.id,
       telegramUserId
     );
 
-    if (hasResponded) {
+    if (existingTgResponse) {
+      // Если пользователь уже ответил acknowledged и шлёт on_way — обновить
+      if (existingTgResponse.response_type === 'acknowledged' && responseType === 'on_way') {
+        const updated = await CalloutResponseModel.updateResponseType(existingTgResponse.id, 'on_way');
+        if (updated) {
+          try {
+            await this.notifyDiscordAboutResponse(updated, callout, subdivision, 'telegram');
+          } catch (error) {
+            logger.error('Failed to notify Discord about updated Telegram response', {
+              error: error instanceof Error ? error.message : error,
+            });
+          }
+          return updated;
+        }
+      }
+      // Тот же или ниже статус — вернуть существующий
       logger.info('User already responded to this callout', {
         calloutId: callout.id,
         telegramUserId,
       });
-      // Не бросаем ошибку, просто возвращаем существующий ответ
-      const existingResponse = await CalloutResponseModel.getLastUserResponse(
-        callout.id,
-        telegramUserId
-      );
-      if (existingResponse) {
-        return existingResponse;
-      }
+      return existingTgResponse;
     }
 
     // 5. Создать запись ответа в БД
     const response = await CalloutResponseModel.create({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
-      vk_user_id: telegramUserId, // Используем поле vk_user_id для хранения telegram user_id
+      vk_user_id: telegramUserId,
       vk_user_name: telegramUserName,
-      response_type: 'acknowledged',
+      response_type: responseType,
     });
 
     logger.info('Telegram response saved to database', {
       responseId: response.id,
       calloutId: callout.id,
       telegramUserId,
+      responseType,
     });
 
     // 6. Отправить уведомление в Discord
@@ -241,10 +263,11 @@ export class SyncService {
       // Отправить сообщение
       await channel.send(message);
 
-      logger.info('Discord notified about VK response', {
+      logger.info('Discord notified about response', {
         calloutId: callout.id,
         channelId: channel.id,
         responseId: response.id,
+        platform,
       });
 
       // Логировать в audit log
@@ -258,8 +281,38 @@ export class SyncService {
       };
       await logAuditEvent(channel.guild, AuditEventType.VK_RESPONSE_RECEIVED, auditData);
 
-      // Опционально: обновить embed с списком ответов
-      // TODO: можно добавить позже
+      // Обновить embed оригинального сообщения с ответами
+      if (callout.discord_message_id) {
+        try {
+          const originalMessage = await channel.messages.fetch(callout.discord_message_id);
+          if (originalMessage) {
+            const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+            const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+            const subdivisionsMap = new Map<number, Subdivision>();
+            for (const subId of subdivisionIds) {
+              const sub = await SubdivisionModel.findById(subId);
+              if (sub) subdivisionsMap.set(subId, sub);
+            }
+
+            // Загружаем subdivision каллаута (может отличаться от subdivision ответчика)
+            const calloutSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
+            if (!calloutSubdivision) throw new Error('Callout subdivision not found');
+
+            const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
+            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap);
+
+            await originalMessage.edit({
+              embeds: [updatedEmbed],
+              components: originalMessage.components,
+            });
+          }
+        } catch (embedError) {
+          logger.error('Failed to update original embed with responses', {
+            error: embedError instanceof Error ? embedError.message : embedError,
+            calloutId: callout.id,
+          });
+        }
+      }
     } catch (error) {
       logger.error('Failed to send Discord notification', {
         error: error instanceof Error ? error.message : error,
@@ -282,10 +335,12 @@ export class SyncService {
     });
 
     const platformName = platform === 'vk' ? 'VK' : 'Telegram';
+    const typeLabel = response.response_type === 'on_way' ? '🚗 В пути' : '✅ Принято';
 
     return (
       `${EMOJI.SUCCESS} **${subdivision.name}** отреагировал на инцидент\n` +
       `👤 Ответил: ${response.vk_user_name} (${platformName})\n` +
+      `📋 Статус: ${typeLabel}\n` +
       `🕐 Время: ${timestamp}`
     );
   }

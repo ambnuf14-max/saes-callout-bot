@@ -3,7 +3,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Устанавливаем зависимости для сборки нативных модулей (sqlite3)
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 py3-setuptools make g++
 
 # Копируем package.json
 COPY package.json ./
