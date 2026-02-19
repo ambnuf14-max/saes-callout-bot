@@ -7,3 +7,4 @@ export { CalloutModel } from './Callout';
 export { CalloutResponseModel } from './CalloutResponse';
 export { SubdivisionModel } from './Subdivision';
 export { VerificationTokenModel, VkVerificationTokenModel } from './VerificationToken';
+export { TelegramMemberModel } from './TelegramMember';

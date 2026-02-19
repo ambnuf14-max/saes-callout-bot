@@ -1,8 +1,10 @@
 import { Client, TextChannel } from 'discord.js';
 import logger from '../../utils/logger';
 import PresenceManager from '../utils/presence-manager';
-import { ServerModel } from '../../database/models';
+import { ServerModel, CalloutModel } from '../../database/models';
 import { createCalloutPanel } from '../interactions/setup-mode-select';
+import { deleteIncidentChannel } from '../utils/channel-manager';
+import config from '../../config/config';
 
 /**
  * Обработчик события ready
@@ -25,6 +27,11 @@ export default function readyHandler(client: Client) {
   // Проверить наличие панели каллаута на всех серверах
   ensureCalloutPanels(client).catch(err =>
     logger.error('Error in ensureCalloutPanels', { error: err instanceof Error ? err.message : err })
+  );
+
+  // Удалить каналы закрытых каллаутов, которые не успели удалиться до перезапуска
+  cleanupOrphanedChannels(client).catch(err =>
+    logger.error('Error in cleanupOrphanedChannels', { error: err instanceof Error ? err.message : err })
   );
 }
 
@@ -71,6 +78,46 @@ async function ensureCalloutPanels(client: Client): Promise<void> {
       logger.error('Failed to ensure callout panel', {
         guildId: server.guild_id,
         error: error instanceof Error ? error.message : error,
+      });
+    }
+  }
+}
+
+/**
+ * Удаляет каналы закрытых каллаутов, которые не успели удалиться из-за перезапуска бота.
+ */
+async function cleanupOrphanedChannels(client: Client): Promise<void> {
+  if (!config.features.autoDeleteChannels) return;
+
+  const orphaned = await CalloutModel.findClosedWithChannelOlderThan(config.features.channelDeleteDelay);
+
+  if (orphaned.length === 0) return;
+
+  logger.info('Found orphaned incident channels after restart, cleaning up', {
+    count: orphaned.length,
+  });
+
+  for (const callout of orphaned) {
+    if (!callout.discord_channel_id) continue;
+
+    try {
+      const server = await ServerModel.findById(callout.server_id);
+      if (!server) continue;
+
+      const guild = client.guilds.cache.get(server.guild_id);
+      if (!guild) continue;
+
+      await deleteIncidentChannel(guild, callout.discord_channel_id);
+
+      logger.info('Deleted orphaned incident channel', {
+        calloutId: callout.id,
+        channelId: callout.discord_channel_id,
+      });
+    } catch (error) {
+      logger.error('Failed to delete orphaned incident channel', {
+        error: error instanceof Error ? error.message : error,
+        calloutId: callout.id,
+        channelId: callout.discord_channel_id,
       });
     }
   }

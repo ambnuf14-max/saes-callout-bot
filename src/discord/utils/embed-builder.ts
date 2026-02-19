@@ -151,39 +151,71 @@ export function buildClosedCalloutEmbed(
 }
 
 /**
- * Добавить поле с ответами в Embed
+ * Добавить поле "Лог инцидента" в Embed
  */
 export function addResponsesToEmbed(
   embed: EmbedBuilder,
   responses: CalloutResponse[],
-  subdivisions: Map<number, Subdivision>
+  subdivisions: Map<number, Subdivision>,
+  callout?: Callout
 ): EmbedBuilder {
-  if (responses.length === 0) {
+  const logEntries: string[] = [];
+
+  if (callout) {
+    const time = formatMoscowTime(new Date(callout.created_at));
+    logEntries.push(`\`${time}\` - @${callout.author_name} Создал запрос поддержки.`);
+  }
+
+  for (const r of responses) {
+    const subdiv = subdivisions.get(r.subdivision_id);
+    const time = formatMoscowTime(new Date(r.created_at));
+    const emoji = subdiv ? formatSubdivisionEmoji(subdiv) : '';
+    const name = subdiv?.name || 'Unknown';
+    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки.`);
+  }
+
+  if (callout && callout.status !== CALLOUT_STATUS.ACTIVE && callout.closed_at) {
+    const time = formatMoscowTime(new Date(callout.closed_at));
+    const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
+    logEntries.push(`\`${time}\` - 🔒 Инцидент закрыт${reason}.`);
+  }
+
+  if (logEntries.length === 0) {
     return embed;
   }
 
-  let responseText = responses
-    .map((r) => {
-      const subdiv = subdivisions.get(r.subdivision_id);
-      const subdivName = subdiv?.name || 'Unknown';
-      return `• **${subdivName}** - ${r.vk_user_name} (${getResponseTypeLabel(r.response_type)})`;
-    })
-    .join('\n');
-
-  // Discord ограничивает значение поля embed до 1024 символов
-  if (responseText.length > 1024) {
-    responseText = responseText.substring(0, 1021) + '...';
+  let logText = logEntries.join('\n');
+  if (logText.length > 1024) {
+    logText = logText.substring(0, 1021) + '...';
   }
 
-  embed.addFields([
-    {
-      name: `${EMOJI.SUCCESS} Ответы подразделений (${responses.length})`,
-      value: responseText,
-      inline: false,
-    },
-  ]);
+  embed.addFields([{
+    name: 'Лог инцидента',
+    value: logText,
+    inline: false,
+  }]);
 
   return embed;
+}
+
+function formatMoscowTime(date: Date): string {
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function formatSubdivisionEmoji(subdivision: Subdivision): string {
+  const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+  if (!parsed) return '';
+  if (parsed.id) {
+    return parsed.animated
+      ? `<a:${parsed.name}:${parsed.id}> `
+      : `<:${parsed.name}:${parsed.id}> `;
+  }
+  return `${parsed.name} `;
 }
 
 /**

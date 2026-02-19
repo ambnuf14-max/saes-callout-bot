@@ -1,8 +1,9 @@
 import vkBot from '../vk/bot';
 import telegramBot from '../telegram/bot';
+import discordBot from '../discord/bot';
 import logger from '../utils/logger';
 import { Callout, Subdivision } from '../types/database.types';
-import { CalloutModel, SubdivisionModel } from '../database/models';
+import { CalloutModel, SubdivisionModel, CalloutResponseModel } from '../database/models';
 import { sendCalloutNotification as sendVkCallout, formatCalloutClosedMessage as formatVkClosed } from '../vk/utils/message-sender';
 import { sendCalloutNotification as sendTelegramCallout, formatCalloutClosedMessage as formatTelegramClosed, editMessage } from '../telegram/utils/message-sender';
 import { EMOJI } from '../config/constants';
@@ -16,7 +17,8 @@ export class NotificationService {
    */
   static async notifyVkAboutCallout(
     callout: Callout,
-    subdivision: Subdivision
+    subdivision: Subdivision,
+    authorFactionName?: string
   ): Promise<void> {
     // Проверить что VK бот активен
     if (!vkBot.isActive()) {
@@ -47,7 +49,8 @@ export class NotificationService {
         vkBot.getApi(),
         subdivision.vk_chat_id,
         callout,
-        subdivision
+        subdivision,
+        authorFactionName
       );
 
       // Сохранить ID сообщения в БД
@@ -113,15 +116,21 @@ export class NotificationService {
       // Форматировать сообщение о закрытии
       let message: string;
       if (status === 'closed') {
-        message = formatVkClosed(callout);
+        const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+        const subdivisionsMap = new Map<number, Subdivision>();
+        for (const subId of [...new Set(allResponses.map(r => r.subdivision_id))]) {
+          const sub = await SubdivisionModel.findById(subId);
+          if (sub) subdivisionsMap.set(subId, sub);
+        }
+        message = formatVkClosed(callout, subdivision, allResponses, subdivisionsMap);
       } else {
         message = `${EMOJI.INFO} Статус каллаута #${callout.id} обновлен: ${status}`;
       }
 
       // Обновить сообщение в VK
-      const editParams: { peer_id: number; message_id: number; message: string; keyboard?: string } = {
+      const editParams: { peer_id: number; cmid: number; message: string; keyboard?: string } = {
         peer_id: parseInt(subdivision.vk_chat_id),
-        message_id: parseInt(callout.vk_message_id),
+        cmid: parseInt(callout.vk_message_id),
         message: message,
       };
 
@@ -162,7 +171,8 @@ export class NotificationService {
    */
   static async notifyTelegramAboutCallout(
     callout: Callout,
-    subdivision: Subdivision
+    subdivision: Subdivision,
+    authorFactionName?: string
   ): Promise<void> {
     // Проверить что Telegram бот активен
     if (!telegramBot.isActive()) {
@@ -193,7 +203,8 @@ export class NotificationService {
         telegramBot.getApi(),
         subdivision.telegram_chat_id,
         callout,
-        subdivision
+        subdivision,
+        authorFactionName
       );
 
       // Сохранить ID сообщения в БД
@@ -256,7 +267,25 @@ export class NotificationService {
       // Форматировать сообщение о закрытии
       let message: string;
       if (status === 'closed') {
-        message = formatTelegramClosed(callout);
+        const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+        const subdivisionsMap = new Map<number, Subdivision>();
+        const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+        for (const subId of subdivisionIds) {
+          const sub = await SubdivisionModel.findById(subId);
+          if (sub) subdivisionsMap.set(subId, sub);
+        }
+        let closedByName: string | undefined;
+        if (callout.closed_by === 'system') {
+          closedByName = 'System';
+        } else if (callout.closed_by && discordBot.client.isReady()) {
+          try {
+            const user = await discordBot.client.users.fetch(callout.closed_by);
+            closedByName = user.displayName || user.username;
+          } catch {
+            closedByName = undefined;
+          }
+        }
+        message = formatTelegramClosed(callout, subdivision, allResponses, subdivisionsMap, closedByName);
       } else {
         message = `${EMOJI.INFO} Статус каллаута #${callout.id} обновлен: ${status}`;
       }

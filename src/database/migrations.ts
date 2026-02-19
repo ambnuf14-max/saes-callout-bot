@@ -14,6 +14,7 @@ import runFactionLogoUrlMigration from './migrations/013_faction_logo_url';
 import runStandaloneNeedsSetupMigration from './migrations/014_standalone_needs_setup';
 import runCalloutTacChannelMigration from './migrations/015_callout_tac_channel';
 import runCalloutBriefDescriptionMigration from './migrations/016_callout_brief_description';
+import runTelegramMembersMigration from './migrations/017_telegram_members';
 
 /**
  * SQL схема для всех таблиц
@@ -176,6 +177,7 @@ export async function runMigrations(): Promise<void> {
     await runStandaloneNeedsSetupMigration();
     await runCalloutTacChannelMigration();
     await runCalloutBriefDescriptionMigration();
+    await runTelegramMembersMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

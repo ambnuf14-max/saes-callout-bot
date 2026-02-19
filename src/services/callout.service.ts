@@ -1,11 +1,11 @@
 import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { CalloutModel, SubdivisionModel, ServerModel } from '../database/models';
+import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
 import validators from '../utils/validators';
 import { CalloutError } from '../utils/error-handler';
 import { createIncidentChannel, deleteIncidentChannel } from '../discord/utils/channel-manager';
-import { buildCalloutEmbed, buildClosedCalloutEmbed } from '../discord/utils/embed-builder';
+import { buildCalloutEmbed, buildClosedCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
 import { EMOJI, CALLOUT_STATUS, MESSAGES } from '../config/constants';
 import NotificationService from './notification.service';
 import config from '../config/config';
@@ -157,8 +157,8 @@ export class CalloutService {
 
       // Отправить уведомления в VK и Telegram параллельно (не критично, ошибки обрабатываются внутри)
       await Promise.all([
-        NotificationService.notifyVkAboutCallout(callout, subdivision),
-        NotificationService.notifyTelegramAboutCallout(callout, subdivision),
+        NotificationService.notifyVkAboutCallout(callout, subdivision, data.author_faction_name),
+        NotificationService.notifyTelegramAboutCallout(callout, subdivision, data.author_faction_name),
       ]);
 
       // Получить обновленный каллаут
@@ -282,6 +282,16 @@ export class CalloutService {
             if (message) {
               // Создать обновленный embed
               const closedEmbed = buildClosedCalloutEmbed(closedCallout, subdivision);
+
+              // Добавить лог инцидента (ответы + запись о закрытии)
+              const allResponses = await CalloutResponseModel.findByCalloutId(calloutId);
+              const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+              const subdivisionsMap = new Map<number, Subdivision>();
+              for (const subId of subdivisionIds) {
+                const sub = await SubdivisionModel.findById(subId);
+                if (sub) subdivisionsMap.set(subId, sub);
+              }
+              addResponsesToEmbed(closedEmbed, allResponses, subdivisionsMap, closedCallout);
 
               await message.edit({ embeds: [closedEmbed], components: [] });
 

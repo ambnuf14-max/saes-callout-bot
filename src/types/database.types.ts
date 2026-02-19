@@ -103,6 +103,7 @@ export interface CreateCalloutDTO {
   location?: string;
   tac_channel?: string;
   brief_description?: string;
+  author_faction_name?: string; // не хранится в БД, только для уведомлений
 }
 
 export interface UpdateCalloutDTO {

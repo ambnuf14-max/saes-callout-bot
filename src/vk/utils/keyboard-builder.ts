@@ -31,7 +31,7 @@ export function buildDetailedCalloutKeyboard(
     .callbackButton({
       label: 'Отреагировать на инцидент',
       payload: JSON.stringify({ ...acknowledgedPayload, type: 'acknowledged' }),
-      color: Keyboard.POSITIVE_COLOR,
+      color: Keyboard.NEGATIVE_COLOR,
     })
     .inline()
     .toString();

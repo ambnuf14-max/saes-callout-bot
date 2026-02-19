@@ -16,6 +16,12 @@ import {
   VkResponseReceivedData,
 } from '../discord/utils/audit-logger';
 import { buildCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
+import { parseDiscordEmoji } from '../discord/utils/subdivision-settings-helper';
+import telegramBot from '../telegram/bot';
+import { formatActiveCalloutWithLog, editMessage as editTelegramMessage } from '../telegram/utils/message-sender';
+import vkBot from '../vk/bot';
+import { formatActiveCalloutWithLog as formatVkActiveWithLog } from '../vk/utils/message-sender';
+import { buildDetailedCalloutKeyboard as buildVkKeyboard } from '../vk/utils/keyboard-builder';
 
 /**
  * Сервис синхронизации между VK, Telegram и Discord
@@ -258,7 +264,7 @@ export class SyncService {
       }
 
       // Форматировать сообщение
-      const message = this.formatResponseMessage(response, subdivision, platform);
+      const message = this.formatResponseMessage(response, subdivision, callout);
 
       // Отправить сообщение
       await channel.send(message);
@@ -299,7 +305,7 @@ export class SyncService {
             if (!calloutSubdivision) throw new Error('Callout subdivision not found');
 
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
-            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap);
+            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
             await originalMessage.edit({
               embeds: [updatedEmbed],
@@ -309,6 +315,61 @@ export class SyncService {
         } catch (embedError) {
           logger.error('Failed to update original embed with responses', {
             error: embedError instanceof Error ? embedError.message : embedError,
+            calloutId: callout.id,
+          });
+        }
+      }
+
+      // Обновить сообщение в VK с логом инцидента
+      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive()) {
+        try {
+          const vkSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
+          if (vkSubdivision?.vk_chat_id) {
+            const allVkResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+            const vkSubdivisionsMap = new Map<number, Subdivision>();
+            for (const subId of [...new Set(allVkResponses.map(r => r.subdivision_id))]) {
+              const sub = await SubdivisionModel.findById(subId);
+              if (sub) vkSubdivisionsMap.set(subId, sub);
+            }
+            const vkMessage = formatVkActiveWithLog(callout, vkSubdivision, allVkResponses, vkSubdivisionsMap);
+            const keyboard = buildVkKeyboard(callout.id, callout.subdivision_id);
+            await (vkBot.getApi().api.messages.edit as any)({
+              peer_id: parseInt(vkSubdivision.vk_chat_id),
+              cmid: parseInt(callout.vk_message_id),
+              message: vkMessage,
+              keyboard,
+            });
+          }
+        } catch (vkError) {
+          logger.error('Failed to update VK message with log', {
+            error: vkError instanceof Error ? vkError.message : vkError,
+            calloutId: callout.id,
+          });
+        }
+      }
+
+      // Обновить сообщение в Telegram с логом инцидента
+      if (callout.telegram_message_id && telegramBot.isActive()) {
+        try {
+          const tgSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
+          if (tgSubdivision?.telegram_chat_id) {
+            const allTgResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+            const tgSubdivisionsMap = new Map<number, Subdivision>();
+            for (const subId of [...new Set(allTgResponses.map(r => r.subdivision_id))]) {
+              const sub = await SubdivisionModel.findById(subId);
+              if (sub) tgSubdivisionsMap.set(subId, sub);
+            }
+            const tgMessage = formatActiveCalloutWithLog(callout, tgSubdivision, allTgResponses, tgSubdivisionsMap);
+            await editTelegramMessage(
+              telegramBot.getApi(),
+              tgSubdivision.telegram_chat_id,
+              parseInt(callout.telegram_message_id),
+              tgMessage
+            );
+          }
+        } catch (tgError) {
+          logger.error('Failed to update Telegram message with log', {
+            error: tgError instanceof Error ? tgError.message : tgError,
             calloutId: callout.id,
           });
         }
@@ -328,21 +389,23 @@ export class SyncService {
   private static formatResponseMessage(
     response: CalloutResponse,
     subdivision: Subdivision,
-    platform: 'vk' | 'telegram' = 'vk'
+    callout: Callout,
   ): string {
-    const timestamp = new Date(response.created_at).toLocaleString('ru-RU', {
-      timeZone: 'Europe/Moscow',
-    });
+    const authorMention = `<@${callout.author_id}>`;
 
-    const platformName = platform === 'vk' ? 'VK' : 'Telegram';
-    const typeLabel = response.response_type === 'on_way' ? '🚗 В пути' : '✅ Принято';
+    const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+    let emojiStr = '';
+    if (parsed) {
+      if (parsed.id) {
+        emojiStr = parsed.animated
+          ? `<a:${parsed.name}:${parsed.id}> `
+          : `<:${parsed.name}:${parsed.id}> `;
+      } else {
+        emojiStr = `${parsed.name} `;
+      }
+    }
 
-    return (
-      `${EMOJI.SUCCESS} **${subdivision.name}** отреагировал на инцидент\n` +
-      `👤 Ответил: ${response.vk_user_name} (${platformName})\n` +
-      `📋 Статус: ${typeLabel}\n` +
-      `🕐 Время: ${timestamp}`
-    );
+    return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент.`;
   }
 
   /**

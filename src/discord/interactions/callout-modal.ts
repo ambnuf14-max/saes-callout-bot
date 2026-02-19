@@ -7,7 +7,7 @@ import {
   ActionRowBuilder,
 } from 'discord.js';
 import logger from '../../utils/logger';
-import { ServerModel, SubdivisionModel } from '../../database/models';
+import { ServerModel, SubdivisionModel, FactionModel } from '../../database/models';
 import CalloutService from '../../services/callout.service';
 import CalloutGatewayService from '../../services/callout-gateway.service';
 import { EMOJI, MESSAGES } from '../../config/constants';
@@ -117,6 +117,16 @@ export async function handleCalloutModalSubmit(
       return;
     }
 
+    // Найти фракцию автора по его ролям на сервере
+    let authorFactionName: string | undefined;
+    for (const roleId of userRoles) {
+      const faction = await FactionModel.findByFactionRole(server.id, roleId);
+      if (faction) {
+        authorFactionName = faction.name;
+        break;
+      }
+    }
+
     // Создать каллаут через сервис (с location!)
     const { callout, channel } = await CalloutService.createCallout(
       interaction.guild,
@@ -124,11 +134,12 @@ export async function handleCalloutModalSubmit(
         server_id: server.id,
         subdivision_id: subdivision.id,
         author_id: interaction.user.id,
-        author_name: interaction.user.tag,
+        author_name: member.displayName,
         description: description.trim(),
         location: location.trim(),
         tac_channel: tacChannel.trim() || undefined,
         brief_description: briefDescription.trim(),
+        author_faction_name: authorFactionName,
       }
     );
 

@@ -1,8 +1,9 @@
 import { VK } from 'vk-io';
 import logger from '../../utils/logger';
-import { Callout, Subdivision } from '../../types/database.types';
+import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { buildDetailedCalloutKeyboard } from './keyboard-builder';
 import { EMOJI } from '../../config/constants';
+import { parseDiscordEmoji } from '../../discord/utils/subdivision-settings-helper';
 
 /**
  * Утилиты для отправки сообщений в VK
@@ -15,25 +16,33 @@ export async function sendCalloutNotification(
   vk: VK,
   chatId: string,
   callout: Callout,
-  subdivision: Subdivision
+  subdivision: Subdivision,
+  authorFactionName?: string
 ): Promise<number> {
   try {
     // Форматировать сообщение
-    const message = formatCalloutMessage(callout, subdivision);
+    const message = formatCalloutMessage(callout, subdivision, authorFactionName);
 
     // Создать клавиатуру с кнопками
     const keyboard = buildDetailedCalloutKeyboard(callout.id, subdivision.id);
 
-    // Отправить сообщение
-    const response = await vk.api.messages.send({
-      peer_id: parseInt(chatId),
+    // Отправить сообщение.
+    // Используем peer_ids (множественное) — VK возвращает объект с conversation_message_id.
+    const peerIdInt = parseInt(chatId);
+    const sendResponse = await (vk.api.messages.send as any)({
+      peer_ids: [peerIdInt],
       message: message,
       keyboard: keyboard,
       random_id: Date.now() + Math.floor(Math.random() * 100000),
     });
 
-    // VK API возвращает число или объект в зависимости от параметров
-    const messageId = typeof response === 'number' ? response : (response as any).message_id || 0;
+    // peer_ids response: [{peer_id, message_id, conversation_message_id, error?}]
+    let messageId = 0;
+    if (Array.isArray(sendResponse) && sendResponse.length > 0) {
+      messageId = sendResponse[0].conversation_message_id || 0;
+    } else if (sendResponse && typeof sendResponse === 'object') {
+      messageId = (sendResponse as any).conversation_message_id || 0;
+    }
 
     logger.info('VK notification sent', {
       calloutId: callout.id,
@@ -110,10 +119,57 @@ export async function sendConfirmation(
 /**
  * Форматировать сообщение о каллауте для VK
  */
-function formatCalloutMessage(callout: Callout, subdivision: Subdivision): string {
+function formatCalloutMessage(callout: Callout, subdivision: Subdivision, authorFactionName?: string): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+  const authorLine = authorFactionName
+    ? `Отправил запрос: ${callout.author_name} (${authorFactionName})`
+    : `Отправил запрос: ${callout.author_name}`;
+
+  const lines = [
+    '@all',
+    '',
+    `🚨 INCOMING CALLOUT #${callout.id}`,
+    '',
+    `Кратко об инциденте`,
+    callout.brief_description || 'Не указано',
+    '',
+    `Локация инцидента`,
+    callout.location || 'Не указано',
+    '',
+    `Полное описание инцидента`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    lines.push('', 'TAC-канал', callout.tac_channel);
+  }
+
+  lines.push(
+    '',
+    `Запрошенные подразделения`,
+    subdivision.name,
+    '',
+    authorLine,
+    time,
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Форматировать активное сообщение каллаута с логом инцидента (для обновления при ответе)
+ */
+export function formatActiveCalloutWithLog(
+  callout: Callout,
+  subdivision: Subdivision,
+  responses: CalloutResponse[],
+  subdivisionsMap: Map<number, Subdivision>
+): string {
   const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 
   const lines = [
+    '@all',
+    '',
     `🚨 INCOMING CALLOUT #${callout.id}`,
     '',
     `Кратко об инциденте`,
@@ -136,35 +192,108 @@ function formatCalloutMessage(callout: Callout, subdivision: Subdivision): strin
     subdivision.name,
     '',
     `Отправил запрос: ${callout.author_name}`,
-    `🕐 ${time}`,
-    '',
-    '@all',
+    time,
   );
+
+  const logEntries: string[] = [];
+  logEntries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
+  for (const r of responses) {
+    const subdiv = subdivisionsMap.get(r.subdivision_id);
+    const logTime = formatMoscowTime(new Date(r.created_at));
+    const emoji = subdiv ? formatSubdivisionEmojiVk(subdiv) : '';
+    const name = subdiv?.name || 'Unknown';
+    logEntries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
+  }
+
+  if (logEntries.length > 0) {
+    lines.push('', 'Лог инцидента', logEntries.join('\n'));
+  }
 
   return lines.join('\n');
 }
 
 /**
- * Форматировать сообщение о закрытии каллаута
+ * Форматировать сообщение о закрытии каллаута для VK (полный формат)
  */
-export function formatCalloutClosedMessage(callout: Callout): string {
+export function formatCalloutClosedMessage(
+  callout: Callout,
+  subdivision: Subdivision,
+  responses: CalloutResponse[] = [],
+  subdivisionsMap: Map<number, Subdivision> = new Map()
+): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+
   const lines = [
-    `${EMOJI.CLOSED} КАЛЛАУТ #${callout.id} ЗАКРЫТ`,
+    '@all',
     '',
-    `🕐 Время закрытия: ${
-      callout.closed_at
-        ? new Date(callout.closed_at).toLocaleString('ru-RU', {
-            timeZone: 'Europe/Moscow',
-          })
-        : 'Неизвестно'
-    }`,
+    `🚨 INCOMING CALLOUT #${callout.id}`,
+    '',
+    `Кратко об инциденте`,
+    callout.brief_description || 'Не указано',
+    '',
+    `Локация инцидента`,
+    callout.location || 'Не указано',
+    '',
+    `Полное описание инцидента`,
+    callout.description,
   ];
 
-  if (callout.closed_reason) {
-    lines.push(`📝 Причина: ${callout.closed_reason}`);
+  if (callout.tac_channel) {
+    lines.push('', 'TAC-канал', callout.tac_channel);
   }
 
+  lines.push(
+    '',
+    `Запрошенные подразделения`,
+    subdivision.name,
+    '',
+    `Отправил запрос: ${callout.author_name}`,
+    time,
+    '',
+    `Статус: 🔒 Закрыт`,
+  );
+
+  if (callout.closed_reason) {
+    lines.push(`Причина: ${callout.closed_reason}`);
+  }
+
+  // Лог инцидента
+  const logEntries: string[] = [];
+  logEntries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
+
+  for (const r of responses) {
+    const subdiv = subdivisionsMap.get(r.subdivision_id);
+    const logTime = formatMoscowTime(new Date(r.created_at));
+    const emoji = subdiv ? formatSubdivisionEmojiVk(subdiv) : '';
+    const name = subdiv?.name || 'Unknown';
+    logEntries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
+  }
+
+  if (callout.closed_at) {
+    const logTime = formatMoscowTime(new Date(callout.closed_at));
+    const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
+    logEntries.push(`${logTime} - 🔒 Инцидент закрыт${reason}.`);
+  }
+
+  lines.push('', 'Лог инцидента', logEntries.join('\n'));
+
   return lines.join('\n');
+}
+
+function formatMoscowTime(date: Date): string {
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function formatSubdivisionEmojiVk(subdivision: Subdivision): string {
+  const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+  // Кастомные Discord-эмодзи не рендерятся в VK — показываем только unicode
+  if (!parsed || parsed.id) return '';
+  return `${parsed.name} `;
 }
 
 export default {

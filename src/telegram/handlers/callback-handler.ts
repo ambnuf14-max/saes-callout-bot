@@ -4,6 +4,7 @@ import SyncService from '../../services/sync.service';
 import { CalloutResponsePayload, parseCompactCallbackData } from '../utils/keyboard-builder';
 import { handleTelegramError } from '../../utils/error-handler';
 import { EMOJI } from '../../config/constants';
+import { trackTelegramMember } from '../utils/member-tracker';
 
 /**
  * Обработчик callback событий от inline кнопок Telegram
@@ -24,6 +25,11 @@ export async function handleCallbackQuery(
       chatId: query.message?.chat.id,
       callbackData: query.data,
     });
+
+    // Трекинг участника
+    if (query.message?.chat.id) {
+      await trackTelegramMember(query.message.chat.id, query.from);
+    }
 
     if (!query.data) {
       await bot.answerCallbackQuery(query.id, {

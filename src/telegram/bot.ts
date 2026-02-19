@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import { handleTelegramError } from '../utils/error-handler';
 import handleCallbackQuery from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
+import { trackTelegramMember } from './utils/member-tracker';
 
 /**
  * Класс Telegram бота
@@ -113,11 +114,31 @@ class TelegramBotClient {
       }
     });
 
-    // Обработка добавления бота в группу
+    // Трекинг участников по любым сообщениям в групповых чатах
+    this.bot.on('message', async (msg) => {
+      if (msg.from && msg.from.id && !msg.from.is_bot) {
+        const chatType = msg.chat.type;
+        if (chatType === 'group' || chatType === 'supergroup') {
+          await trackTelegramMember(msg.chat.id, msg.from);
+        }
+      }
+    });
+
+    // Обработка добавления бота в группу + трекинг новых участников
     this.bot.on('new_chat_members', async (msg) => {
       try {
         const me = await this.bot.getMe();
         const botAdded = msg.new_chat_members?.some(m => m.id === me.id);
+
+        // Трекинг всех вступивших (кроме ботов)
+        if (msg.new_chat_members) {
+          for (const member of msg.new_chat_members) {
+            if (!member.is_bot) {
+              await trackTelegramMember(msg.chat.id, member);
+            }
+          }
+        }
+
         if (!botAdded) return;
 
         const welcomeText =
@@ -163,6 +184,9 @@ class TelegramBotClient {
         botName: me.first_name,
       });
 
+      // Бот подключён к API — уже может отправлять сообщения
+      this.isRunning = true;
+
       // Регистрация обработчиков
       this.registerEventHandlers();
 
@@ -181,8 +205,6 @@ class TelegramBotClient {
           restart: true,
         });
       }
-
-      this.isRunning = true;
 
       logger.info('Telegram bot started successfully', {
         mode: this.useWebhook ? 'Webhook' : 'Long Poll',

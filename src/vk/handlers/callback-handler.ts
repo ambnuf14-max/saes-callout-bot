@@ -5,6 +5,7 @@ import { CalloutResponsePayload } from '../utils/keyboard-builder';
 import { handleVkError } from '../../utils/error-handler';
 import { EMOJI } from '../../config/constants';
 import vkBot from '../bot';
+import { CalloutModel } from '../../database/models';
 
 /**
  * Обработчик callback событий от кнопок VK
@@ -47,6 +48,19 @@ export async function handleCallbackEvent(
       userId: context.userId,
       userName,
     });
+
+    // Сохранить conversation_message_id если ещё не сохранён
+    const cmid = (context as any).conversationMessageId;
+    if (cmid && payload.callout_id) {
+      const existing = await CalloutModel.findById(payload.callout_id);
+      if (existing && (!existing.vk_message_id || existing.vk_message_id === '0')) {
+        await CalloutModel.update(payload.callout_id, { vk_message_id: cmid.toString() });
+        logger.info('Saved VK conversation_message_id for callout', {
+          calloutId: payload.callout_id,
+          cmid,
+        });
+      }
+    }
 
     // Обработать ответ через SyncService
     const responseType = payload.type || 'acknowledged';

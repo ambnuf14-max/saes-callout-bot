@@ -92,7 +92,7 @@ function getConfig(): Config {
 
     features: {
       autoDeleteChannels: process.env.AUTO_DELETE_CHANNELS === 'true',
-      channelDeleteDelay: parseInt(process.env.CHANNEL_DELETE_DELAY || '300000', 10),
+      channelDeleteDelay: parseInt(process.env.CHANNEL_DELETE_DELAY || '180000', 10),
       calloutAutoCloseMs: parseInt(process.env.CALLOUT_AUTO_CLOSE_DELAY || '3600000', 10),
     },
   };

@@ -1,8 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { Callout, Subdivision } from '../../types/database.types';
+import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { EMOJI } from '../../config/constants';
 import { buildDetailedCalloutKeyboard } from './keyboard-builder';
 import logger from '../../utils/logger';
+import { parseDiscordEmoji } from '../../discord/utils/subdivision-settings-helper';
+import { TelegramMemberModel, TelegramMember } from '../../database/models/TelegramMember';
 
 /**
  * Утилиты для форматирования и отправки сообщений в Telegram
@@ -15,10 +17,12 @@ export async function sendCalloutNotification(
   bot: TelegramBot,
   chatId: string,
   callout: Callout,
-  subdivision: Subdivision
+  subdivision: Subdivision,
+  authorFactionName?: string
 ): Promise<number> {
   try {
-    const message = formatCalloutMessage(callout, subdivision);
+    const members = await TelegramMemberModel.findByChatId(chatId);
+    const message = formatCalloutMessage(callout, subdivision, authorFactionName, members);
     const keyboard = buildDetailedCalloutKeyboard(callout.id, subdivision.id);
 
     const sentMessage = await bot.sendMessage(chatId, message, {
@@ -47,7 +51,138 @@ export async function sendCalloutNotification(
 /**
  * Форматировать сообщение о каллауте для Telegram
  */
-function formatCalloutMessage(callout: Callout, subdivision: Subdivision): string {
+function buildMentionLine(members: TelegramMember[]): string {
+  if (members.length === 0) return '';
+  return members.map(m => {
+    if (m.username) return `@${m.username}`;
+    const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || 'участник';
+    return `<a href="tg://user?id=${m.user_id}">${name}</a>`;
+  }).join(' ');
+}
+
+function formatCalloutMessage(callout: Callout, subdivision: Subdivision, authorFactionName?: string, members: TelegramMember[] = []): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+  const authorLine = authorFactionName
+    ? `<b>Отправил запрос:</b> ${callout.author_name} (${authorFactionName})`
+    : `<b>Отправил запрос:</b> ${callout.author_name}`;
+
+  const mentionLine = buildMentionLine(members);
+  const parts: string[] = [];
+  if (mentionLine) {
+    parts.push(mentionLine, '');
+  }
+  parts.push(
+    `🚨 <b>INCOMING CALLOUT #${callout.id}</b>`,
+    '',
+    `<b>Кратко об инциденте</b>`,
+    callout.brief_description || 'Не указано',
+    '',
+    `<b>Локация инцидента</b>`,
+    callout.location || 'Не указано',
+    '',
+    `<b>Полное описание инцидента</b>`,
+    callout.description,
+  );
+
+  if (callout.tac_channel) {
+    parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
+  }
+
+  parts.push(
+    '',
+    `<b>Запрошенные подразделения</b>`,
+    subdivision.name,
+    '',
+    authorLine,
+    `🕐 ${time}`,
+  );
+
+  return parts.join('\n');
+}
+
+/**
+ * Форматировать полное сообщение о закрытии каллаута для Telegram
+ */
+export function formatCalloutClosedMessage(
+  callout: Callout,
+  subdivision: Subdivision,
+  responses: CalloutResponse[] = [],
+  subdivisionsMap: Map<number, Subdivision> = new Map(),
+  closedByName?: string
+): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+
+  const parts = [
+    `🚨 <b>INCOMING CALLOUT #${callout.id}</b>`,
+    '',
+    `<b>Кратко об инциденте</b>`,
+    callout.brief_description || 'Не указано',
+    '',
+    `<b>Локация инцидента</b>`,
+    callout.location || 'Не указано',
+    '',
+    `<b>Полное описание инцидента</b>`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
+  }
+
+  parts.push(
+    '',
+    `<b>Запрошенные подразделения</b>`,
+    subdivision.name,
+    '',
+    `<b>Отправил запрос:</b> ${callout.author_name}`,
+    time,
+    '',
+    `<b>Статус:</b> 🔒 Закрыт`,
+  );
+
+  if (closedByName) {
+    parts.push(`<b>Закрыл:</b> ${closedByName}`);
+  }
+
+  // Лог инцидента
+  const logEntries = buildLogEntries(callout, responses, subdivisionsMap, true);
+  parts.push('', '<b>Лог инцидента</b>', logEntries.join('\n'));
+
+  return parts.join('\n');
+}
+
+function buildLogEntries(
+  callout: Callout,
+  responses: CalloutResponse[],
+  subdivisionsMap: Map<number, Subdivision>,
+  includeClosed = false
+): string[] {
+  const entries: string[] = [];
+  entries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
+
+  for (const r of responses) {
+    const subdiv = subdivisionsMap.get(r.subdivision_id);
+    const logTime = formatMoscowTime(new Date(r.created_at));
+    const emoji = subdiv ? formatSubdivisionEmojiTg(subdiv) : '';
+    const name = subdiv?.name || 'Unknown';
+    entries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
+  }
+
+  if (includeClosed && callout.closed_at) {
+    const logTime = formatMoscowTime(new Date(callout.closed_at));
+    const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
+    entries.push(`${logTime} - 🔒 Инцидент закрыт${reason}.`);
+  }
+
+  return entries;
+}
+
+export function formatActiveCalloutWithLog(
+  callout: Callout,
+  subdivision: Subdivision,
+  responses: CalloutResponse[],
+  subdivisionsMap: Map<number, Subdivision>
+): string {
   const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 
   const parts = [
@@ -76,23 +211,28 @@ function formatCalloutMessage(callout: Callout, subdivision: Subdivision): strin
     `🕐 ${time}`,
   );
 
+  const logEntries = buildLogEntries(callout, responses, subdivisionsMap, false);
+  if (logEntries.length > 0) {
+    parts.push('', '<b>Лог инцидента</b>', logEntries.join('\n'));
+  }
+
   return parts.join('\n');
 }
 
-/**
- * Форматировать сообщение о закрытии каллаута
- */
-export function formatCalloutClosedMessage(callout: Callout): string {
-  const header = `${EMOJI.SUCCESS} <b>Каллаут #${callout.id} закрыт</b>`;
-  const closedByText = callout.closed_by === 'system' ? 'System (авто-закрытие)' : callout.closed_by;
-  const closedBy = closedByText ? `👤 Закрыл: ${closedByText}` : '';
-  const reason = callout.closed_reason ? `📝 Причина: ${callout.closed_reason}` : '';
+function formatMoscowTime(date: Date): string {
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
 
-  const parts = [header];
-  if (closedBy) parts.push(closedBy);
-  if (reason) parts.push(reason);
-
-  return parts.join('\n');
+function formatSubdivisionEmojiTg(subdivision: Subdivision): string {
+  const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+  // Кастомные Discord-эмодзи не рендерятся в Telegram — показываем только unicode
+  if (!parsed || parsed.id) return '';
+  return `${parsed.name} `;
 }
 
 /**

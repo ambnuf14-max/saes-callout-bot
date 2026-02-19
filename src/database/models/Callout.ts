@@ -307,6 +307,21 @@ export class CalloutModel {
   }
 
   /**
+   * Найти закрытые каллауты с каналом, закрытые раньше чем minAgeMs миллисекунд назад
+   */
+  static async findClosedWithChannelOlderThan(minAgeMs: number): Promise<Callout[]> {
+    const cutoff = new Date(Date.now() - minAgeMs).toISOString();
+    return await database.all<Callout>(
+      `SELECT * FROM callouts
+       WHERE status != ?
+         AND discord_channel_id IS NOT NULL
+         AND closed_at IS NOT NULL
+         AND closed_at < ?`,
+      [CALLOUT_STATUS.ACTIVE, cutoff]
+    );
+  }
+
+  /**
    * Получить количество активных каллаутов (для всех серверов)
    */
   static async countActive(): Promise<number> {
