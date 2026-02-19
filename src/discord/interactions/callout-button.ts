@@ -10,6 +10,7 @@ import SubdivisionService from '../../services/subdivision.service';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { buildSubdivisionEmbeds } from '../utils/subdivision-embed-builder';
+import { parseDiscordEmoji } from '../utils/subdivision-settings-helper';
 
 /**
  * Обработчик нажатия кнопки "Создать каллаут"
@@ -38,7 +39,15 @@ export async function handleCreateCalloutButton(
 
     // Получить активные подразделения, принимающие каллауты
     const allSubdivisions = await SubdivisionService.getSubdivisionsByServerId(server.id, true);
-    const subdivisions = allSubdivisions.filter(sub => sub.is_accepting_callouts);
+    const acceptingSubdivisions = allSubdivisions.filter(sub => sub.is_accepting_callouts && sub.discord_role_id);
+
+    // Если у фракции есть не-дефолтные подразделения — дефолтное не показываем
+    const factionsWithRealSubdivisions = new Set(
+      acceptingSubdivisions.filter(sub => !sub.is_default).map(sub => sub.faction_id)
+    );
+    const subdivisions = acceptingSubdivisions.filter(
+      sub => !sub.is_default || !factionsWithRealSubdivisions.has(sub.faction_id)
+    );
 
     if (subdivisions.length === 0) {
       throw new CalloutError(
@@ -63,12 +72,20 @@ export async function handleCreateCalloutButton(
       .setCustomId('subdivision_select')
       .setPlaceholder('Выберите подразделение...')
       .addOptions(
-        subdivisions.map((subdivision: any) => ({
-          label: (subdivision.is_accepting_callouts ? '' : '⏸️ ') + subdivision.name,
-          description: subdivision.short_description || subdivision.description || 'Нет описания',
-          value: subdivision.id.toString(),
-          emoji: subdivision.is_accepting_callouts ? '🏢' : undefined,
-        }))
+        subdivisions.map((subdivision: any) => {
+          const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+          const emoji = subdivision.is_accepting_callouts
+            ? (parsed
+                ? (parsed.id ? { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false } : parsed.name)
+                : '🏢')
+            : undefined;
+          return {
+            label: (subdivision.is_accepting_callouts ? '' : '⏸️ ') + subdivision.name,
+            description: subdivision.short_description || subdivision.description || 'Нет описания',
+            value: subdivision.id.toString(),
+            emoji,
+          };
+        })
       );
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(

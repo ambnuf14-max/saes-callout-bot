@@ -48,16 +48,33 @@ export async function sendCalloutNotification(
  * Форматировать сообщение о каллауте для Telegram
  */
 function formatCalloutMessage(callout: Callout, subdivision: Subdivision): string {
-  const header = `${EMOJI.CALLOUT} <b>КАЛЛАУТ #${callout.id}</b>`;
-  const subdivisionInfo = `📋 Подразделение: <b>${subdivision.name}</b>`;
-  const authorInfo = `👤 Автор: ${callout.author_name}`;
-  const descriptionInfo = `📝 Описание: ${callout.description}`;
-  const locationInfo = callout.location ? `📍 Локация: ${callout.location}` : '';
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 
-  const parts = [header, subdivisionInfo, authorInfo, descriptionInfo];
-  if (locationInfo) {
-    parts.push(locationInfo);
+  const parts = [
+    `🚨 <b>INCOMING CALLOUT #${callout.id}</b>`,
+    '',
+    `<b>Кратко об инциденте</b>`,
+    callout.brief_description || 'Не указано',
+    '',
+    `<b>Локация инцидента</b>`,
+    callout.location || 'Не указано',
+    '',
+    `<b>Полное описание инцидента</b>`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
   }
+
+  parts.push(
+    '',
+    `<b>Запрошенные подразделения</b>`,
+    subdivision.name,
+    '',
+    `<b>Отправил запрос:</b> ${callout.author_name}`,
+    `🕐 ${time}`,
+  );
 
   return parts.join('\n');
 }

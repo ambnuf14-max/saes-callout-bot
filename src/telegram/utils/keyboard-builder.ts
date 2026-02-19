@@ -27,12 +27,8 @@ export function buildDetailedCalloutKeyboard(
     inline_keyboard: [
       [
         {
-          text: '✅ Принято',
+          text: 'Отреагировать на инцидент',
           callback_data: `r:${calloutId}:${subdivisionId}:a`,
-        },
-        {
-          text: '🚗 В пути',
-          callback_data: `r:${calloutId}:${subdivisionId}:w`,
         },
       ],
     ],

@@ -4,26 +4,33 @@ import { SubdivisionService } from '../../services/subdivision.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { getLeaderFaction } from '../utils/faction-permission-checker';
 import { buildSubdivisionsList, buildSubdivisionDetailPanel, buildSettingsPanel, buildSubdivisionEmbedEditorPanel } from '../utils/faction-panel-builder';
-import { parseSubdivisionSettingsData, isValidDiscordEmoji } from '../utils/subdivision-settings-helper';
+import {
+  parseSubdivisionSettingsData,
+  isValidDiscordEmoji,
+  isValidUrl,
+  isValidHexColor,
+  parseEmbedFieldFromModal,
+  getVerifiedSubdivision,
+  createDraftState,
+  handleInteractionError,
+} from '../utils/subdivision-settings-helper';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { Subdivision } from '../../types/database.types';
 
 // Временное хранилище для draft изменений embed подразделений
-const subdivisionDraftState = new Map<string, Partial<Subdivision>>();
+const subdivisionDraftState = createDraftState<Subdivision>();
 
 export function getSubdivisionDraft(subdivisionId: number): Partial<Subdivision> | undefined {
   return subdivisionDraftState.get(subdivisionId.toString());
 }
 
 function setSubdivisionDraft(subdivisionId: number, data: Partial<Subdivision>) {
-  const key = subdivisionId.toString();
-  const existing = subdivisionDraftState.get(key) || {};
-  subdivisionDraftState.set(key, { ...existing, ...data });
+  subdivisionDraftState.set(subdivisionId.toString(), data);
 }
 
 export function clearSubdivisionDraft(subdivisionId: number) {
-  subdivisionDraftState.delete(subdivisionId.toString());
+  subdivisionDraftState.clear(subdivisionId.toString());
 }
 
 /**
@@ -79,6 +86,11 @@ export async function handleFactionPanelModal(interaction: ModalSubmitInteractio
       const subdivisionId = parseInt(customId.replace('faction_modal_sub_other_', ''));
       await handleSubOtherSettings(interaction, subdivisionId, faction.id);
     }
+    // Обновление фракции (название + эмодзи)
+    else if (customId.startsWith('faction_modal_update_faction_')) {
+      const factionId = parseInt(customId.replace('faction_modal_update_faction_', ''));
+      await handleUpdateFaction(interaction, factionId, faction.id, faction.server_id);
+    }
     // === Редактирование полей embed подразделения (интерактивный редактор) ===
     else if (customId.startsWith('subdivision_modal_name_')) {
       const subdivisionId = parseInt(customId.replace('subdivision_modal_name_', ''));
@@ -125,22 +137,7 @@ export async function handleFactionPanelModal(interaction: ModalSubmitInteractio
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'role');
     }
   } catch (error) {
-    logger.error('Error handling faction panel modal', {
-      error: error instanceof Error ? error.message : error,
-      customId,
-      userId: interaction.user.id,
-    });
-
-    const content =
-      error instanceof CalloutError
-        ? error.message
-        : `${EMOJI.ERROR} Произошла ошибка при обработке формы`;
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-    }
+    await handleInteractionError(error, interaction, 'Error handling faction panel modal', `${EMOJI.ERROR} Произошла ошибка при обработке формы`);
   }
 }
 
@@ -209,19 +206,7 @@ async function handleEditSubdivision(
 ) {
   await interaction.deferUpdate();
 
-  // Проверить что подразделение существует и принадлежит фракции
-  const existingSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!existingSubdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
-  }
-
-  if (existingSubdivision.faction_id !== factionId) {
-    throw new CalloutError(
-      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
-      'PERMISSION_DENIED',
-      403
-    );
-  }
+  const existingSubdivision = await getVerifiedSubdivision(subdivisionId, factionId);
 
   const name = interaction.fields.getTextInputValue('subdivision_name').trim();
   const description = interaction.fields.getTextInputValue('subdivision_description').trim();
@@ -270,19 +255,7 @@ async function handleConfigureEmbed(
 ) {
   await interaction.deferUpdate();
 
-  // Проверить что подразделение существует и принадлежит фракции
-  const existingSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!existingSubdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
-  }
-
-  if (existingSubdivision.faction_id !== factionId) {
-    throw new CalloutError(
-      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
-      'PERMISSION_DENIED',
-      403
-    );
-  }
+  const existingSubdivision = await getVerifiedSubdivision(subdivisionId, factionId);
 
   // Получить значения полей
   const title = interaction.fields.getTextInputValue('embed_title').trim() || undefined;
@@ -346,7 +319,7 @@ async function handleConfigureEmbed(
   });
 
   // Показать панель настроек с уведомлением
-  const panel = buildSettingsPanel(existingSubdivision);
+  const panel = await buildSettingsPanel(existingSubdivision);
 
   await interaction.editReply(panel);
 
@@ -356,26 +329,6 @@ async function handleConfigureEmbed(
   });
 }
 
-/**
- * Проверить корректность URL
- */
-function isValidUrl(url: string): boolean {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Проверить корректность hex цвета
- */
-function isValidHexColor(color: string): boolean {
-  // Поддержка форматов: #RRGGBB или RRGGBB
-  const hexPattern = /^#?[0-9A-Fa-f]{6}$/;
-  return hexPattern.test(color);
-}
 
 /**
  * Обработка настроек подразделения (роль, логотип, краткое описание).
@@ -389,18 +342,7 @@ async function handleEditSettings(
 ) {
   await interaction.deferUpdate();
 
-  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
-  }
-
-  if (subdivision.faction_id !== factionId) {
-    throw new CalloutError(
-      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
-      'PERMISSION_DENIED',
-      403
-    );
-  }
+  const subdivision = await getVerifiedSubdivision(subdivisionId, factionId);
 
   if (!interaction.guild) {
     throw new Error('Guild not found');
@@ -427,7 +369,7 @@ async function handleEditSettings(
     userId: interaction.user.id,
   });
 
-  const panel = buildSettingsPanel(subdivision);
+  const panel = await buildSettingsPanel(subdivision);
   await interaction.editReply(panel);
 
   await interaction.followUp({
@@ -447,18 +389,7 @@ async function handleSubOtherSettings(
 ) {
   await interaction.deferUpdate();
 
-  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
-  }
-
-  if (subdivision.faction_id !== factionId) {
-    throw new CalloutError(
-      `${EMOJI.ERROR} У вас нет прав на управление этим подразделением`,
-      'PERMISSION_DENIED',
-      403
-    );
-  }
+  const subdivision = await getVerifiedSubdivision(subdivisionId, factionId);
 
   if (!interaction.guild) throw new Error('Guild not found');
 
@@ -494,11 +425,84 @@ async function handleSubOtherSettings(
     userId: interaction.user.id,
   });
 
-  const panel = buildSettingsPanel(subdivision);
+  const panel = await buildSettingsPanel(subdivision);
   await interaction.editReply(panel);
 
   await interaction.followUp({
     content: `${EMOJI.PENDING} Запрос на обновление настроек подразделения отправлен администратору`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+/**
+ * Обработка обновления фракции (название + эмодзи)
+ */
+async function handleUpdateFaction(
+  interaction: ModalSubmitInteraction,
+  factionId: number,
+  leaderFactionId: number,
+  serverId: number
+) {
+  await interaction.deferUpdate();
+
+  if (factionId !== leaderFactionId) {
+    throw new CalloutError(
+      `${EMOJI.ERROR} У вас нет прав на управление этой фракцией`,
+      'PERMISSION_DENIED',
+      403
+    );
+  }
+
+  if (!interaction.guild) throw new Error('Guild not found');
+
+  const nameRaw = interaction.fields.getTextInputValue('faction_name').trim();
+  const logoRaw = interaction.fields.getTextInputValue('faction_logo').trim();
+
+  const data: { name?: string; logo_url?: string | null } = {};
+  if (nameRaw) data.name = nameRaw;
+  data.logo_url = logoRaw || null;
+
+  const { PendingChangeService } = await import('../../services/pending-change.service');
+  await PendingChangeService.requestUpdateFaction(
+    factionId,
+    serverId,
+    interaction.user.id,
+    data,
+    interaction.guild
+  );
+
+  logger.info('Faction update requested via panel', {
+    factionId,
+    userId: interaction.user.id,
+  });
+
+  // Возврат к главной панели
+  const { FactionModel } = await import('../../database/models');
+  const { SubdivisionModel } = await import('../../database/models');
+  const faction = await FactionModel.findById(factionId);
+  if (!faction) throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+
+  const activeNonDefaultCount = await SubdivisionModel.countActiveNonDefault(faction.id);
+
+  let panel;
+  if (activeNonDefaultCount > 0) {
+    const { SubdivisionService } = await import('../../services/subdivision.service');
+    const allSubdivisions = await SubdivisionService.getSubdivisionsByFactionId(faction.id, true);
+    const subdivisions = allSubdivisions.filter((sub: any) => !sub.is_default);
+    const missingRoleCount = subdivisions.filter((sub: any) => !sub.discord_role_id).length;
+    const { buildMainPanel } = await import('../utils/faction-panel-builder');
+    panel = buildMainPanel(faction, subdivisions.length, subdivisions.length, missingRoleCount);
+  } else {
+    const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
+    if (!defaultSubdivision) throw new CalloutError('Ошибка конфигурации', 'CONFIG_ERROR', 500);
+    const { buildStandaloneMainPanel } = await import('../utils/faction-panel-builder');
+    panel = buildStandaloneMainPanel(faction, defaultSubdivision);
+  }
+
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
+    content: `${EMOJI.PENDING} Запрос на обновление фракции отправлен администратору`,
     flags: MessageFlags.Ephemeral,
   });
 }
@@ -516,96 +520,18 @@ async function handleSubdivisionFieldEdit(
 ) {
   await interaction.deferUpdate();
 
-  const draftData: Partial<Subdivision> = {};
-
-  // Получить значения полей в зависимости от типа
-  switch (field) {
-    case 'name':
-      const nameVal = interaction.fields.getTextInputValue('subdivision_name').trim();
-      if (nameVal) {
-        draftData.name = nameVal;
-      }
-      break;
-    case 'title':
-      const title = interaction.fields.getTextInputValue('embed_title').trim();
-      draftData.embed_title = title || null;
-      const titleUrl = interaction.fields.getTextInputValue('embed_title_url').trim();
-      draftData.embed_title_url = titleUrl || null;
-      break;
-    case 'description':
-      const desc = interaction.fields.getTextInputValue('embed_description').trim();
-      draftData.embed_description = desc || null;
-      break;
-    case 'color':
-      let color = interaction.fields.getTextInputValue('embed_color').trim();
-      if (color) {
-        // Нормализовать цвет (добавить # если нужно)
-        color = color.startsWith('#') ? color : `#${color}`;
-        // Валидация hex цвета
-        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-          await interaction.followUp({
-            content: `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-        draftData.embed_color = color;
-      } else {
-        draftData.embed_color = null;
-      }
-      break;
-    case 'author':
-      const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
-      const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
-      const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
-      draftData.embed_author_name = authorName || null;
-      draftData.embed_author_url = authorUrl || null;
-      draftData.embed_author_icon_url = authorIcon || null;
-      break;
-    case 'footer':
-      const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
-      const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
-      draftData.embed_footer_text = footerText || null;
-      draftData.embed_footer_icon_url = footerIcon || null;
-      break;
-    case 'image':
-      const imageUrl = interaction.fields.getTextInputValue('embed_image_url').trim();
-      draftData.embed_image_url = imageUrl || null;
-      break;
-    case 'thumbnail':
-      const thumbnailUrl = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
-      draftData.embed_thumbnail_url = thumbnailUrl || null;
-      break;
-    case 'short_desc':
-      const shortDesc = interaction.fields.getTextInputValue('short_description').trim();
-      draftData.short_description = shortDesc || null;
-      break;
-    case 'logo':
-      const logoUrl = interaction.fields.getTextInputValue('logo_url').trim();
-      draftData.logo_url = logoUrl || null;
-      break;
-    case 'role':
-      const roleId = interaction.fields.getTextInputValue('discord_role_id').trim();
-      if (roleId && !/^\d{17,20}$/.test(roleId)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный ID Discord роли. Должен содержать только цифры (17-20 символов).`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.discord_role_id = roleId || null;
-      break;
+  const result = parseEmbedFieldFromModal(interaction, field, { nameInputCustomId: 'subdivision_name' });
+  if (!result.ok) {
+    await interaction.followUp({ content: result.errorMessage, flags: MessageFlags.Ephemeral });
+    return;
   }
 
-  // Обновить draft состояние
-  setSubdivisionDraft(subdivisionId, draftData);
+  setSubdivisionDraft(subdivisionId, result.data);
 
-  // Получить текущий draft и перерисовать панель с обновленным предпросмотром
   const currentDraft = getSubdivisionDraft(subdivisionId);
   const panel = await buildSubdivisionEmbedEditorPanel(subdivisionId, currentDraft);
   await interaction.editReply(panel);
 
-  // Показать ephemeral уведомление об изменении
   await interaction.followUp({
     content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Отправить на одобрение" чтобы применить изменения.`,
     flags: MessageFlags.Ephemeral,

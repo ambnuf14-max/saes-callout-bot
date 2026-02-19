@@ -4,7 +4,7 @@ import logger from '../../utils/logger';
 import { ServerModel, SubdivisionModel } from '../../database/models';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { getLeaderFaction } from '../utils/faction-permission-checker';
-import { buildMainPanel, buildStandaloneMainPanel } from '../utils/faction-panel-builder';
+import { buildMainPanel, buildStandaloneMainPanel, buildStandaloneSetupRequiredPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 
@@ -67,7 +67,8 @@ const factionCommand: Command = {
         // Есть подразделения (в т.ч. из шаблонов типа) — показать обычную панель
         const allSubdivisions = await SubdivisionService.getSubdivisionsByFactionId(faction.id, true);
         const subdivisions = allSubdivisions.filter(sub => !sub.is_default);
-        panel = buildMainPanel(faction, subdivisions.length, subdivisions.length);
+        const missingRoleCount = subdivisions.filter(sub => !sub.discord_role_id).length;
+        panel = buildMainPanel(faction, subdivisions.length, subdivisions.length, missingRoleCount);
       } else {
         // Нет обычных подразделений — standalone режим, нужно дефолтное
         const defaultSubdivision = await SubdivisionModel.findDefaultByFactionId(faction.id);
@@ -77,7 +78,9 @@ const factionCommand: Command = {
           });
           return;
         }
-        panel = buildStandaloneMainPanel(faction, defaultSubdivision);
+        panel = faction.standalone_needs_setup
+          ? buildStandaloneSetupRequiredPanel(faction, defaultSubdivision)
+          : buildStandaloneMainPanel(faction, defaultSubdivision);
       }
 
       await interaction.editReply(panel);

@@ -16,10 +16,21 @@ import { ServerModel } from '../../database/models';
 /**
  * Создать канал для инцидента
  */
+function slugifyForChannel(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u0400-\u04FF-]/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 45);
+}
+
 export async function createIncidentChannel(
   guild: Guild,
   callout: Callout,
-  subdivision: Subdivision
+  subdivision: Subdivision,
+  briefDescription?: string
 ): Promise<TextChannel> {
   try {
     // Получить настройки сервера для категории
@@ -58,8 +69,11 @@ export async function createIncidentChannel(
       }
     }
 
-    // Название канала: incident-{id}-{dept}
-    const channelName = `incident-${callout.id}-${subdivision.name.toLowerCase()}`;
+    // Название канала: incident-{id}-{краткое описание или название подразделения}
+    const nameSuffix = briefDescription
+      ? slugifyForChannel(briefDescription)
+      : slugifyForChannel(subdivision.name);
+    const channelName = `incident-${callout.id}-${nameSuffix}`;
 
     // Получить роли для прав доступа
     const leaderRoleIds = server ? ServerModel.getLeaderRoleIds(server) : [];

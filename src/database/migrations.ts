@@ -11,6 +11,9 @@ import runEmbedTitleUrlMigration from './migrations/010_embed_title_url';
 import runTemplateShortDescLogoMigration from './migrations/011_template_short_desc_logo';
 import runTemplateDiscordRoleMigration from './migrations/012_template_discord_role';
 import runFactionLogoUrlMigration from './migrations/013_faction_logo_url';
+import runStandaloneNeedsSetupMigration from './migrations/014_standalone_needs_setup';
+import runCalloutTacChannelMigration from './migrations/015_callout_tac_channel';
+import runCalloutBriefDescriptionMigration from './migrations/016_callout_brief_description';
 
 /**
  * SQL схема для всех таблиц
@@ -170,6 +173,9 @@ export async function runMigrations(): Promise<void> {
     await runTemplateShortDescLogoMigration();
     await runTemplateDiscordRoleMigration();
     await runFactionLogoUrlMigration();
+    await runStandaloneNeedsSetupMigration();
+    await runCalloutTacChannelMigration();
+    await runCalloutBriefDescriptionMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

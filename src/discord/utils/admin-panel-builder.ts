@@ -16,8 +16,10 @@ import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { COLORS, EMOJI } from '../../config/constants';
 import CalloutService from '../../services/callout.service';
-import { getChangeTypeLabel, formatChangeDetails, formatDate } from './change-formatter';
+import { getChangeTypeLabel, formatChangeDetails, formatBeforeAfter, formatDate } from './change-formatter';
 import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
+import { buildSubdivisionEditorPanel, buildLinksPanelGeneric, buildSubdivisionSettingsPanelCore } from './subdivision-editor-builder';
+import { buildSubdivisionsListPanel } from './subdivision-list-builder';
 
 /**
  * Построить главный экран админ-панели
@@ -448,8 +450,14 @@ export async function buildFactionsSection(server: Server) {
 
   let description = factions.length > 0
     ? factions.map((d, i) => {
-        const statusEmoji = d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
-        return `${statusEmoji} **${d.name}** — Общая: <@&${d.general_leader_role_id}>, Фракция: <@&${d.faction_role_id}>`;
+        const factionEmoji = (() => {
+          if (!d.logo_url) return d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
+          const parsed = parseDiscordEmoji(d.logo_url);
+          if (!parsed) return d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
+          if (parsed.id && !d.logo_url.startsWith('<')) return `<:e:${parsed.id}>`;
+          return d.logo_url;
+        })();
+        return `${factionEmoji} **${d.name}** — Общая: <@&${d.general_leader_role_id}>, Фракция: <@&${d.faction_role_id}>`;
       }).join('\n')
     : 'Фракции не созданы.';
 
@@ -513,11 +521,15 @@ export async function buildFactionsSection(server: Server) {
   if (factions.length > 0) {
     const options = factions.map((d) => {
       const statusEmoji = d.is_active ? EMOJI.ACTIVE : EMOJI.ERROR;
+      const parsed = d.logo_url ? parseDiscordEmoji(d.logo_url) : null;
+      const emoji: string | { id?: string; name?: string; animated?: boolean } = parsed
+        ? (parsed.id ? { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false } : parsed.name)
+        : statusEmoji;
       return new StringSelectMenuOptionBuilder()
         .setLabel(d.name)
         .setValue(d.id.toString())
         .setDescription(d.description || 'Без описания')
-        .setEmoji(statusEmoji);
+        .setEmoji(emoji);
     });
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -715,66 +727,19 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
     return { embeds: [embed], components: [row] };
   }
 
-  const embed = new EmbedBuilder()
+  const typeEmbed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle(`${EMOJI.INFO} Тип: ${typeWithTemplates.name}`)
     .setTimestamp();
 
   if (typeWithTemplates.description) {
-    embed.addFields({ name: 'Описание', value: typeWithTemplates.description, inline: false });
+    typeEmbed.addFields({ name: 'Описание', value: typeWithTemplates.description, inline: false });
   }
 
-  // Показать шаблоны
-  if (typeWithTemplates.templates.length > 0) {
-    let templatesText = '';
-    typeWithTemplates.templates
-      .sort((a, b) => a.display_order - b.display_order)
-      .forEach((template, idx) => {
-        templatesText += `${idx + 1}. **${template.name}**\n`;
-        if (template.description) {
-          templatesText += `   └ ${template.description}\n`;
-        }
-        if (template.embed_color) {
-          templatesText += `   └ Цвет: ${template.embed_color}\n`;
-        }
-      });
+  const sortedTemplates = typeWithTemplates.templates
+    .sort((a, b) => a.display_order - b.display_order);
 
-    embed.addFields({
-      name: `📋 Шаблоны подразделений (${typeWithTemplates.templates.length})`,
-      value: templatesText,
-      inline: false,
-    });
-  } else {
-    embed.addFields({
-      name: '📋 Шаблоны подразделений',
-      value: 'Нет предопределенных подразделений.\nБудет создано только дефолтное подразделение.',
-      inline: false,
-    });
-  }
-
-  const components: ActionRowBuilder<any>[] = [];
-
-  // Выпадающий список шаблонов
-  if (typeWithTemplates.templates.length > 0) {
-    const sortedTemplates = typeWithTemplates.templates
-      .sort((a, b) => a.display_order - b.display_order)
-      .slice(0, 25);
-    const templateSelect = new StringSelectMenuBuilder()
-      .setCustomId(`admin_select_template_${typeId}`)
-      .setPlaceholder('Выберите шаблон для редактирования...')
-      .addOptions(
-        sortedTemplates.map(t =>
-          new StringSelectMenuOptionBuilder()
-            .setLabel(t.name.substring(0, 100))
-            .setValue(t.id.toString())
-            .setDescription(t.description ? t.description.substring(0, 100) : 'Нет описания')
-        )
-      );
-    components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(templateSelect));
-  }
-
-  // Основные кнопки управления
-  const mainButtons = [
+  const mainButtonsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin_add_template_${typeId}`)
       .setLabel('Добавить шаблон')
@@ -785,9 +750,9 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
       .setLabel('Редактировать тип')
       .setEmoji('✏️')
       .setStyle(ButtonStyle.Primary),
-  ];
+  );
 
-  const secondRow = [
+  const secondButtonsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin_delete_fact_type_${typeId}`)
       .setLabel('Удалить тип')
@@ -796,16 +761,22 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
     new ButtonBuilder()
       .setCustomId('admin_back_to_fact_types')
       .setLabel('Назад к типам')
-      .setEmoji('◀️')
       .setStyle(ButtonStyle.Secondary),
-  ];
+  );
 
-  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...mainButtons));
-  components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...secondRow));
+  const templateListResult = buildSubdivisionsListPanel(sortedTemplates, {
+    title: `📋 Шаблоны подразделений (${sortedTemplates.length})`,
+    emptyText: 'Нет предопределенных подразделений.\nБудет создано только дефолтное подразделение.',
+    selectMenuId: `admin_select_template_${typeId}`,
+    selectMenuPlaceholder: 'Выберите шаблон для редактирования...',
+    showCalloutStatus: false,
+    showSocialLinks: false,
+    actionRows: [mainButtonsRow, secondButtonsRow],
+  });
 
   return {
-    embeds: [embed],
-    components,
+    embeds: [typeEmbed, ...templateListResult.embeds],
+    components: templateListResult.components,
   };
 }
 
@@ -830,7 +801,6 @@ export async function buildPendingChangesPanel(serverId: number) {
           new ButtonBuilder()
             .setCustomId('admin_back_to_factions')
             .setLabel('Назад к фракциям')
-            .setEmoji('◀️')
             .setStyle(ButtonStyle.Secondary)
         ),
       ],
@@ -888,7 +858,6 @@ export async function buildPendingChangesPanel(serverId: number) {
       new ButtonBuilder()
         .setCustomId('admin_back_to_factions')
         .setLabel('Назад к фракциям')
-        .setEmoji('◀️')
         .setStyle(ButtonStyle.Secondary)
     )
   );
@@ -933,11 +902,11 @@ export async function buildReviewChangePanel(changeId: number) {
     )
     .setTimestamp();
 
-  // Детали изменения
-  const detailsText = formatChangeDetails(change);
+  // Детали изменения (до → после)
+  const detailsText = formatBeforeAfter(change);
   embed.addFields({
-    name: 'Детали изменения',
-    value: detailsText,
+    name: 'Изменения (до → после)',
+    value: detailsText.substring(0, 1024) || 'Нет деталей',
     inline: false,
   });
 
@@ -994,242 +963,33 @@ export async function buildTemplateEditorPanel(
   // Применить draft изменения если есть
   const currentData = draftData ? { ...template, ...draftData } : template;
 
-  // Построить предпросмотр embed
-  const previewEmbed = new EmbedBuilder()
-    .setTitle(currentData.embed_title || currentData.name)
-    .setDescription(currentData.embed_description || currentData.description || 'Нет описания');
-
-  if (isValidUrl(currentData.embed_title_url)) {
-    try {
-      previewEmbed.setURL(currentData.embed_title_url!);
-    } catch {
-      // Невалидный URL заголовка
-    }
-  }
-
-  if (currentData.embed_color) {
-    try {
-      previewEmbed.setColor(currentData.embed_color as any);
-    } catch {
-      // Игнорировать некорректные цвета
-    }
-  }
-
-  if (currentData.embed_author_name) {
-    try {
-      previewEmbed.setAuthor({
-        name: currentData.embed_author_name,
-        url: isValidUrl(currentData.embed_author_url) ? currentData.embed_author_url! : undefined,
-        iconURL: isValidUrl(currentData.embed_author_icon_url) ? currentData.embed_author_icon_url! : undefined,
-      });
-    } catch {
-      // Невалидные данные автора — пропускаем
-    }
-  }
-
-  if (currentData.embed_image_url) {
-    try {
-      if (isValidUrl(currentData.embed_image_url)) {
-        previewEmbed.setImage(currentData.embed_image_url);
-      }
-    } catch {
-      // Невалидный URL изображения
-    }
-  }
-
-  if (currentData.embed_thumbnail_url) {
-    try {
-      if (isValidUrl(currentData.embed_thumbnail_url)) {
-        previewEmbed.setThumbnail(currentData.embed_thumbnail_url);
-      }
-    } catch {
-      // Невалидный URL миниатюры
-    }
-  }
-
-  if (currentData.embed_footer_text) {
-    try {
-      previewEmbed.setFooter({
-        text: currentData.embed_footer_text,
-        iconURL: isValidUrl(currentData.embed_footer_icon_url) ? currentData.embed_footer_icon_url! : undefined,
-      });
-    } catch {
-      // Невалидные данные футера
-    }
-  }
-
-  // Embed с информацией о редактировании
-  const infoEmbed = new EmbedBuilder()
-    .setColor(COLORS.INFO)
-    .setTitle(`✏️ Редактирование шаблона: ${template.name}`)
-    .setDescription(
+  return buildSubdivisionEditorPanel(currentData, {
+    editorTitle: `✏️ Редактирование шаблона: ${template.name}`,
+    editorDescription:
       'Используйте кнопки ниже для редактирования полей embed.\n' +
       'Изменения отображаются в предпросмотре ниже.\n\n' +
-      '**После завершения редактирования нажмите "Сохранить"**'
-    )
-    .addFields(
-      { name: 'Название', value: currentData.name, inline: true },
-      { name: 'Описание', value: currentData.description || 'Не указано', inline: true }
-    );
-
-  // Показать текущие значения полей embed
-  const fieldValues = [];
-  if (currentData.embed_title) fieldValues.push(`📝 Заголовок: ${currentData.embed_title.substring(0, 50)}`);
-  if (currentData.embed_title_url) fieldValues.push(`🔗 URL заголовка: установлен`);
-  if (currentData.embed_color) fieldValues.push(`🎨 Цвет: ${currentData.embed_color}`);
-  if (currentData.embed_author_name) fieldValues.push(`👤 Автор: ${currentData.embed_author_name}`);
-  if (currentData.embed_image_url) fieldValues.push(`🖼️ Изображение: установлено`);
-  if (currentData.embed_thumbnail_url) fieldValues.push(`🖼️ Миниатюра: установлена`);
-  if (currentData.embed_footer_text) fieldValues.push(`📌 Футер: ${currentData.embed_footer_text.substring(0, 50)}`);
-
-  if (fieldValues.length > 0) {
-    infoEmbed.addFields({
-      name: 'Настроенные поля Embed',
-      value: fieldValues.join('\n'),
-      inline: false,
-    });
-  }
-
-  // Показать настройки шаблона (short_description, logo_url, discord_role_id)
-  const settingsValues = [];
-  if (currentData.short_description) settingsValues.push(`📋 Краткое описание: ${currentData.short_description.substring(0, 50)}`);
-  if (currentData.logo_url) settingsValues.push(`🖼️ Логотип: установлен`);
-  if (currentData.discord_role_id) settingsValues.push(`🔰 Роль: <@&${currentData.discord_role_id}>`);
-
-  if (settingsValues.length > 0) {
-    infoEmbed.addFields({
-      name: 'Настройки шаблона',
-      value: settingsValues.join('\n'),
-      inline: false,
-    });
-  }
-
-  // Показать эмодзи как thumbnail через CDN (только для кастомных Discord-эмодзи)
-  if (currentData.logo_url && !currentData.embed_thumbnail_url) {
-    const parsedLogoEmoji = parseDiscordEmoji(currentData.logo_url);
-    const logoCdnUrl = getEmojiCdnUrl(parsedLogoEmoji);
-    if (logoCdnUrl) {
-      try {
-        previewEmbed.setThumbnail(logoCdnUrl);
-      } catch {
-        // Невалидный URL
-      }
-    }
-  }
-
-  const components: ActionRowBuilder<any>[] = [];
-
-  // Ряд 1: настройки подразделения (название, эмодзи, краткое описание, роль)
-  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`template_edit_name_${typeId}_${templateId}`)
-      .setLabel('Название')
-      .setEmoji('📝')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_logo_${typeId}_${templateId}`)
-      .setLabel('Эмодзи')
-      .setEmoji('🏷️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_short_desc_${typeId}_${templateId}`)
-      .setLabel('Краткое описание')
-      .setEmoji('📋')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_set_role_${typeId}_${templateId}`)
-      .setLabel('Роль')
-      .setEmoji('🔰')
-      .setStyle(currentData.discord_role_id ? ButtonStyle.Primary : ButtonStyle.Secondary),
-  );
-
-  // Ряд 2: embed — автор, заголовок (+ URL), миниатюра
-  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`template_edit_author_${typeId}_${templateId}`)
-      .setLabel('Автор')
-      .setEmoji('👤')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_title_${typeId}_${templateId}`)
-      .setLabel('Заголовок')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_thumbnail_${typeId}_${templateId}`)
-      .setLabel('Миниатюра')
-      .setEmoji('🖼️')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Ряд 3: основной текст, изображение, цвет, футер (объединены для освобождения места под предпросмотр)
-  const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`template_edit_description_${typeId}_${templateId}`)
-      .setLabel('Основной текст')
-      .setEmoji('📄')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_image_${typeId}_${templateId}`)
-      .setLabel('Изображение')
-      .setEmoji('🖼️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_color_${typeId}_${templateId}`)
-      .setLabel('Цвет')
-      .setEmoji('🎨')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`template_edit_footer_${typeId}_${templateId}`)
-      .setLabel('Футер')
-      .setEmoji('📌')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Ряд 4: действия (без эмодзи)
-  const row4buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`template_save_${typeId}_${templateId}`)
-      .setLabel('Сохранить')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`admin_delete_template_${typeId}_${templateId}`)
-      .setLabel('Удалить')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(`admin_view_fact_type_${typeId}`)
-      .setLabel('Назад')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Предпросмотр в выпадающем списке каллаутов (первая строка)
-  const previewSelectLabel = (currentData.name || 'Название').substring(0, 100);
-  const previewSelectDesc = (currentData.short_description || currentData.description || 'Нет описания').substring(0, 100);
-  const parsedLogoForSelect = parseDiscordEmoji(currentData.logo_url);
-  const selectOption = new StringSelectMenuOptionBuilder()
-    .setLabel(previewSelectLabel)
-    .setDescription(previewSelectDesc)
-    .setValue('preview');
-  if (parsedLogoForSelect) {
-    selectOption.setEmoji(parsedLogoForSelect.id
-      ? { id: parsedLogoForSelect.id, name: parsedLogoForSelect.name, animated: parsedLogoForSelect.animated ?? false }
-      : parsedLogoForSelect.name);
-  } else {
-    selectOption.setEmoji('🏢');
-  }
-  const rowPreview = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('template_list_preview')
-      .setPlaceholder('Предпросмотр списка подразделений')
-      .addOptions(selectOption)
-  );
-
-  components.push(rowPreview, row1, row2, row3, row4buttons);
-
-  return {
-    embeds: [infoEmbed, previewEmbed],
-    components,
-  };
+      '**После завершения редактирования нажмите "Сохранить"**',
+    settingsSectionTitle: 'Настройки шаблона',
+    selectMenuId: 'template_list_preview',
+    selectMenuPlaceholder: 'Предпросмотр списка подразделений',
+    idPrefix: 'template',
+    idSuffix: `${typeId}_${templateId}`,
+    roleButtonId: `template_set_role_${typeId}_${templateId}`,
+    actionButtons: [
+      new ButtonBuilder()
+        .setCustomId(`template_save_${typeId}_${templateId}`)
+        .setLabel('Сохранить')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`admin_delete_template_${typeId}_${templateId}`)
+        .setLabel('Удалить')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`admin_view_fact_type_${typeId}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary),
+    ],
+  });
 }
 
 /**
@@ -1237,73 +997,26 @@ export async function buildTemplateEditorPanel(
  * Использует StringSelectMenu для выбора подразделения
  */
 export function buildFactionSubdivisionsPanel(faction: Faction, subdivisions: Subdivision[]) {
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.INFO)
-    .setTitle(`📂 Подразделения: ${faction.name}`)
-    .setTimestamp();
+  const parsed = parseDiscordEmoji(faction.logo_url);
+  const cdnUrl = getEmojiCdnUrl(parsed);
 
   const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin_faction_${faction.id}`)
       .setLabel('Назад')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Secondary),
   );
 
-  if (subdivisions.length === 0) {
-    embed.setDescription('Нет подразделений (только дефолтное).');
-    return { embeds: [embed], components: [backRow] };
-  }
-
-  const lines = subdivisions.map(sub => {
-    const role = sub.discord_role_id ? `<@&${sub.discord_role_id}>` : '—';
-    const calloutsIcon = sub.is_accepting_callouts ? '✅' : '⏸️';
-    return `${calloutsIcon} **${sub.name}** | Роль: ${role}`;
+  return buildSubdivisionsListPanel(subdivisions, {
+    title: `📋 Подразделения: ${faction.name}`,
+    thumbnailUrl: cdnUrl,
+    emptyText: 'Нет подразделений (только дефолтное).',
+    selectMenuId: `admin_sub_select_${faction.id}`,
+    selectMenuPlaceholder: 'Выберите подразделение для редактирования...',
+    showCalloutStatus: true,
+    showSocialLinks: true,
+    actionRows: [backRow],
   });
-  embed.setDescription(lines.join('\n') + '\n\n_Выберите подразделение из списка для редактирования_');
-
-  const options = subdivisions.map(sub => {
-    const option = new StringSelectMenuOptionBuilder()
-      .setLabel(sub.name.substring(0, 100))
-      .setValue(sub.id.toString())
-      .setDescription(
-        (sub.short_description || sub.description || (sub.discord_role_id ? `Роль: <@&${sub.discord_role_id}>` : 'Нет описания')).substring(0, 100)
-      );
-    const parsedEmoji = parseDiscordEmoji(sub.logo_url);
-    if (parsedEmoji) {
-      option.setEmoji(parsedEmoji.id
-        ? { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false }
-        : parsedEmoji.name);
-    } else {
-      option.setEmoji('⚙️');
-    }
-    return option;
-  });
-
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`admin_sub_select_${faction.id}`)
-    .setPlaceholder('Выберите подразделение для редактирования...')
-    .addOptions(options);
-
-  return {
-    embeds: [embed],
-    components: [
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu),
-      backRow,
-    ],
-  };
-}
-
-/**
- * Проверка валидности URL для embed полей
- */
-function isValidUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -1363,60 +1076,64 @@ export async function buildTemplateRolePanel(typeId: number, templateId: number,
  * Панель настроек подразделения для администратора (прямое редактирование, без pending)
  */
 export function buildAdminSubdivisionSettingsPanel(subdivision: Subdivision, factionId: number) {
+  return buildSubdivisionSettingsPanelCore(subdivision, {
+    description: '_(Изменения применяются сразу)_',
+    color: COLORS.INFO,
+    roleSelectId: `admin_sub_role_${subdivision.id}`,
+    otherSettingsButtonId: `admin_sub_other_settings_${subdivision.id}`,
+    configureEmbedButtonId: `admin_sub_configure_embed_${factionId}_${subdivision.id}`,
+    toggleCalloutsButtonId: `admin_toggle_callouts_${subdivision.id}`,
+    roleClearButtonId: `admin_sub_role_clear_${subdivision.id}`,
+    linksButtonId: `admin_sub_links_${subdivision.id}`,
+    deleteButtonId: !subdivision.is_default ? `admin_delete_sub_${subdivision.id}` : null,
+    backButtonId: `admin_faction_subdivisions_${factionId}`,
+  });
+}
+
+/**
+ * Панель управления привязками VK/Telegram (администратор, прямое сохранение)
+ */
+export function buildAdminLinksPanel(subdivision: Subdivision) {
+  return buildLinksPanelGeneric(subdivision, {
+    idPrefix: 'admin',
+    backButtonId: `admin_sub_settings_${subdivision.id}`,
+  });
+}
+
+/**
+ * Панель подтверждения удаления подразделения (администратор)
+ */
+export function buildAdminDeleteConfirmation(subdivision: Subdivision) {
   const embed = new EmbedBuilder()
-    .setColor(COLORS.INFO)
-    .setTitle(`⚙️ Настройки подразделения: ${subdivision.name}`)
-    .setDescription('Выберите роль через меню ниже или нажмите кнопку для редактирования других настроек.')
-    .addFields(
-      {
-        name: '🔰 Discord роль',
-        value: subdivision.discord_role_id ? `<@&${subdivision.discord_role_id}>` : 'Не задана',
-        inline: true,
-      },
-      {
-        name: '📋 Краткое описание',
-        value: subdivision.short_description || 'Не задано',
-        inline: true,
-      },
-      {
-        name: '🏷️ Эмодзи',
-        value: subdivision.logo_url || 'Не задан',
-        inline: true,
-      }
+    .setColor(COLORS.WARNING)
+    .setTitle(`${EMOJI.WARNING} Подтверждение удаления`)
+    .setDescription(
+      `Вы действительно хотите удалить подразделение **${subdivision.name}**?\n\n` +
+      `⚠️ **Внимание:** Это действие необратимо!`
     )
     .setTimestamp();
 
-  const roleSelect = new RoleSelectMenuBuilder()
-    .setCustomId(`admin_sub_role_${subdivision.id}`)
-    .setPlaceholder('Выберите роль подразделения...');
-
-  const buttons: ButtonBuilder[] = [
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_other_settings_${subdivision.id}`)
-      .setLabel('Описание / Эмодзи')
-      .setEmoji('📝')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`admin_faction_subdivisions_${factionId}`)
-      .setLabel('Назад')
-      .setStyle(ButtonStyle.Secondary),
-  ];
-
-  if (subdivision.discord_role_id) {
-    buttons.splice(1, 0,
-      new ButtonBuilder()
-        .setCustomId(`admin_sub_role_clear_${subdivision.id}`)
-        .setLabel('Очистить роль')
-        .setEmoji('🗑️')
-        .setStyle(ButtonStyle.Danger)
-    );
+  if (subdivision.logo_url) {
+    const parsed = parseDiscordEmoji(subdivision.logo_url);
+    const cdnUrl = getEmojiCdnUrl(parsed);
+    if (cdnUrl) embed.setThumbnail(cdnUrl);
   }
 
   return {
     embeds: [embed],
     components: [
-      new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect),
-      new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`admin_confirm_delete_${subdivision.id}`)
+          .setLabel('Удалить')
+          .setEmoji('🗑️')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`admin_cancel_delete_${subdivision.id}`)
+          .setLabel('Отмена')
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Secondary),
+      ),
     ],
   };
 }
@@ -1432,186 +1149,30 @@ export async function buildAdminSubdivisionEditorPanel(
 ) {
   const currentData = draftData ? { ...subdivision, ...draftData } : subdivision;
 
-  // Построить предпросмотр embed с валидацией всех полей
-  const previewEmbed = new EmbedBuilder()
-    .setTitle(currentData.embed_title || currentData.name)
-    .setDescription(currentData.embed_description || currentData.description || 'Нет описания');
-
-  if (isValidUrl(currentData.embed_title_url)) {
-    try { previewEmbed.setURL(currentData.embed_title_url!); } catch {}
-  }
-  if (currentData.embed_color) {
-    try { previewEmbed.setColor(currentData.embed_color as any); } catch {}
-  }
-  if (currentData.embed_author_name) {
-    try {
-      previewEmbed.setAuthor({
-        name: currentData.embed_author_name,
-        url: isValidUrl(currentData.embed_author_url) ? currentData.embed_author_url! : undefined,
-        iconURL: isValidUrl(currentData.embed_author_icon_url) ? currentData.embed_author_icon_url! : undefined,
-      });
-    } catch {}
-  }
-  if (currentData.embed_image_url && isValidUrl(currentData.embed_image_url)) {
-    try { previewEmbed.setImage(currentData.embed_image_url); } catch {}
-  }
-  if (currentData.embed_thumbnail_url && isValidUrl(currentData.embed_thumbnail_url)) {
-    try { previewEmbed.setThumbnail(currentData.embed_thumbnail_url); } catch {}
-  } else if (currentData.logo_url) {
-    const parsedLogo = parseDiscordEmoji(currentData.logo_url);
-    const logoCdnUrl = getEmojiCdnUrl(parsedLogo);
-    if (logoCdnUrl) try { previewEmbed.setThumbnail(logoCdnUrl); } catch {}
-  }
-  if (currentData.embed_footer_text) {
-    try {
-      previewEmbed.setFooter({
-        text: currentData.embed_footer_text,
-        iconURL: isValidUrl(currentData.embed_footer_icon_url) ? currentData.embed_footer_icon_url! : undefined,
-      });
-    } catch {}
-  }
-
-  // Инфо-embed
-  const infoEmbed = new EmbedBuilder()
-    .setColor(COLORS.INFO)
-    .setTitle(`✏️ Редактирование подразделения: ${subdivision.name}`)
-    .setDescription(
+  return buildSubdivisionEditorPanel(currentData, {
+    editorTitle: `✏️ Редактирование подразделения: ${subdivision.name}`,
+    editorDescription:
       'Используйте кнопки ниже для редактирования полей embed.\n' +
       'Изменения отображаются в предпросмотре ниже.\n\n' +
-      '**После завершения нажмите "Сохранить"** (изменения применятся сразу)'
-    )
-    .addFields(
-      { name: 'Название', value: currentData.name, inline: true },
-      { name: 'Описание', value: currentData.description || 'Не указано', inline: true },
-    );
-
-  const fieldValues: string[] = [];
-  if (currentData.embed_title) fieldValues.push(`📝 Заголовок: ${currentData.embed_title.substring(0, 50)}`);
-  if (currentData.embed_title_url) fieldValues.push(`🔗 URL заголовка: установлен`);
-  if (currentData.embed_color) fieldValues.push(`🎨 Цвет: ${currentData.embed_color}`);
-  if (currentData.embed_author_name) fieldValues.push(`👤 Автор: ${currentData.embed_author_name}`);
-  if (currentData.embed_image_url) fieldValues.push(`🖼️ Изображение: установлено`);
-  if (currentData.embed_thumbnail_url) fieldValues.push(`🖼️ Миниатюра: установлена`);
-  if (currentData.embed_footer_text) fieldValues.push(`📌 Футер: ${currentData.embed_footer_text.substring(0, 50)}`);
-  if (fieldValues.length > 0) {
-    infoEmbed.addFields({ name: 'Настроенные поля Embed', value: fieldValues.join('\n'), inline: false });
-  }
-
-  const settingsValues: string[] = [];
-  if (currentData.short_description) settingsValues.push(`📋 Краткое описание: ${currentData.short_description.substring(0, 50)}`);
-  if (currentData.logo_url) settingsValues.push(`🏷️ Эмодзи: ${currentData.logo_url}`);
-  if (currentData.discord_role_id) settingsValues.push(`🔰 Роль: <@&${currentData.discord_role_id}>`);
-  if (settingsValues.length > 0) {
-    infoEmbed.addFields({ name: 'Настройки подразделения', value: settingsValues.join('\n'), inline: false });
-  }
-
-  const subId = subdivision.id;
-  const components: ActionRowBuilder<any>[] = [];
-
-  // Предпросмотр в выпадающем списке каллаутов
-  const previewSelectLabel = (currentData.name || 'Название').substring(0, 100);
-  const previewSelectDesc = (currentData.short_description || currentData.description || 'Нет описания').substring(0, 100);
-  const parsedLogoForSelect = parseDiscordEmoji(currentData.logo_url);
-  const selectOption = new StringSelectMenuOptionBuilder()
-    .setLabel(previewSelectLabel)
-    .setDescription(previewSelectDesc)
-    .setValue('preview');
-  if (parsedLogoForSelect) {
-    selectOption.setEmoji(parsedLogoForSelect.id
-      ? { id: parsedLogoForSelect.id, name: parsedLogoForSelect.name, animated: parsedLogoForSelect.animated ?? false }
-      : parsedLogoForSelect.name);
-  } else {
-    selectOption.setEmoji('🏢');
-  }
-  const rowPreview = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('subdivision_list_preview')
-      .setPlaceholder('Предпросмотр в списке каллаутов')
-      .addOptions(selectOption)
-  );
-
-  // Ряд 1: Название, Эмодзи, Краткое описание, Роль
-  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_name_${subId}`)
-      .setLabel('Название')
-      .setEmoji('📝')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_logo_${subId}`)
-      .setLabel('Эмодзи')
-      .setEmoji('🏷️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_short_desc_${subId}`)
-      .setLabel('Краткое описание')
-      .setEmoji('📋')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_role_${factionId}_${subId}`)
-      .setLabel('Роль')
-      .setEmoji('🔰')
-      .setStyle(currentData.discord_role_id ? ButtonStyle.Primary : ButtonStyle.Secondary),
-  );
-
-  // Ряд 2: Автор, Заголовок (+ URL), Миниатюра
-  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_author_${subId}`)
-      .setLabel('Автор')
-      .setEmoji('👤')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_title_${subId}`)
-      .setLabel('Заголовок')
-      .setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_thumbnail_${subId}`)
-      .setLabel('Миниатюра')
-      .setEmoji('🖼️')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Ряд 3: Основной текст, Изображение, Цвет, Футер
-  const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_description_${subId}`)
-      .setLabel('Основной текст')
-      .setEmoji('📄')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_image_${subId}`)
-      .setLabel('Изображение')
-      .setEmoji('🖼️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_color_${subId}`)
-      .setLabel('Цвет')
-      .setEmoji('🎨')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_edit_footer_${subId}`)
-      .setLabel('Футер')
-      .setEmoji('📌')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Ряд 4: Действия
-  const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`admin_sub_editor_save_${factionId}_${subId}`)
-      .setLabel('Сохранить')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`admin_faction_subdivisions_${factionId}`)
-      .setLabel('Назад')
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  components.push(rowPreview, row1, row2, row3, row4);
-
-  return { embeds: [infoEmbed, previewEmbed], components };
+      '**После завершения нажмите "Сохранить"** (изменения применятся сразу)',
+    showInfoThumbnail: true,
+    settingsSectionTitle: 'Настройки подразделения',
+    selectMenuId: 'subdivision_list_preview',
+    selectMenuPlaceholder: 'Предпросмотр в списке каллаутов',
+    idPrefix: 'admin_sub',
+    idSuffix: `${subdivision.id}`,
+    roleButtonId: `admin_sub_edit_role_${factionId}_${subdivision.id}`,
+    actionButtons: [
+      new ButtonBuilder()
+        .setCustomId(`admin_sub_editor_save_${factionId}_${subdivision.id}`)
+        .setLabel('Сохранить')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`admin_faction_subdivisions_${factionId}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary),
+    ],
+  });
 }
 
 /**

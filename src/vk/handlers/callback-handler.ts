@@ -19,12 +19,15 @@ export async function handleCallbackEvent(
       eventId: context.eventId,
     });
 
-    // Парсинг payload
-    const payload = context.eventPayload as CalloutResponsePayload;
+    // Парсинг payload (vk-io возвращает строку, парсим вручную)
+    const rawPayload = context.eventPayload;
+    const payload: CalloutResponsePayload = typeof rawPayload === 'string'
+      ? JSON.parse(rawPayload)
+      : rawPayload as CalloutResponsePayload;
 
     if (!payload || payload.action !== 'respond') {
       logger.warn('Invalid callback payload', { payload });
-      await context.answerEvent({
+      await context.answer({
         type: 'show_snackbar',
         text: `${EMOJI.ERROR} Неверный формат данных`,
       });
@@ -64,7 +67,7 @@ export async function handleCallbackEvent(
     const snackbarText = responseType === 'on_way'
       ? `${EMOJI.SUCCESS} Статус "В пути" отправлен в Discord!`
       : `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`;
-    await context.answerEvent({
+    await context.answer({
       type: 'show_snackbar',
       text: snackbarText,
     });
@@ -82,7 +85,7 @@ export async function handleCallbackEvent(
 
     // Отправить ошибку пользователю
     try {
-      await context.answerEvent({
+      await context.answer({
         type: 'show_snackbar',
         text:
           error instanceof Error

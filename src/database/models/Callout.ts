@@ -12,15 +12,17 @@ export class CalloutModel {
    */
   static async create(data: CreateCalloutDTO): Promise<Callout> {
     const result = await database.run(
-      `INSERT INTO callouts (server_id, subdivision_id, author_id, author_name, description, location, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO callouts (server_id, subdivision_id, author_id, author_name, description, brief_description, location, tac_channel, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.subdivision_id,
         data.author_id,
         data.author_name,
         data.description,
+        data.brief_description || null,
         data.location || null,
+        data.tac_channel || null,
         CALLOUT_STATUS.ACTIVE,
       ]
     );
@@ -197,6 +199,20 @@ export class CalloutModel {
   }
 
   /**
+   * Получить последние каллауты фракции (по всем её подразделениям)
+   */
+  static async findByFactionId(factionId: number, limit: number = 15): Promise<Callout[]> {
+    return await database.all<Callout>(
+      `SELECT c.* FROM callouts c
+       JOIN subdivisions s ON c.subdivision_id = s.id
+       WHERE s.faction_id = ?
+       ORDER BY c.created_at DESC
+       LIMIT ?`,
+      [factionId, limit]
+    );
+  }
+
+  /**
    * Получить каллауты с фильтрацией и пагинацией
    */
   static async findFiltered(
@@ -268,7 +284,12 @@ export class CalloutModel {
    * Найти активные каллауты, созданные раньше чем timeoutMs миллисекунд назад
    */
   static async findExpiredActive(timeoutMs: number): Promise<Callout[]> {
-    const cutoff = new Date(Date.now() - timeoutMs).toISOString();
+    // SQLite хранит CURRENT_TIMESTAMP как 'YYYY-MM-DD HH:MM:SS' (без T и Z),
+    // поэтому приводим cutoff к тому же формату для корректного строкового сравнения
+    const cutoff = new Date(Date.now() - timeoutMs)
+      .toISOString()
+      .replace('T', ' ')
+      .replace(/\.\d{3}Z$/, '');
     return await database.all<Callout>(
       'SELECT * FROM callouts WHERE status = ? AND created_at < ?',
       [CALLOUT_STATUS.ACTIVE, cutoff]

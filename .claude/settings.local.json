@@ -33,7 +33,9 @@
       "Bash(ls -la \"C:\\\\Users\\\\sexorcist\\\\Desktop\\\\saes-callout-bot\\\\src\\\\discord\\\\commands\"\" 2>/dev/null || echo \"Directory listing failed \")",
       "Bash(echo:*)",
       "Bash(./node_modules/.bin/tsc:*)",
-      "Bash(node_modules/.bin/tsc:*)"
+      "Bash(node_modules/.bin/tsc:*)",
+      "Bash(DOCKER_BUILDKIT=0 docker build:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

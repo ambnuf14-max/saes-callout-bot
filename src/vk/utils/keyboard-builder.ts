@@ -29,14 +29,9 @@ export function buildDetailedCalloutKeyboard(
 
   const keyboard = Keyboard.builder()
     .callbackButton({
-      label: '✅ Принято',
+      label: 'Отреагировать на инцидент',
       payload: JSON.stringify({ ...acknowledgedPayload, type: 'acknowledged' }),
       color: Keyboard.POSITIVE_COLOR,
-    })
-    .callbackButton({
-      label: '🚗 В пути',
-      payload: JSON.stringify({ ...acknowledgedPayload, type: 'on_way' }),
-      color: Keyboard.PRIMARY_COLOR,
     })
     .inline()
     .toString();

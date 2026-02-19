@@ -11,6 +11,7 @@ import logger from '../../utils/logger';
 import CalloutService from '../../services/callout.service';
 import { getUserRoleIds } from '../utils/permission-checker';
 import { EMOJI, MESSAGES } from '../../config/constants';
+import config from '../../config/config';
 import { CalloutError } from '../../utils/error-handler';
 
 /**
@@ -146,7 +147,7 @@ export async function handleCloseCalloutModal(interaction: ModalSubmitInteractio
     }
 
     await interaction.editReply({
-      content: MESSAGES.CALLOUT.SUCCESS_CLOSED(calloutId),
+      content: MESSAGES.CALLOUT.SUCCESS_CLOSED(calloutId, Math.round(config.features.channelDeleteDelay / 60000)),
     });
 
     logger.info('Callout closed via button', {

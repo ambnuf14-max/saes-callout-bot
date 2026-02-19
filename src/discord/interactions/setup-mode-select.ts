@@ -16,6 +16,7 @@ import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import { EMOJI, COLORS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { handleInteractionError } from '../utils/subdivision-settings-helper';
 import { Server } from '../../types/database.types';
 import { Guild } from 'discord.js';
 
@@ -132,23 +133,7 @@ export async function handleSetupModeSelect(
       await showSetupModeSelection(interaction as ButtonInteraction);
     }
   } catch (error) {
-    logger.error('Error handling setup mode select', {
-      error: error instanceof Error ? error.message : error,
-      customId,
-      userId: interaction.user.id,
-      guildId: interaction.guild.id,
-    });
-
-    const content =
-      error instanceof CalloutError
-        ? error.message
-        : `${EMOJI.ERROR} Произошла ошибка при настройке`;
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-    }
+    await handleInteractionError(error, interaction, 'Error handling setup mode select', `${EMOJI.ERROR} Произошла ошибка при настройке`, { logExtra: { guildId: interaction.guild?.id } });
   }
 }
 
@@ -723,30 +708,24 @@ export async function showSetupModeSelection(interaction: ButtonInteraction) {
 }
 
 /**
- * Helper: Создать панель с кнопкой каллаута
+ * Создать панель с кнопкой каллаута
  */
-async function createCalloutPanel(channel: TextChannel) {
+export async function createCalloutPanel(channel: TextChannel) {
+  const botAvatarUrl = channel.client.user?.displayAvatarURL({ size: 256 }) ?? null;
+
   const embed = new EmbedBuilder()
     .setTitle(MESSAGES.CALLOUT.TITLE_PANEL)
     .setDescription(MESSAGES.CALLOUT.DESCRIPTION_PANEL)
-    .setColor(COLORS.INFO)
-    .addFields([
-      {
-        name: `${EMOJI.INFO} Инструкция`,
-        value:
-          '1. Нажмите кнопку ниже\n' +
-          '2. Выберите департамент из списка\n' +
-          '3. Укажите место и описание инцидента\n' +
-          '4. Система создаст канал и уведомит департамент',
-      },
-    ])
+    .setColor(COLORS.ACTIVE)
     .setFooter({ text: 'SAES Callout System' })
     .setTimestamp();
+
+  if (botAvatarUrl) embed.setThumbnail(botAvatarUrl);
 
   const button = new ButtonBuilder()
     .setCustomId('create_callout')
     .setLabel(MESSAGES.CALLOUT.BUTTON_CREATE)
-    .setStyle(ButtonStyle.Primary);
+    .setStyle(ButtonStyle.Danger);
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 

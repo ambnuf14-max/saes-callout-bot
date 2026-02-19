@@ -47,6 +47,7 @@ export interface Faction {
   allow_create_subdivisions: boolean; // Может ли лидер создавать подразделения (контроль администратора)
   faction_type_id: number | null; // Тип фракции (nullable)
   is_active: boolean;
+  standalone_needs_setup: boolean; // Флаг: требуется настройка после перехода в standalone режим
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +56,7 @@ export interface CreateFactionDTO {
   server_id: number;
   name: string;
   description?: string;
+  logo_url?: string;
   general_leader_role_id: string;
   faction_role_id: string;
   allow_create_subdivisions?: boolean;
@@ -68,6 +70,7 @@ export interface UpdateFactionDTO {
   faction_role_id?: string;
   allow_create_subdivisions?: boolean;
   is_active?: boolean;
+  standalone_needs_setup?: boolean;
 }
 
 export interface Callout {
@@ -77,7 +80,9 @@ export interface Callout {
   author_id: string;
   author_name: string;
   description: string;
+  brief_description: string | null;
   location: string | null;
+  tac_channel: string | null;
   discord_channel_id: string | null;
   discord_message_id: string | null;
   vk_message_id: string | null;
@@ -96,6 +101,8 @@ export interface CreateCalloutDTO {
   author_name: string;
   description: string;
   location?: string;
+  tac_channel?: string;
+  brief_description?: string;
 }
 
 export interface UpdateCalloutDTO {
@@ -344,7 +351,8 @@ export type ChangeType =
   | 'create_subdivision'
   | 'update_subdivision'
   | 'delete_subdivision'
-  | 'update_embed';
+  | 'update_embed'
+  | 'update_faction';
 
 export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
@@ -392,18 +400,23 @@ export interface DeleteSubdivisionChangeData {
   subdivision_name: string;
 }
 
+export interface UpdateFactionChangeData {
+  name?: string;
+  logo_url?: string | null;
+}
+
 export interface UpdateEmbedChangeData {
   name?: string;
-  embed_author_name?: string;
-  embed_author_url?: string;
-  embed_author_icon_url?: string;
-  embed_title?: string;
-  embed_description?: string;
-  embed_color?: string;
-  embed_image_url?: string;
-  embed_thumbnail_url?: string;
-  embed_footer_text?: string;
-  embed_footer_icon_url?: string;
+  embed_author_name?: string | null;
+  embed_author_url?: string | null;
+  embed_author_icon_url?: string | null;
+  embed_title?: string | null;
+  embed_description?: string | null;
+  embed_color?: string | null;
+  embed_image_url?: string | null;
+  embed_thumbnail_url?: string | null;
+  embed_footer_text?: string | null;
+  embed_footer_icon_url?: string | null;
   // Настройки подразделения (могут быть изменены вместе с embed)
   short_description?: string | null;
   logo_url?: string | null;

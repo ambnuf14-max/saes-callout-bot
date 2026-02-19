@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
+import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
 
 /**
  * Утилиты для создания Embed сообщений
@@ -12,63 +13,91 @@ import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
 export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): EmbedBuilder {
   const isActive = callout.status === CALLOUT_STATUS.ACTIVE;
   const color = isActive ? COLORS.ACTIVE : COLORS.CLOSED;
-  const statusEmoji = isActive ? EMOJI.ACTIVE : EMOJI.CLOSED;
-  const statusText = isActive ? 'Active' : 'Closed';
+  const statusText = isActive ? `${EMOJI.ACTIVE} Активен` : `${EMOJI.CLOSED} Закрыт`;
+
+  const createdAtUnix = Math.floor(new Date(callout.created_at).getTime() / 1000);
+  const thumbnailUrl = getEmojiCdnUrl(parseDiscordEmoji(subdivision.logo_url));
+  const subdivisionValue = subdivision.discord_role_id
+    ? `<@&${subdivision.discord_role_id}>`
+    : subdivision.name;
 
   const embed = new EmbedBuilder()
-    .setTitle(`${EMOJI.ALERT} Incident #${callout.id} - ${subdivision.name}`)
+    .setTitle('Incident Callout Report Message')
+    .setDescription('🚨 **INCOMING CALLOUT**')
     .setColor(color)
+    .setThumbnail(thumbnailUrl)
     .addFields([
       {
-        name: `${EMOJI.INFO} Автор`,
-        value: `<@${callout.author_id}>`,
-        inline: true,
+        name: 'Кратко об инциденте',
+        value: callout.brief_description || 'Не указано',
+        inline: false,
       },
       {
-        name: `${EMOJI.INFO} Подразделение`,
-        value: `<@&${subdivision.discord_role_id}>`,
-        inline: true,
-      },
-      {
-        name: `${statusEmoji} Статус`,
-        value: statusText,
-        inline: true,
-      },
-      {
-        name: '📍 Место',
+        name: 'Локация инцидента',
         value: callout.location || 'Не указано',
         inline: false,
       },
       {
-        name: `${EMOJI.INFO} Описание инцидента`,
+        name: 'Полное описание инцидента',
         value: callout.description,
         inline: false,
       },
+      ...(callout.tac_channel ? [{
+        name: 'TAC-канал',
+        value: callout.tac_channel,
+        inline: false,
+      }] : []),
+      {
+        name: 'Статус',
+        value: statusText,
+        inline: true,
+      },
+      {
+        name: 'Запрошенные подразделения',
+        value: subdivisionValue,
+        inline: false,
+      },
+      {
+        name: 'Каллаут создан',
+        value: `<t:${createdAtUnix}:R>`,
+        inline: true,
+      },
+      {
+        name: 'Отправил запрос',
+        value: `<@${callout.author_id}>`,
+        inline: true,
+      },
     ])
-    .setFooter({ text: 'SAES Callout System' })
+    .setFooter({ text: `SAES Callout System • Incident #${callout.id}` })
     .setTimestamp(new Date(callout.created_at));
 
-  // Добавить информацию о закрытии, если каллаут закрыт
+  // Информация о закрытии
   if (!isActive && callout.closed_by) {
     const closedByValue = callout.closed_by === 'system'
       ? 'System (авто-закрытие)'
       : `<@${callout.closed_by}>`;
-    embed.addFields([
-      {
-        name: `${EMOJI.INFO} Закрыл`,
-        value: closedByValue,
+
+    embed.addFields([{
+      name: '🔒 Закрыл',
+      value: closedByValue,
+      inline: true,
+    }]);
+
+    if (callout.closed_at) {
+      const closedAtUnix = Math.floor(new Date(callout.closed_at).getTime() / 1000);
+      embed.addFields([{
+        name: '🕐 Время закрытия',
+        value: `<t:${closedAtUnix}:R>`,
         inline: true,
-      },
-    ]);
+      }]);
+    }
 
     if (callout.closed_reason) {
-      embed.addFields([
-        {
-          name: `${EMOJI.INFO} Причина закрытия`,
-          value: callout.closed_reason,
-          inline: false,
-        },
-      ]);
+      embed.addFields([{
+        name: '📝 Причина закрытия',
+        value: callout.closed_reason,
+        inline: false,
+      }]);
     }
   }
 

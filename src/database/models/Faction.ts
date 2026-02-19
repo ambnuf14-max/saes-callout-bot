@@ -13,12 +13,13 @@ export class FactionModel {
     const allowCreate = data.allow_create_subdivisions !== undefined ? data.allow_create_subdivisions : true;
 
     const result = await database.run(
-      `INSERT INTO factions (server_id, name, description, general_leader_role_id, faction_role_id, allow_create_subdivisions, faction_type_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO factions (server_id, name, description, logo_url, general_leader_role_id, faction_role_id, allow_create_subdivisions, faction_type_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.name,
         data.description || null,
+        data.logo_url || null,
         data.general_leader_role_id,
         data.faction_role_id,
         allowCreate ? 1 : 0,
@@ -140,6 +141,10 @@ export class FactionModel {
     if (data.is_active !== undefined) {
       updates.push('is_active = ?');
       params.push(data.is_active ? 1 : 0);
+    }
+    if (data.standalone_needs_setup !== undefined) {
+      updates.push('standalone_needs_setup = ?');
+      params.push(data.standalone_needs_setup ? 1 : 0);
     }
 
     if (updates.length === 0) {

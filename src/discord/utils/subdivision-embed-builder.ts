@@ -1,6 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
 import { Subdivision } from '../../types/database.types';
 import { COLORS } from '../../config/constants';
+import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
+import { isValidUrl } from './subdivision-editor-builder';
 
 /**
  * Построить embed для подразделения на основе его настроек
@@ -52,12 +54,17 @@ export function buildSubdivisionEmbed(subdivision: Subdivision): EmbedBuilder {
     }
   }
 
-  // Thumbnail (миниатюра)
-  if (subdivision.embed_thumbnail_url) {
+  // Thumbnail (миниатюра): embed_thumbnail_url → logo_url (через CDN) → без thumbnail
+  if (subdivision.embed_thumbnail_url && isValidUrl(subdivision.embed_thumbnail_url)) {
     try {
       embed.setThumbnail(subdivision.embed_thumbnail_url);
-    } catch (error) {
-      // Игнорируем некорректные URL
+    } catch {}
+  } else if (subdivision.logo_url) {
+    const parsed = parseDiscordEmoji(subdivision.logo_url);
+    const cdnUrl = getEmojiCdnUrl(parsed);
+    const thumbnailUrl = cdnUrl ?? (subdivision.logo_url.includes('://') ? subdivision.logo_url : null);
+    if (thumbnailUrl) {
+      try { embed.setThumbnail(thumbnailUrl); } catch {}
     }
   }
 

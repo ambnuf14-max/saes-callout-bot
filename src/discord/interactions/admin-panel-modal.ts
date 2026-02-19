@@ -1,4 +1,4 @@
-import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
+import { ModalSubmitInteraction, MessageFlags, EmbedBuilder } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import { FactionService } from '../../services/faction.service';
@@ -17,44 +17,47 @@ import {
   buildAdminSubdivisionSettingsPanel,
   buildAdminSubdivisionEditorPanel,
 } from '../utils/admin-panel-builder';
-import { parseSubdivisionSettingsData, isValidDiscordEmoji } from '../utils/subdivision-settings-helper';
-import { EMOJI } from '../../config/constants';
+import {
+  parseSubdivisionSettingsData,
+  isValidDiscordEmoji,
+  parseEmbedFieldFromModal,
+  getVerifiedSubdivision,
+  createDraftState,
+  handleInteractionError,
+} from '../utils/subdivision-settings-helper';
+import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
 import { SubdivisionTemplate, Subdivision } from '../../types/database.types';
 
 // Временное хранилище для draft изменений шаблонов
-const templateDraftState = new Map<string, Partial<SubdivisionTemplate>>();
+const templateDraftState = createDraftState<SubdivisionTemplate>();
 
 export function getTemplateDraft(typeId: number, templateId: number): Partial<SubdivisionTemplate> | undefined {
   return templateDraftState.get(`${typeId}_${templateId}`);
 }
 
 export function setTemplateDraft(typeId: number, templateId: number, data: Partial<SubdivisionTemplate>) {
-  const key = `${typeId}_${templateId}`;
-  const existing = templateDraftState.get(key) || {};
-  templateDraftState.set(key, { ...existing, ...data });
+  templateDraftState.set(`${typeId}_${templateId}`, data);
 }
 
 export function clearTemplateDraft(typeId: number, templateId: number) {
-  templateDraftState.delete(`${typeId}_${templateId}`);
+  templateDraftState.clear(`${typeId}_${templateId}`);
 }
 
 // Временное хранилище для draft изменений подразделений (администратор, прямое редактирование)
-const adminSubDraftState = new Map<string, Partial<Subdivision>>();
+const adminSubDraftState = createDraftState<Subdivision>();
 
 export function getAdminSubDraft(subdivisionId: number): Partial<Subdivision> | undefined {
   return adminSubDraftState.get(subdivisionId.toString());
 }
 
 export function setAdminSubDraft(subdivisionId: number, data: Partial<Subdivision>) {
-  const key = subdivisionId.toString();
-  const existing = adminSubDraftState.get(key) || {};
-  adminSubDraftState.set(key, { ...existing, ...data });
+  adminSubDraftState.set(subdivisionId.toString(), data);
 }
 
 export function clearAdminSubDraft(subdivisionId: number) {
-  adminSubDraftState.delete(subdivisionId.toString());
+  adminSubDraftState.clear(subdivisionId.toString());
 }
 
 /**
@@ -229,21 +232,7 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       await handleSubEditorFieldEdit(interaction, subId, 'footer');
     }
   } catch (error) {
-    logger.error('Error handling admin panel modal', {
-      error: error instanceof Error ? error.message : error,
-      customId,
-      userId: interaction.user.id,
-    });
-
-    const content = error instanceof CalloutError
-      ? error.message
-      : `${EMOJI.ERROR} Произошла ошибка при обработке формы`;
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-    }
+    await handleInteractionError(error, interaction, 'Error handling admin panel modal', `${EMOJI.ERROR} Произошла ошибка при обработке формы`);
   }
 }
 
@@ -258,6 +247,17 @@ async function handleAddFaction(
 
   const name = interaction.fields.getTextInputValue('dept_name').trim();
   const description = interaction.fields.getTextInputValue('dept_description').trim();
+  const emoji = interaction.fields.getTextInputValue('dept_emoji').trim();
+
+  // Валидация эмодзи
+  if (emoji && !isValidDiscordEmoji(emoji)) {
+    await interaction.editReply({
+      content: `${EMOJI.ERROR} Некорректное эмодзи. Укажите кастомное Discord-эмодзи (<:name:id>) или unicode-эмодзи (🚔).`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
 
   // Получить состояние с ролями и типом
   const state = getAddFactionState(interaction.user.id);
@@ -275,6 +275,7 @@ async function handleAddFaction(
     server_id: serverId,
     name,
     description: description || undefined,
+    logo_url: emoji || undefined,
     general_leader_role_id: state.generalLeaderRoleId,
     faction_role_id: state.departmentRoleId,
   }, state.selectedTypeId);
@@ -460,131 +461,18 @@ async function handleTemplateFieldEdit(
 ) {
   await interaction.deferUpdate();
 
-  const draftData: Partial<SubdivisionTemplate> = {};
-
-  // Получить значения полей в зависимости от типа
-  switch (field) {
-    case 'name':
-      draftData.name = interaction.fields.getTextInputValue('template_name').trim();
-      break;
-    case 'title':
-      const title = interaction.fields.getTextInputValue('embed_title').trim();
-      draftData.embed_title = title || null;
-      const titleUrl = interaction.fields.getTextInputValue('embed_title_url').trim();
-      if (titleUrl && !isValidUrl(titleUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL заголовка. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_title_url = titleUrl || null;
-      break;
-    case 'description':
-      const desc = interaction.fields.getTextInputValue('embed_description').trim();
-      draftData.embed_description = desc || null;
-      break;
-    case 'color':
-      let color = interaction.fields.getTextInputValue('embed_color').trim();
-      if (color) {
-        // Нормализовать цвет (добавить # если нужно)
-        color = color.startsWith('#') ? color : `#${color}`;
-        // Валидация hex цвета
-        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-          await interaction.followUp({
-            content: `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-        draftData.embed_color = color;
-      } else {
-        draftData.embed_color = null;
-      }
-      break;
-    case 'author':
-      const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
-      const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
-      const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
-      if (authorUrl && !isValidUrl(authorUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL автора. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      if (authorIcon && !isValidUrl(authorIcon)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL иконки автора. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_author_name = authorName || null;
-      draftData.embed_author_url = authorUrl || null;
-      draftData.embed_author_icon_url = authorIcon || null;
-      break;
-    case 'footer':
-      const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
-      const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
-      if (footerIcon && !isValidUrl(footerIcon)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL иконки футера. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_footer_text = footerText || null;
-      draftData.embed_footer_icon_url = footerIcon || null;
-      break;
-    case 'image':
-      const imageUrl = interaction.fields.getTextInputValue('embed_image_url').trim();
-      if (imageUrl && !isValidUrl(imageUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL изображения. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_image_url = imageUrl || null;
-      break;
-    case 'thumbnail':
-      const thumbnailUrl = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
-      if (thumbnailUrl && !isValidUrl(thumbnailUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL миниатюры. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_thumbnail_url = thumbnailUrl || null;
-      break;
-    case 'short_desc':
-      const shortDesc = interaction.fields.getTextInputValue('short_description').trim();
-      draftData.short_description = shortDesc || null;
-      break;
-    case 'logo':
-      const logoUrl = interaction.fields.getTextInputValue('logo_url').trim();
-      if (logoUrl && !isValidDiscordEmoji(logoUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректное эмодзи. Укажите кастомное Discord-эмодзи (<:name:id>) или unicode-эмодзи.`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.logo_url = logoUrl || null;
-      break;
+  const result = parseEmbedFieldFromModal(interaction, field, { nameInputCustomId: 'template_name', validateUrls: true });
+  if (!result.ok) {
+    await interaction.followUp({ content: result.errorMessage, flags: MessageFlags.Ephemeral });
+    return;
   }
 
-  // Обновить draft состояние
-  setTemplateDraft(typeId, templateId, draftData);
+  setTemplateDraft(typeId, templateId, result.data);
 
-  // Получить текущий draft и перерисовать панель с обновленным предпросмотром
   const currentDraft = getTemplateDraft(typeId, templateId);
   const panel = await buildTemplateEditorPanel(typeId, templateId, currentDraft);
   await interaction.editReply(panel);
 
-  // Показать ephemeral уведомление об изменении
   await interaction.followUp({
     content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Сохранить" чтобы применить изменения.`,
     flags: MessageFlags.Ephemeral,
@@ -602,10 +490,7 @@ async function handleAdminEditSubdivisionSettings(
 ) {
   await interaction.deferUpdate();
 
-  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
-  }
+  const subdivision = await getVerifiedSubdivision(subdivisionId);
 
   // Парсинг и валидация через shared helper
   const settingsData = parseSubdivisionSettingsData(interaction);
@@ -646,136 +531,15 @@ async function handleSubEditorFieldEdit(
 ) {
   await interaction.deferUpdate();
 
-  const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-  if (!subdivision) {
-    throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+  const subdivision = await getVerifiedSubdivision(subdivisionId);
+
+  const result = parseEmbedFieldFromModal(interaction, field, { nameInputCustomId: 'sub_name', validateUrls: true });
+  if (!result.ok) {
+    await interaction.followUp({ content: result.errorMessage, flags: MessageFlags.Ephemeral });
+    return;
   }
 
-  const draftData: Partial<Subdivision> = {};
-
-  switch (field) {
-    case 'name': {
-      const val = interaction.fields.getTextInputValue('sub_name').trim();
-      if (val) draftData.name = val;
-      break;
-    }
-    case 'logo': {
-      const val = interaction.fields.getTextInputValue('logo_url').trim();
-      if (val && !isValidDiscordEmoji(val)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректное эмодзи. Укажите кастомное Discord-эмодзи (<:name:id>) или unicode-эмодзи.`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.logo_url = val || null;
-      break;
-    }
-    case 'short_desc': {
-      const val = interaction.fields.getTextInputValue('short_description').trim();
-      draftData.short_description = val || null;
-      break;
-    }
-    case 'title': {
-      const titleVal = interaction.fields.getTextInputValue('embed_title').trim();
-      draftData.embed_title = titleVal || null;
-      const titleUrl = interaction.fields.getTextInputValue('embed_title_url').trim();
-      if (titleUrl && !isValidUrl(titleUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL заголовка. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_title_url = titleUrl || null;
-      break;
-    }
-    case 'description': {
-      const val = interaction.fields.getTextInputValue('embed_description').trim();
-      draftData.embed_description = val || null;
-      break;
-    }
-    case 'color': {
-      let color = interaction.fields.getTextInputValue('embed_color').trim();
-      if (color) {
-        color = color.startsWith('#') ? color : `#${color}`;
-        if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-          await interaction.followUp({
-            content: `${EMOJI.ERROR} Некорректный hex цвет. Используйте формат #RRGGBB или RRGGBB`,
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-        draftData.embed_color = color;
-      } else {
-        draftData.embed_color = null;
-      }
-      break;
-    }
-    case 'author': {
-      const authorName = interaction.fields.getTextInputValue('embed_author_name').trim();
-      const authorUrl = interaction.fields.getTextInputValue('embed_author_url').trim();
-      const authorIcon = interaction.fields.getTextInputValue('embed_author_icon_url').trim();
-      if (authorUrl && !isValidUrl(authorUrl)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL автора. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      if (authorIcon && !isValidUrl(authorIcon)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL иконки автора. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_author_name = authorName || null;
-      draftData.embed_author_url = authorUrl || null;
-      draftData.embed_author_icon_url = authorIcon || null;
-      break;
-    }
-    case 'footer': {
-      const footerText = interaction.fields.getTextInputValue('embed_footer_text').trim();
-      const footerIcon = interaction.fields.getTextInputValue('embed_footer_icon_url').trim();
-      if (footerIcon && !isValidUrl(footerIcon)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL иконки футера. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_footer_text = footerText || null;
-      draftData.embed_footer_icon_url = footerIcon || null;
-      break;
-    }
-    case 'image': {
-      const val = interaction.fields.getTextInputValue('embed_image_url').trim();
-      if (val && !isValidUrl(val)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL изображения. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_image_url = val || null;
-      break;
-    }
-    case 'thumbnail': {
-      const val = interaction.fields.getTextInputValue('embed_thumbnail_url').trim();
-      if (val && !isValidUrl(val)) {
-        await interaction.followUp({
-          content: `${EMOJI.ERROR} Некорректный URL миниатюры. Используйте полный URL (https://...)`,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      draftData.embed_thumbnail_url = val || null;
-      break;
-    }
-  }
-
-  setAdminSubDraft(subdivisionId, draftData);
+  setAdminSubDraft(subdivisionId, result.data);
 
   const currentDraft = getAdminSubDraft(subdivisionId);
   const panel = await buildAdminSubdivisionEditorPanel(subdivision.faction_id, subdivision, currentDraft);
@@ -787,15 +551,62 @@ async function handleSubEditorFieldEdit(
   });
 }
 
+
 /**
- * Проверка валидности URL
+ * Обработчик модальных окон из Audit Log канала (audit_modal_reject_change_)
+ * Вызывается при отклонении изменения через кнопку в audit log сообщении
  */
-function isValidUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
+export async function handleAuditLogModal(interaction: ModalSubmitInteraction) {
+  if (!interaction.guild) return;
+
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  if (!isAdministrator(member)) {
+    await interaction.reply({
+      content: `${EMOJI.ERROR} Только администраторы могут отклонять изменения`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const customId = interaction.customId;
+
+  if (customId.startsWith('audit_modal_reject_change_')) {
+    const changeId = parseInt(customId.replace('audit_modal_reject_change_', ''));
+    const reason = interaction.fields.getTextInputValue('rejection_reason').trim();
+
+    try {
+      // deferUpdate обновит оригинальное сообщение audit log (где была кнопка)
+      await interaction.deferUpdate();
+
+      await PendingChangeService.rejectChange(changeId, interaction.user.id, reason, interaction.guild);
+
+      logger.info('Change rejected from audit log', {
+        changeId,
+        reason,
+        userId: interaction.user.id,
+      });
+
+      const resultEmbed = new EmbedBuilder()
+        .setTitle(`❌ Изменение #${changeId} отклонено`)
+        .setColor(COLORS.ERROR)
+        .addFields(
+          { name: 'Отклонил', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'Причина', value: reason, inline: false },
+        )
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [resultEmbed], components: [] });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Не удалось отклонить изменение';
+      logger.error('Failed to reject change from audit log', {
+        changeId,
+        error: error instanceof Error ? error.message : error,
+      });
+      try {
+        await interaction.followUp({ content: `${EMOJI.ERROR} ${msg}`, flags: MessageFlags.Ephemeral });
+      } catch {
+        // ignore
+      }
+    }
   }
 }

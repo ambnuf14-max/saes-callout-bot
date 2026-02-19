@@ -36,13 +36,6 @@ export const validators = {
 
     const trimmed = text.trim();
 
-    if (trimmed.length < LIMITS.DESCRIPTION_MIN) {
-      return {
-        valid: false,
-        error: MESSAGES.VALIDATION.DESC_TOO_SHORT(LIMITS.DESCRIPTION_MIN),
-      };
-    }
-
     if (trimmed.length > LIMITS.DESCRIPTION_MAX) {
       return {
         valid: false,
@@ -65,13 +58,6 @@ export const validators = {
     }
 
     const trimmed = location.trim();
-
-    if (trimmed.length < LIMITS.LOCATION_MIN) {
-      return {
-        valid: false,
-        error: MESSAGES.VALIDATION.LOCATION_TOO_SHORT(LIMITS.LOCATION_MIN),
-      };
-    }
 
     if (trimmed.length > LIMITS.LOCATION_MAX) {
       return {

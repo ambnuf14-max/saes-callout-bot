@@ -5,6 +5,7 @@ import { getLeaderFaction } from '../utils/faction-permission-checker';
 import { buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { handleInteractionError } from '../utils/subdivision-settings-helper';
 
 /**
  * Обработчик select menu для выбора подразделения
@@ -32,22 +33,7 @@ export async function handleFactionSelect(interaction: StringSelectMenuInteracti
       await handleSelectSubdivision(interaction);
     }
   } catch (error) {
-    logger.error('Error handling faction select menu', {
-      error: error instanceof Error ? error.message : error,
-      customId,
-      userId: interaction.user.id,
-    });
-
-    const content =
-      error instanceof CalloutError
-        ? error.message
-        : `${EMOJI.ERROR} Произошла ошибка при выборе подразделения`;
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-    }
+    await handleInteractionError(error, interaction, 'Error handling faction select menu', `${EMOJI.ERROR} Произошла ошибка при выборе подразделения`);
   }
 }
 

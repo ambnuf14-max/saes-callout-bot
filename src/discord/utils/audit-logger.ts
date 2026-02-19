@@ -1,7 +1,8 @@
-import { Guild, EmbedBuilder, TextChannel, ChannelType } from 'discord.js';
+import { Guild, EmbedBuilder, TextChannel, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { ServerModel } from '../../database/models';
 import logger from '../../utils/logger';
 import { COLORS, EMOJI } from '../../config/constants';
+import { PendingChangeWithDetails } from '../../types/database.types';
 
 /**
  * Типы событий для audit log
@@ -689,4 +690,78 @@ function buildChangeCancelledEmbed(
       { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
+}
+
+/**
+ * Отправить pending change request в audit log с кнопками Одобрить/Отклонить
+ */
+export async function logPendingChangeWithButtons(
+  guild: Guild,
+  change: PendingChangeWithDetails
+): Promise<void> {
+  try {
+    const server = await ServerModel.findByGuildId(guild.id);
+    if (!server || !server.audit_log_channel_id) {
+      return;
+    }
+
+    const channel = await guild.channels.fetch(server.audit_log_channel_id);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return;
+    }
+
+    // Динамический импорт для избежания циклических зависимостей
+    const { getChangeTypeLabel, formatBeforeAfter } = await import('./change-formatter');
+
+    const typeLabel = getChangeTypeLabel(change.change_type);
+    const diffText = formatBeforeAfter(change);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJI.PENDING} Запрос на изменение #${change.id}`)
+      .setColor(COLORS.WARNING)
+      .addFields(
+        { name: 'Тип', value: typeLabel, inline: true },
+        { name: 'Фракция', value: change.faction_name, inline: true },
+        { name: 'Запросил', value: `<@${change.requested_by}>`, inline: true },
+      )
+      .setTimestamp();
+
+    if (change.subdivision_name) {
+      embed.addFields({ name: 'Подразделение', value: change.subdivision_name, inline: true });
+    }
+
+    embed.addFields({
+      name: 'Изменения (до → после)',
+      value: diffText.substring(0, 1024) || 'Нет деталей',
+      inline: false,
+    });
+
+    embed.setFooter({ text: `ID запроса: #${change.id}` });
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`audit_approve_change_${change.id}`)
+        .setLabel('Одобрить')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`audit_reject_change_${change.id}`)
+        .setLabel('Отклонить')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    await (channel as TextChannel).send({ embeds: [embed], components: [row] });
+
+    logger.debug('Pending change request posted to audit log with buttons', {
+      changeId: change.id,
+      guildId: guild.id,
+    });
+  } catch (error) {
+    logger.error('Failed to post pending change request to audit log', {
+      error: error instanceof Error ? error.message : error,
+      changeId: change.id,
+      guildId: guild.id,
+    });
+  }
 }

@@ -111,20 +111,35 @@ export async function sendConfirmation(
  * Форматировать сообщение о каллауте для VK
  */
 function formatCalloutMessage(callout: Callout, subdivision: Subdivision): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+
   const lines = [
-    `${EMOJI.ALERT} НОВЫЙ КАЛЛАУТ #${callout.id}`,
+    `🚨 INCOMING CALLOUT #${callout.id}`,
     '',
-    `📋 Подразделение: ${subdivision.name}`,
-    `👤 От: ${callout.author_name}`,
-    `📍 Место: ${callout.location || 'Не указано'}`,
-    `📝 Описание: ${callout.description}`,
+    `Кратко об инциденте`,
+    callout.brief_description || 'Не указано',
     '',
-    `🕐 Время: ${new Date(callout.created_at).toLocaleString('ru-RU', {
-      timeZone: 'Europe/Moscow',
-    })}`,
+    `Локация инцидента`,
+    callout.location || 'Не указано',
+    '',
+    `Полное описание инцидента`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    lines.push('', 'TAC-канал', callout.tac_channel);
+  }
+
+  lines.push(
+    '',
+    `Запрошенные подразделения`,
+    subdivision.name,
+    '',
+    `Отправил запрос: ${callout.author_name}`,
+    `🕐 ${time}`,
     '',
     '@all',
-  ];
+  );
 
   return lines.join('\n');
 }

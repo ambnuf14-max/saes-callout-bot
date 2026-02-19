@@ -1,4 +1,11 @@
-import { ModalSubmitInteraction, MessageFlags } from 'discord.js';
+import {
+  ModalSubmitInteraction,
+  MessageFlags,
+  EmbedBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder,
+} from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel, SubdivisionModel } from '../../database/models';
 import CalloutService from '../../services/callout.service';
@@ -25,12 +32,19 @@ export async function handleCalloutModalSubmit(
     return;
   }
 
-  // Отложенный ответ, так как создание канала может занять время
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // Отложить обновление оригинального ephemeral сообщения (с select menu),
+  // чтобы после успеха оно заменилось на embed с кнопкой и исчезло по нажатию
+  if (interaction.isFromMessage()) {
+    await interaction.deferUpdate();
+  } else {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
 
   try {
     // Получить данные из модального окна
+    const briefDescription = interaction.fields.getTextInputValue('brief_description_input');
     const location = interaction.fields.getTextInputValue('location_input');
+    const tacChannel = interaction.fields.getTextInputValue('tac_channel_input');
     const description = interaction.fields.getTextInputValue('description_input');
 
     // Получить подразделение из временного хранилища
@@ -113,6 +127,8 @@ export async function handleCalloutModalSubmit(
         author_name: interaction.user.tag,
         description: description.trim(),
         location: location.trim(),
+        tac_channel: tacChannel.trim() || undefined,
+        brief_description: briefDescription.trim(),
       }
     );
 
@@ -131,8 +147,21 @@ export async function handleCalloutModalSubmit(
     await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id, isAdmin);
 
     // Отправить подтверждение пользователю
+    const successEmbed = new EmbedBuilder()
+      .setColor(0x57f287)
+      .setTitle(`${EMOJI.SUCCESS} Каллаут создан`)
+      .setDescription(`Ваш запрос к **${subdivision.name}** был успешно отправлен.`);
+
+    const goToChannelButton = new ButtonBuilder()
+      .setLabel('Перейти к инциденту')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`https://discord.com/channels/${interaction.guild.id}/${channel.id}`);
+
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(goToChannelButton);
+
     await interaction.editReply({
-      content: MESSAGES.CALLOUT.SUCCESS_CREATED(channel.toString()),
+      embeds: [successEmbed],
+      components: [buttonRow],
     });
   } catch (error) {
     logger.error('Error processing callout modal', {
@@ -148,6 +177,8 @@ export async function handleCalloutModalSubmit(
 
     await interaction.editReply({
       content: errorMessage,
+      embeds: [],
+      components: [],
     });
 
     // Очистить временное хранилище даже при ошибке

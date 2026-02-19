@@ -230,7 +230,7 @@ export class SubdivisionModel {
    * Отвязать VK беседу от подразделения
    */
   static async unlinkVkChat(id: number): Promise<Subdivision | undefined> {
-    return await this.update(id, { vk_chat_id: undefined });
+    return await this.update(id, { vk_chat_id: null });
   }
 
   /**
@@ -244,7 +244,7 @@ export class SubdivisionModel {
    * Отвязать Telegram группу от подразделения
    */
   static async unlinkTelegramChat(id: number): Promise<Subdivision | undefined> {
-    return await this.update(id, { telegram_chat_id: undefined });
+    return await this.update(id, { telegram_chat_id: null });
   }
 
   /**

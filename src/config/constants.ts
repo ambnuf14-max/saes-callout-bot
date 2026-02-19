@@ -31,6 +31,7 @@ export const EMOJI = {
 export const LIMITS = {
   DESCRIPTION_MIN: 10,
   DESCRIPTION_MAX: 500,
+  BRIEF_DESCRIPTION_MAX: 40,
   FACTION_NAME_MIN: 2,
   FACTION_NAME_MAX: 10,
   LOCATION_MIN: 3,
@@ -40,13 +41,15 @@ export const LIMITS = {
 // Текстовые константы
 export const MESSAGES = {
   CALLOUT: {
-    BUTTON_CREATE: `${EMOJI.PHONE} New Callout`,
-    BUTTON_CLOSE: `${EMOJI.CLOSED} Закрыть инцидент`,
+    BUTTON_CREATE: `New Callout`,
+    BUTTON_CLOSE: `Закрыть инцидент`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
     BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
 
-    TITLE_PANEL: `${EMOJI.ALERT} Система каллаутов`,
-    DESCRIPTION_PANEL: 'Нажмите кнопку ниже для создания каллаута',
+    TITLE_PANEL: `🚨  Incident Callout System`,
+    DESCRIPTION_PANEL:
+      'Используйте систему каллаутов для запроса необходимых подразделений или департаментов на инцидент, выберите нужные из списка, укажите необходимую информацию и направьте запрос.\n\n' +
+      'Вы можете ознакомиться со списком доступных подразделений, нажав на кнопку ниже.',
 
     MODAL_TITLE: 'Создание каллаута',
     MODAL_DEPT_LABEL: 'Фракция',
@@ -56,8 +59,8 @@ export const MESSAGES = {
 
     SUCCESS_CREATED: (channelName: string) =>
       `${EMOJI.SUCCESS} Каллаут создан! Канал: ${channelName}`,
-    SUCCESS_CLOSED: (id: number) =>
-      `${EMOJI.SUCCESS} Инцидент #${id} закрыт. Канал будет удален через 5 минут.`,
+    SUCCESS_CLOSED: (id: number, delayMinutes: number) =>
+      `${EMOJI.SUCCESS} Инцидент #${id} закрыт. Канал будет удален через ${delayMinutes} ${delayMinutes === 1 ? 'минуту' : delayMinutes < 5 ? 'минуты' : 'минут'}.`,
 
     ERROR_NO_PERMISSION: `${EMOJI.ERROR} У вас нет прав для закрытия этого каллаута`,
     ERROR_NOT_FOUND: `${EMOJI.ERROR} Каллаут не найден`,
@@ -126,9 +129,8 @@ export const MESSAGES = {
     TITLE_TELEGRAM: '📱 Привязка Telegram группы',
     INSTRUCTIONS: (token: string, minutes: number) =>
       `**Шаг 1: Добавьте бота в VK беседу**\n` +
-      `• Откройте нужную VK беседу\n` +
-      `• Нажмите на название беседы → "Участники" → "Пригласить"\n` +
-      `• Найдите и добавьте сообщество **SAES Callout Bot**\n\n` +
+      `• Перейдите в сообщество бота: https://vk.com/saescalloutbot\n` +
+      `• Нажмите кнопку **"Пригласить в беседу"** и выберите нужную беседу\n\n` +
       `**Шаг 2: Привяжите беседу**\n` +
       `• В беседе отправьте команду: \`/verify ${token}\`\n` +
       `• Токен действителен **${minutes} минут**`,

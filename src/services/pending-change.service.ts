@@ -6,6 +6,7 @@ import {
   UpdateSubdivisionChangeData,
   DeleteSubdivisionChangeData,
   UpdateEmbedChangeData,
+  UpdateFactionChangeData,
 } from '../types/database.types';
 import PendingChangeModel from '../database/models/PendingChange';
 import SubdivisionModel from '../database/models/Subdivision';
@@ -16,8 +17,8 @@ import logger from '../utils/logger';
 import { Guild } from 'discord.js';
 import {
   logAuditEvent,
+  logPendingChangeWithButtons,
   AuditEventType,
-  ChangeRequestedData,
   ChangeApprovedData,
   ChangeRejectedData,
 } from '../discord/utils/audit-logger';
@@ -64,19 +65,14 @@ export class PendingChangeService {
       change_data: data,
     });
 
-    // Отправить уведомление в audit log
-    const faction = await FactionModel.findById(factionId);
-    if (faction) {
-      const user = await guild.members.fetch(requestedBy);
-      const auditData: ChangeRequestedData = {
-        userId: requestedBy,
-        userName: user.user.tag,
-        changeType: getChangeTypeLabel('create_subdivision'),
-        factionName: faction.name,
-        details: `Название: ${data.name}`,
-        changeId: change.id,
-      };
-      await logAuditEvent(guild, AuditEventType.SUBDIVISION_CREATE_REQUESTED, auditData);
+    // Отправить уведомление в audit log с кнопками Одобрить/Отклонить
+    try {
+      const changeWithDetails = await PendingChangeModel.findWithDetails(change.id);
+      if (changeWithDetails) {
+        await logPendingChangeWithButtons(guild, changeWithDetails);
+      }
+    } catch (error) {
+      logger.warn('Failed to send audit log for create_subdivision', { error });
     }
 
     return change;
@@ -122,29 +118,34 @@ export class PendingChangeService {
       }
     }
 
+    const changeDataWithBefore = {
+      ...data,
+      _before: {
+        name: subdivision.name,
+        description: subdivision.description,
+        short_description: subdivision.short_description,
+        logo_url: subdivision.logo_url,
+        discord_role_id: subdivision.discord_role_id,
+      },
+    };
+
     const change = await PendingChangeModel.create({
       server_id: serverId,
       faction_id: factionId,
       subdivision_id: subdivisionId,
       change_type: 'update_subdivision',
       requested_by: requestedBy,
-      change_data: data,
+      change_data: changeDataWithBefore,
     });
 
-    // Отправить уведомление в audit log
-    const faction = await FactionModel.findById(factionId);
-    if (faction) {
-      const user = await guild.members.fetch(requestedBy);
-      const details = data.name ? `Новое название: ${data.name}` : 'Обновление описания';
-      const auditData: ChangeRequestedData = {
-        userId: requestedBy,
-        userName: user.user.tag,
-        changeType: getChangeTypeLabel('update_subdivision'),
-        factionName: faction.name,
-        details: `Подразделение: ${subdivision.name}\n${details}`,
-        changeId: change.id,
-      };
-      await logAuditEvent(guild, AuditEventType.SUBDIVISION_UPDATE_REQUESTED, auditData);
+    // Отправить уведомление в audit log с кнопками Одобрить/Отклонить
+    try {
+      const changeWithDetails = await PendingChangeModel.findWithDetails(change.id);
+      if (changeWithDetails) {
+        await logPendingChangeWithButtons(guild, changeWithDetails);
+      }
+    } catch (error) {
+      logger.warn('Failed to send audit log for update_subdivision', { error });
     }
 
     return change;
@@ -187,19 +188,14 @@ export class PendingChangeService {
       change_data: data,
     });
 
-    // Отправить уведомление в audit log
-    const faction = await FactionModel.findById(factionId);
-    if (faction) {
-      const user = await guild.members.fetch(requestedBy);
-      const auditData: ChangeRequestedData = {
-        userId: requestedBy,
-        userName: user.user.tag,
-        changeType: getChangeTypeLabel('delete_subdivision'),
-        factionName: faction.name,
-        details: `Подразделение: ${subdivision.name}`,
-        changeId: change.id,
-      };
-      await logAuditEvent(guild, AuditEventType.SUBDIVISION_DELETE_REQUESTED, auditData);
+    // Отправить уведомление в audit log с кнопками Одобрить/Отклонить
+    try {
+      const changeWithDetails = await PendingChangeModel.findWithDetails(change.id);
+      if (changeWithDetails) {
+        await logPendingChangeWithButtons(guild, changeWithDetails);
+      }
+    } catch (error) {
+      logger.warn('Failed to send audit log for delete_subdivision', { error });
     }
 
     return change;
@@ -230,28 +226,90 @@ export class PendingChangeService {
       );
     }
 
+    const changeDataWithBefore = {
+      ...data,
+      _before: {
+        name: subdivision.name,
+        embed_title: subdivision.embed_title,
+        embed_description: subdivision.embed_description,
+        embed_color: subdivision.embed_color,
+        embed_image_url: subdivision.embed_image_url,
+        embed_thumbnail_url: subdivision.embed_thumbnail_url,
+        embed_author_name: subdivision.embed_author_name,
+        embed_footer_text: subdivision.embed_footer_text,
+        short_description: subdivision.short_description,
+        logo_url: subdivision.logo_url,
+      },
+    };
+
     const change = await PendingChangeModel.create({
       server_id: serverId,
       faction_id: factionId,
       subdivision_id: subdivisionId,
       change_type: 'update_embed',
       requested_by: requestedBy,
-      change_data: data,
+      change_data: changeDataWithBefore,
     });
 
-    // Отправить уведомление в audit log
+    // Отправить уведомление в audit log с кнопками Одобрить/Отклонить
+    try {
+      const changeWithDetails = await PendingChangeModel.findWithDetails(change.id);
+      if (changeWithDetails) {
+        await logPendingChangeWithButtons(guild, changeWithDetails);
+      }
+    } catch (error) {
+      logger.warn('Failed to send audit log for update_embed', { error });
+    }
+
+    return change;
+  }
+
+  /**
+   * Создать запрос на обновление фракции (название + эмодзи)
+   */
+  static async requestUpdateFaction(
+    factionId: number,
+    serverId: number,
+    requestedBy: string,
+    data: UpdateFactionChangeData,
+    guild: Guild
+  ): Promise<PendingChange> {
     const faction = await FactionModel.findById(factionId);
-    if (faction) {
-      const user = await guild.members.fetch(requestedBy);
-      const auditData: ChangeRequestedData = {
-        userId: requestedBy,
-        userName: user.user.tag,
-        changeType: getChangeTypeLabel('update_embed'),
-        factionName: faction.name,
-        details: `Подразделение: ${subdivision.name}\nНастройка embed сообщения`,
-        changeId: change.id,
-      };
-      await logAuditEvent(guild, AuditEventType.EMBED_UPDATE_REQUESTED, auditData);
+    if (!faction) {
+      throw new CalloutError('Фракция не найдена', 'FACTION_NOT_FOUND', 404);
+    }
+
+    if (data.name !== undefined && (data.name.length < 2 || data.name.length > 50)) {
+      throw new CalloutError(
+        'Название фракции должно быть от 2 до 50 символов',
+        'INVALID_FACTION_NAME',
+        400
+      );
+    }
+
+    const changeDataWithBefore = {
+      ...data,
+      _before: {
+        name: faction.name,
+        logo_url: faction.logo_url,
+      },
+    };
+
+    const change = await PendingChangeModel.create({
+      server_id: serverId,
+      faction_id: factionId,
+      change_type: 'update_faction',
+      requested_by: requestedBy,
+      change_data: changeDataWithBefore,
+    });
+
+    try {
+      const changeWithDetails = await PendingChangeModel.findWithDetails(change.id);
+      if (changeWithDetails) {
+        await logPendingChangeWithButtons(guild, changeWithDetails);
+      }
+    } catch (error) {
+      logger.warn('Failed to send audit log for update_faction', { error });
     }
 
     return change;
@@ -266,7 +324,11 @@ export class PendingChangeService {
       throw new CalloutError('Запрос не найден', 'CHANGE_NOT_FOUND', 404);
     }
 
-    if (change.status !== 'pending') {
+    // Атомарно помечаем как одобренное ДО применения изменения.
+    // approve() использует WHERE status = 'pending', поэтому только один
+    // вызов из двух одновременных пройдёт — защита от race condition.
+    const claimed = await PendingChangeModel.approve(changeId, reviewedBy);
+    if (!claimed) {
       throw new CalloutError('Запрос уже обработан', 'CHANGE_ALREADY_PROCESSED', 400);
     }
 
@@ -294,20 +356,21 @@ export class PendingChangeService {
           await this.applyUpdateEmbed(change);
           break;
 
+        case 'update_faction':
+          await this.applyUpdateFaction(change);
+          break;
+
         default:
           throw new Error(`Unknown change type: ${change.change_type}`);
       }
     } catch (error) {
-      logger.error('Failed to apply pending change', {
+      logger.error('Failed to apply pending change (change is marked approved in DB)', {
         changeId,
         changeType: change.change_type,
         error: error instanceof Error ? error.message : error,
       });
       throw error;
     }
-
-    // Пометить как одобренное
-    await PendingChangeModel.approve(changeId, reviewedBy);
 
     logger.info('Pending change approved and applied', {
       changeId,
@@ -519,6 +582,13 @@ export class PendingChangeService {
           : 'Настройка embed сообщения';
       }
 
+      case 'update_faction': {
+        const data = PendingChangeModel.parseChangeData<UpdateFactionChangeData>(change);
+        const faction = await FactionModel.findById(change.faction_id);
+        const details = data.name ? `Новое название: ${data.name}` : 'Обновление эмодзи';
+        return faction ? `Фракция: ${faction.name}\n${details}` : details;
+      }
+
       default:
         return 'Детали недоступны';
     }
@@ -639,6 +709,23 @@ export class PendingChangeService {
     logger.debug('Applied update_embed change', {
       changeId: change.id,
       subdivisionId: change.subdivision_id,
+    });
+  }
+
+  /**
+   * Применить обновление фракции (название + эмодзи)
+   */
+  private static async applyUpdateFaction(change: PendingChange): Promise<void> {
+    const data = PendingChangeModel.parseChangeData<UpdateFactionChangeData>(change);
+
+    await FactionModel.update(change.faction_id, {
+      name: data.name,
+      logo_url: data.logo_url,
+    });
+
+    logger.debug('Applied update_faction change', {
+      changeId: change.id,
+      factionId: change.faction_id,
     });
   }
 

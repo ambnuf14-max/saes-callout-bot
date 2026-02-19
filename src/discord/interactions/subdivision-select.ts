@@ -89,17 +89,26 @@ export async function handleSubdivisionSelect(
     });
 
     // Создать модальное окно с полями "Подробности" и "Место"
+    const modalTitle = `Запрос к ${subdivision.name}`.slice(0, 45);
     const modal = new ModalBuilder()
       .setCustomId('callout_modal')
-      .setTitle('Создание каллаута');
+      .setTitle(modalTitle);
+
+    // Поле "Краткое описание" (brief_description) — используется в названии канала
+    const briefDescriptionInput = new TextInputBuilder()
+      .setCustomId('brief_description_input')
+      .setLabel('Краткое описание инцидента')
+      .setPlaceholder('Например: Пожар в многоэтажном здании')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(LIMITS.BRIEF_DESCRIPTION_MAX)
+      .setRequired(true);
 
     // Поле "Место" (location)
     const locationInput = new TextInputBuilder()
       .setCustomId('location_input')
       .setLabel('Место инцидента')
-      .setPlaceholder('Например: Grove Street, перекресток Main St.')
+      .setPlaceholder('Например: Jefferson, Carson Street')
       .setStyle(TextInputStyle.Short)
-      .setMinLength(LIMITS.LOCATION_MIN)
       .setMaxLength(LIMITS.LOCATION_MAX)
       .setRequired(true);
 
@@ -109,18 +118,24 @@ export async function handleSubdivisionSelect(
       .setLabel('Подробности инцидента')
       .setPlaceholder('Опишите ситуацию подробно...')
       .setStyle(TextInputStyle.Paragraph)
-      .setMinLength(LIMITS.DESCRIPTION_MIN)
       .setMaxLength(LIMITS.DESCRIPTION_MAX)
       .setRequired(true);
 
-    const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      locationInput
-    );
-    const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(
-      descriptionInput
-    );
+    // Поле "TAC-канал" (опционально)
+    const tacChannelInput = new TextInputBuilder()
+      .setCustomId('tac_channel_input')
+      .setLabel('TAC-канал (Опционально)')
+      .setPlaceholder('Например: C-TAC-1, C-TAC-2')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(50)
+      .setRequired(false);
 
-    modal.addComponents(row1, row2);
+    const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(briefDescriptionInput);
+    const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(locationInput);
+    const row3 = new ActionRowBuilder<TextInputBuilder>().addComponents(tacChannelInput);
+    const row4 = new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput);
+
+    modal.addComponents(row1, row2, row3, row4);
 
     // Показать модальное окно
     await interaction.showModal(modal);

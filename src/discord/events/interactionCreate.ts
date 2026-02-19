@@ -16,8 +16,9 @@ import {
   handleAdminRoleSelect,
   handleAdminChannelSelect,
   handleAdminStringSelect,
+  handleAuditLogButton,
 } from '../interactions/admin-panel-button';
-import { handleAdminPanelModal } from '../interactions/admin-panel-modal';
+import { handleAdminPanelModal, handleAuditLogModal } from '../interactions/admin-panel-modal';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -69,6 +70,8 @@ export default async function interactionCreateHandler(
         await handleSetupModeSelect(interaction);
       } else if (interaction.customId.startsWith('close_callout_')) {
         await handleCloseCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('audit_approve_change_') || interaction.customId.startsWith('audit_reject_change_')) {
+        await handleAuditLogButton(interaction);
       } else if (interaction.customId.startsWith('admin_') || interaction.customId.startsWith('template_')) {
         await handleAdminPanelButton(interaction);
       } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_') || interaction.customId.startsWith('faction_')) {
@@ -91,6 +94,8 @@ export default async function interactionCreateHandler(
         await handleCalloutModalSubmit(interaction);
       } else if (interaction.customId.startsWith('close_callout_modal_')) {
         await handleCloseCalloutModal(interaction);
+      } else if (interaction.customId.startsWith('audit_modal_')) {
+        await handleAuditLogModal(interaction);
       } else if (interaction.customId.startsWith('admin_modal_') || interaction.customId.startsWith('template_modal_')) {
         await handleAdminPanelModal(interaction);
       } else if (interaction.customId.startsWith('department_modal_') || interaction.customId.startsWith('subdivision_modal_') || interaction.customId.startsWith('faction_modal_')) {

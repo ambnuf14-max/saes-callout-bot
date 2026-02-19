@@ -86,6 +86,15 @@ export class CalloutService {
       );
     }
 
+    // Проверить, настроена ли Discord роль
+    if (!subdivision.discord_role_id) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Подразделение ${subdivision.name} не настроено: не задана Discord роль`,
+        'SUBDIVISION_NO_ROLE',
+        400
+      );
+    }
+
     let callout: Callout | undefined;
     try {
       // 1. Создать запись в БД
@@ -103,7 +112,7 @@ export class CalloutService {
       );
 
       // 2. Создать канал для инцидента
-      const channel = await createIncidentChannel(guild, callout, subdivision);
+      const channel = await createIncidentChannel(guild, callout, subdivision, data.brief_description);
 
       // 3. Создать Embed сообщение
       const embed = buildCalloutEmbed(callout, subdivision);
@@ -118,7 +127,7 @@ export class CalloutService {
 
       // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({
-        content: `<@&${subdivision.discord_role_id}> - новый каллаут!`,
+        content: `<@&${subdivision.discord_role_id}>`,
         embeds: [embed],
         components: [actionRow],
       });
