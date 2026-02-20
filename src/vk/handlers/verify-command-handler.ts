@@ -134,7 +134,7 @@ async function notifyDiscordAboutVerification(
 
         const backButton = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId('department_back_list')
+            .setCustomId('faction_back_list')
             .setLabel('Назад')
             .setStyle(ButtonStyle.Secondary)
         );

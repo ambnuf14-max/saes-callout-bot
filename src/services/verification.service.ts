@@ -147,10 +147,20 @@ export class VerificationService {
       await SubdivisionModel.linkTelegramChat(token.subdivision_id, chatId);
     }
 
+    // Сохранить interaction token до markAsUsed, т.к. markAsUsed зануляет их в БД
+    const savedInteractionToken = token.discord_interaction_token;
+    const savedApplicationId = token.discord_application_id;
+
     // Пометить токен как использованный
     const usedToken = await VerificationTokenModel.markAsUsed(token.id, chatId);
     if (!usedToken) {
       throw new Error('Failed to mark token as used');
+    }
+
+    // Восстановить для уведомления Discord (markAsUsed уже очистил их в БД)
+    if (savedInteractionToken) {
+      usedToken.discord_interaction_token = savedInteractionToken;
+      usedToken.discord_application_id = savedApplicationId;
     }
 
     logger.info('Token verified and chat linked', {

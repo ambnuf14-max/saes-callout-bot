@@ -73,7 +73,7 @@ async function notifyExpiredTokens(discordBot: any): Promise<void> {
 
         const backButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
-            .setCustomId('department_back_list')
+            .setCustomId('faction_back_list')
             .setLabel('Назад')
             .setStyle(ButtonStyle.Secondary)
         );
