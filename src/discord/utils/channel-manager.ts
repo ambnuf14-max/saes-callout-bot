@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { Callout, Subdivision } from '../../types/database.types';
-import { ServerModel } from '../../database/models';
+import { ServerModel, FactionModel } from '../../database/models';
 
 /**
  * Утилиты для управления каналами
@@ -78,6 +78,9 @@ export async function createIncidentChannel(
 
     // Получить роли для прав доступа
     const leaderRoleIds = server ? ServerModel.getLeaderRoleIds(server) : [];
+    const calloutAllowedRoleIds = server ? ServerModel.getCalloutAllowedRoleIds(server) : [];
+    const factions = server ? await FactionModel.findByServerId(server.id) : [];
+    const ownerFaction = factions.find((f) => f.id === subdivision.faction_id);
 
     // Настройка прав доступа
     const permissionOverwrites = [
@@ -111,7 +114,7 @@ export async function createIncidentChannel(
       });
     }
 
-    // Добавить лидерские роли
+    // Добавить лидерские роли (с управлением каналом)
     leaderRoleIds.forEach((roleId) => {
       permissionOverwrites.push({
         id: roleId,
@@ -123,6 +126,54 @@ export async function createIncidentChannel(
         ],
       });
     });
+
+    // Добавить роли, которым разрешено создавать каллауты (только просмотр и чтение)
+    calloutAllowedRoleIds
+      .filter((roleId) => !leaderRoleIds.includes(roleId))
+      .forEach((roleId) => {
+        permissionOverwrites.push({
+          id: roleId,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+          ],
+        });
+      });
+
+    // Добавить лидерские роли фракций
+    // Собираем уже добавленные ID чтобы не дублировать overwrites
+    const addedRoleIds = new Set<string>([
+      guild.id,
+      callout.author_id,
+      ...(subdivision.discord_role_id ? [subdivision.discord_role_id] : []),
+      ...leaderRoleIds,
+      ...calloutAllowedRoleIds.filter((id) => !leaderRoleIds.includes(id)),
+    ]);
+
+    for (const faction of factions) {
+      const isOwner = faction.id === subdivision.faction_id;
+      const factionLeaderRoles = [faction.general_leader_role_id, faction.faction_role_id].filter(Boolean);
+
+      for (const roleId of factionLeaderRoles) {
+        if (addedRoleIds.has(roleId)) continue;
+        addedRoleIds.add(roleId);
+
+        const allow = [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+        ];
+
+        if (isOwner) {
+          allow.push(PermissionFlagsBits.ManageChannels);
+        }
+
+        permissionOverwrites.push({ id: roleId, allow });
+      }
+    }
 
     // Создать канал (с категорией или без)
     const channel = await guild.channels.create({
