@@ -542,7 +542,7 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
 
   // Создать канал "callouts" в категории
   const calloutsChannel = await guild.channels.create({
-    name: 'callouts',
+    name: 'создать-каллаут',
     type: ChannelType.GuildText,
     parent: categoryId,
     topic: 'Канал для создания каллаутов экстренных служб',
