@@ -1,101 +1,142 @@
-# ⚡ Быстрый старт (для root)
+# Быстрый запуск на VDS (Ubuntu)
 
-## 1️⃣ Установка Docker (если не установлен)
+## 1. Установка Docker
 
 ```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-rm get-docker.sh
+apt update && apt upgrade -y
+curl -fsSL https://get.docker.com | sh
+docker --version
 ```
 
-## 2️⃣ Загрузка проекта на сервер
+---
 
-**Вариант A - Git:**
+## 2. Загрузка проекта
+
+**Вариант A — Git:**
 ```bash
 cd /root
-git clone <ваш-репозиторий> saes-callout-bot
+git clone <репозиторий> saes-callout-bot
 cd saes-callout-bot
 ```
 
-**Вариант B - Загрузка архива:**
+**Вариант B — SCP с локальной машины:**
 ```bash
-# На локальной машине
-scp -r ./saes-callout-bot root@ваш-сервер:/root/
+# На локальной машине (Windows: использовать Git Bash или PowerShell)
+scp -r C:/Users/sexorcist/Desktop/saes-callout-bot root@IP_СЕРВЕРА:/root/saes-callout-bot
+```
 
-# На сервере
+Затем на сервере:
+```bash
 cd /root/saes-callout-bot
 ```
 
-## 3️⃣ Настройка переменных окружения
+---
+
+## 3. Настройка .env
 
 ```bash
-# Копируем шаблон
 cp .env.example .env
-
-# Редактируем
 nano .env
 ```
 
-**Заполните обязательные поля:**
-- `DISCORD_TOKEN` - токен вашего Discord бота
-- `DISCORD_CLIENT_ID` - ID приложения Discord
-- `VK_TOKEN` - токен группы VK
-- `VK_GROUP_ID` - ID группы VK
+Заполнить:
 
-Сохраните: `Ctrl+O`, затем `Enter`, выйти: `Ctrl+X`
+```env
+DISCORD_TOKEN=MTQ3...
+DISCORD_CLIENT_ID=1471924296812073161
 
-## 4️⃣ Запуск бота
+VK_TOKEN=vk1.a...
+VK_GROUP_ID=235998906
 
-```bash
-chmod +x deploy.sh
-./deploy.sh
+TELEGRAM_BOT_TOKEN=8571082251:AAH...
+TELEGRAM_BOT_USERNAME=SAES Callout Bot
+
+DATABASE_PATH=/app/data/database.sqlite
+LOG_LEVEL=info
+LOG_FILE=/app/logs/bot.log
+
+AUTO_DELETE_CHANNELS=true
+CHANNEL_DELETE_DELAY=180000
 ```
 
-**Готово!** Бот запущен и работает в фоне.
+Сохранить: `Ctrl+O` → `Enter` → `Ctrl+X`
+
+Закрыть права на файл:
+```bash
+chmod 600 .env
+```
 
 ---
 
-## 📋 Основные команды
+## 4. Запуск
 
 ```bash
-# Просмотр логов
-docker-compose logs -f
+docker compose build && docker compose up -d
+```
 
-# Остановить бота
-docker-compose down
+Проверить, что бот запустился:
+```bash
+docker compose logs --tail=50
+```
 
-# Запустить бота
-docker-compose up -d
+Должно быть что-то вроде:
+```
+saes-callout-bot  | Discord bot connected as SAES Callout Bot#1234
+saes-callout-bot  | VK bot started
+saes-callout-bot  | Telegram bot started
+```
 
-# Перезапустить бота
-docker-compose restart
+---
 
-# Статус контейнера
+## 5. Перенос базы данных (если есть)
+
+Если на локальной машине уже есть данные:
+
+```bash
+# На локальной машине
+scp C:/Users/sexorcist/Desktop/saes-callout-bot/data/database.sqlite root@IP_СЕРВЕРА:/root/saes-callout-bot/data/
+```
+
+Затем перезапустить:
+```bash
+docker compose restart
+```
+
+---
+
+## Основные команды
+
+```bash
+# Логи в реальном времени
+docker compose logs -f
+
+# Последние 100 строк
+docker compose logs --tail=100
+
+# Остановить
+docker compose down
+
+# Запустить
+docker compose up -d
+
+# Пересобрать и перезапустить (после обновления кода)
+docker compose build && docker compose up -d
+
+# Статус
 docker ps
 ```
 
-## 🔄 Обновление бота
+---
+
+## Обновление бота
 
 ```bash
-# Если используете Git
 git pull
-docker-compose down
-docker-compose build
-docker-compose up -d
-
-# Если загружаете файлы вручную
-# Загрузите новые файлы, затем:
-docker-compose down
-docker-compose build
-docker-compose up -d
+docker compose build && docker compose up -d
 ```
 
-## ⚠️ Важно
-
-- Файлы `data/` и `logs/` НЕ удаляются при перезапуске
-- Бот автоматически запустится после перезагрузки сервера
-- `.env` файл не должен попадать в Git (уже в .gitignore)
+Данные (БД, логи) при пересборке не теряются — они хранятся в `./data/` и `./logs/` на хосте.
 
 ---
 
-Подробная инструкция: см. **DEPLOY.md**
+Подробнее — **DEPLOY.md**

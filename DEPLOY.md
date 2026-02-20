@@ -1,153 +1,189 @@
-# 🚀 Инструкция по деплою на Ubuntu через Docker (от root)
+# Деплой на Ubuntu VDS через Docker
 
-## Предварительные требования
+## Требования
 
-На вашем Ubuntu сервере должны быть установлены:
-- Docker
-- Docker Compose
+- Ubuntu 20.04 / 22.04
+- Минимум 512 MB RAM (рекомендуется 1 GB)
+- Docker 24+
 
-### Установка Docker на Ubuntu
+---
+
+## Установка Docker
 
 ```bash
-# Обновляем систему
 apt update && apt upgrade -y
-
-# Устанавливаем Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-
-# Проверка установки
+curl -fsSL https://get.docker.com | sh
+systemctl enable docker
 docker --version
-docker-compose --version
 ```
 
 ---
 
-## Деплой бота
+## Загрузка проекта
 
-### 1. Загрузите проект на сервер
+### Git
 
-Вариант A - через Git:
 ```bash
-git clone <ваш-репозиторий>
+cd /root
+git clone <репозиторий> saes-callout-bot
 cd saes-callout-bot
 ```
 
-Вариант B - через SCP/SFTP:
+### SCP (если нет репозитория)
+
+Собрать архив на Windows и загрузить на сервер. Исключить `node_modules/`:
+
 ```bash
-# На вашем локальном компьютере
-scp -r /путь/к/проекту user@ваш-сервер:/home/user/saes-callout-bot
+# На локальной машине (Git Bash)
+cd /c/Users/sexorcist/Desktop
+tar --exclude=saes-callout-bot/node_modules \
+    --exclude=saes-callout-bot/data \
+    --exclude=saes-callout-bot/logs \
+    -czf saes-callout-bot.tar.gz saes-callout-bot
+
+scp saes-callout-bot.tar.gz root@IP_СЕРВЕРА:/root/
 ```
 
-### 2. Настройте переменные окружения
+```bash
+# На сервере
+cd /root
+tar -xzf saes-callout-bot.tar.gz
+cd saes-callout-bot
+```
+
+---
+
+## Настройка .env
 
 ```bash
-# Скопируйте пример конфига
 cp .env.example .env
-
-# Отредактируйте .env файл
 nano .env
+chmod 600 .env
 ```
 
-Заполните все необходимые токены:
-- `DISCORD_TOKEN` - токен Discord бота
-- `DISCORD_CLIENT_ID` - ID приложения Discord
-- `VK_TOKEN` - токен группы VK
-- `VK_GROUP_ID` - ID группы VK
+Обязательные поля:
 
-### 3. Запустите бота
+```env
+DISCORD_TOKEN=<токен бота>
+DISCORD_CLIENT_ID=<ID приложения>
 
-**Вариант A - Быстрый запуск (используя скрипт):**
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
+VK_TOKEN=<токен группы VK>
+VK_GROUP_ID=<ID группы VK>
 
-**Вариант B - Ручной запуск:**
-```bash
-# Сборка образа
-docker-compose build
+TELEGRAM_BOT_TOKEN=<токен от @BotFather>
+TELEGRAM_BOT_USERNAME=<username бота без @>
 
-# Запуск в фоновом режиме
-docker-compose up -d
+DATABASE_PATH=/app/data/database.sqlite
+LOG_LEVEL=info
+LOG_FILE=/app/logs/bot.log
 
-# Просмотр логов
-docker-compose logs -f
+AUTO_DELETE_CHANNELS=true
+CHANNEL_DELETE_DELAY=180000
 ```
 
 ---
 
-## Управление ботом
+## Запуск
 
-### Просмотр логов
 ```bash
-# Все логи
-docker-compose logs
-
-# Последние 100 строк
-docker-compose logs --tail=100
-
-# Следить за логами в реальном времени
-docker-compose logs -f
+docker compose build
+docker compose up -d
 ```
 
-### Перезапуск бота
+Проверить логи:
 ```bash
-docker-compose restart
-```
-
-### Остановка бота
-```bash
-docker-compose down
-```
-
-### Обновление бота
-```bash
-# Загрузите новую версию кода
-git pull
-
-# Пересоберите и перезапустите
-docker-compose down
-docker-compose build
-docker-compose up -d
-```
-
-### Полная переустановка (с очисткой)
-```bash
-# ВНИМАНИЕ: Удалит все данные!
-docker-compose down -v
-rm -rf data logs
-docker-compose up -d
+docker compose logs -f
 ```
 
 ---
 
-## Автозапуск при старте сервера
+## Перенос базы данных
 
-Docker с флагом `restart: unless-stopped` уже настроен на автозапуск.
+Если переносите с другого сервера или с локальной машины:
 
-Убедитесь, что Docker запускается при старте системы:
 ```bash
-sudo systemctl enable docker
+# С Windows (Git Bash) на VDS
+scp C:/Users/sexorcist/Desktop/saes-callout-bot/data/database.sqlite root@IP:/root/saes-callout-bot/data/
+
+# Перезапустить контейнер
+docker compose restart
 ```
 
 ---
 
-## Мониторинг
+## Управление
 
-### Проверка статуса контейнера
 ```bash
+# Запустить
+docker compose up -d
+
+# Остановить (данные сохраняются)
+docker compose down
+
+# Перезапустить
+docker compose restart
+
+# Пересобрать и перезапустить (после git pull)
+docker compose build && docker compose up -d
+
+# Логи в реальном времени
+docker compose logs -f
+
+# Последние N строк
+docker compose logs --tail=200
+
+# Статус контейнера
 docker ps
-```
 
-### Использование ресурсов
-```bash
+# Использование ресурсов
 docker stats saes-callout-bot
+
+# Вход в контейнер (отладка)
+docker exec -it saes-callout-bot sh
 ```
 
-### Вход в контейнер (для отладки)
+---
+
+## Обновление бота
+
 ```bash
-docker-compose exec saes-callout-bot sh
+git pull
+docker compose build && docker compose up -d
+```
+
+БД и логи не затрагиваются — они в `./data/` и `./logs/` на хосте.
+
+---
+
+## Резервная копия
+
+```bash
+# Создать бэкап БД
+cp data/database.sqlite data/database.sqlite.$(date +%Y%m%d)
+
+# Восстановить из бэкапа
+docker compose down
+cp data/database.sqlite.20250220 data/database.sqlite
+docker compose up -d
+```
+
+---
+
+## Безопасность
+
+```bash
+# Закрыть права на .env
+chmod 600 .env
+
+# Файрвол — открыть только SSH
+ufw allow 22
+ufw enable
+
+# SSH — только по ключу (в /etc/ssh/sshd_config):
+# PasswordAuthentication no
+
+# Обновление системы
+apt update && apt upgrade -y
 ```
 
 ---
@@ -156,39 +192,32 @@ docker-compose exec saes-callout-bot sh
 
 ### Бот не запускается
 ```bash
-# Проверьте логи
-docker-compose logs
-
-# Проверьте .env файл
-cat .env
+docker compose logs
+# Смотреть на строки с ERROR
 ```
 
-### База данных повреждена
-```bash
-# Создайте бэкап
-cp data/database.sqlite data/database.sqlite.backup
+### Бот запустился, но не отвечает в Discord
+- Проверить `DISCORD_TOKEN` в `.env`
+- Убедиться, что в Discord Developer Portal включены Privileged Intents:
+  - Presence Intent
+  - Server Members Intent
+  - Message Content Intent
 
-# Пересоздайте БД
-docker-compose down
-rm data/database.sqlite
-docker-compose up -d
-```
+### VK не отвечает
+- Проверить `VK_TOKEN` и `VK_GROUP_ID`
+- Убедиться, что в настройках группы VK включён Long Poll
 
 ### Нет места на диске
 ```bash
-# Очистка неиспользуемых Docker образов
-docker system prune -a
-
-# Проверка места
 df -h
+docker system prune -a   # Удалить неиспользуемые образы/контейнеры
 ```
 
-### Проблемы с правами доступа
+### Полный сброс (УДАЛИТ ВСЕ ДАННЫЕ)
 ```bash
-# Если работаете от root и возникают проблемы с файлами
-chown -R root:root .
-chmod -R 755 .
-chmod 600 .env
+docker compose down
+rm -rf data/database.sqlite logs/
+docker compose up -d
 ```
 
 ---
@@ -196,43 +225,13 @@ chmod 600 .env
 ## Структура файлов на сервере
 
 ```
-saes-callout-bot/
-├── data/              # База данных SQLite (персистентные данные)
-├── logs/              # Логи бота (персистентные данные)
-├── src/               # Исходный код
-├── .env               # Переменные окружения (НЕ коммитить!)
-├── Dockerfile         # Инструкции для сборки образа
-├── docker-compose.yml # Конфигурация Docker Compose
-└── deploy.sh          # Скрипт деплоя
-```
-
----
-
-## Безопасность
-
-1. **Никогда не коммитьте .env файл!** (уже в .gitignore)
-2. Ограничьте права на .env файл: `chmod 600 .env`
-3. Используйте файрвол на сервере: `ufw allow 22 && ufw enable`
-4. Регулярно обновляйте систему: `apt update && apt upgrade`
-5. Ограничьте доступ по SSH (используйте ключи вместо паролей)
-
----
-
-## Полезные команды
-
-```bash
-# Посмотреть все запущенные контейнеры
-docker ps
-
-# Посмотреть все образы
-docker images
-
-# Войти в контейнер
-docker exec -it saes-callout-bot sh
-
-# Скопировать файл из контейнера
-docker cp saes-callout-bot:/app/logs/bot.log ./bot.log
-
-# Просмотр использования диска Docker
-docker system df
+/root/saes-callout-bot/
+├── data/
+│   └── database.sqlite     ← БД (монтируется в контейнер)
+├── logs/
+│   └── bot.log             ← Логи (монтируются в контейнер)
+├── src/                    ← Исходный код
+├── .env                    ← Переменные окружения (chmod 600)
+├── docker-compose.yml
+└── Dockerfile
 ```
