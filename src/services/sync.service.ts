@@ -73,45 +73,38 @@ export class SyncService {
       );
     }
 
-    // 4. Проверить, не отвечало ли уже это подразделение (с любой платформы)
-    const existingResponse = await CalloutResponseModel.getLastSubdivisionResponse(
-      callout.id,
-      subdivision.id
-    );
-
-    if (existingResponse) {
-      // Если подразделение уже ответило acknowledged и шлёт on_way — обновить
-      if (existingResponse.response_type === 'acknowledged' && responseType === 'on_way') {
-        const updated = await CalloutResponseModel.updateResponseType(existingResponse.id, 'on_way');
-        if (updated) {
-          // Отправить уведомление об обновлении в Discord
-          try {
-            await this.notifyDiscordAboutResponse(updated, callout, subdivision);
-          } catch (error) {
-            logger.error('Failed to notify Discord about updated VK response', {
-              error: error instanceof Error ? error.message : error,
-            });
-          }
-          return updated;
+    // 4. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
+    if (responseType === 'on_way') {
+      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
+      if (upgraded) {
+        try {
+          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision);
+        } catch (error) {
+          logger.error('Failed to notify Discord about updated VK response', {
+            error: error instanceof Error ? error.message : error,
+          });
         }
+        return upgraded;
       }
-      // Тот же или ниже статус — вернуть существующий без уведомлений
-      logger.info('Subdivision already responded to this callout', {
-        calloutId: callout.id,
-        subdivisionId: subdivision.id,
-        vkUserId,
-      });
-      return existingResponse;
     }
 
-    // 5. Создать запись ответа в БД
-    const response = await CalloutResponseModel.create({
+    // 5. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: vkUserId,
       vk_user_name: vkUserName,
       response_type: responseType,
     });
+
+    if (!created) {
+      logger.info('Subdivision already responded to this callout', {
+        calloutId: callout.id,
+        subdivisionId: subdivision.id,
+        vkUserId,
+      });
+      return response;
+    }
 
     logger.info('VK response saved to database', {
       responseId: response.id,
@@ -178,44 +171,38 @@ export class SyncService {
       );
     }
 
-    // 4. Проверить, не отвечало ли уже это подразделение (с любой платформы)
-    const existingTgResponse = await CalloutResponseModel.getLastSubdivisionResponse(
-      callout.id,
-      subdivision.id
-    );
-
-    if (existingTgResponse) {
-      // Если подразделение уже ответило acknowledged и шлёт on_way — обновить
-      if (existingTgResponse.response_type === 'acknowledged' && responseType === 'on_way') {
-        const updated = await CalloutResponseModel.updateResponseType(existingTgResponse.id, 'on_way');
-        if (updated) {
-          try {
-            await this.notifyDiscordAboutResponse(updated, callout, subdivision, 'telegram');
-          } catch (error) {
-            logger.error('Failed to notify Discord about updated Telegram response', {
-              error: error instanceof Error ? error.message : error,
-            });
-          }
-          return updated;
+    // 4. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
+    if (responseType === 'on_way') {
+      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
+      if (upgraded) {
+        try {
+          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision, 'telegram');
+        } catch (error) {
+          logger.error('Failed to notify Discord about updated Telegram response', {
+            error: error instanceof Error ? error.message : error,
+          });
         }
+        return upgraded;
       }
-      // Тот же или ниже статус — вернуть существующий без уведомлений
-      logger.info('Subdivision already responded to this callout', {
-        calloutId: callout.id,
-        subdivisionId: subdivision.id,
-        telegramUserId,
-      });
-      return existingTgResponse;
     }
 
-    // 5. Создать запись ответа в БД
-    const response = await CalloutResponseModel.create({
+    // 5. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: telegramUserId,
       vk_user_name: telegramUserName,
       response_type: responseType,
     });
+
+    if (!created) {
+      logger.info('Subdivision already responded to this callout', {
+        calloutId: callout.id,
+        subdivisionId: subdivision.id,
+        telegramUserId,
+      });
+      return response;
+    }
 
     logger.info('Telegram response saved to database', {
       responseId: response.id,
@@ -264,44 +251,38 @@ export class SyncService {
       );
     }
 
-    // 2. Проверить, не отвечало ли уже это подразделение
-    const existingResponse = await CalloutResponseModel.getLastSubdivisionResponse(
-      callout.id,
-      subdivision.id
-    );
-
-    if (existingResponse) {
-      // Если уже acknowledged и шлёт on_way — обновить (апгрейд статуса)
-      if (existingResponse.response_type === 'acknowledged' && responseType === 'on_way') {
-        const updated = await CalloutResponseModel.updateResponseType(existingResponse.id, 'on_way');
-        if (updated) {
-          try {
-            await this.notifyDiscordAboutResponse(updated, callout, subdivision, 'discord');
-          } catch (error) {
-            logger.error('Failed to notify about updated Discord response', {
-              error: error instanceof Error ? error.message : error,
-            });
-          }
-          return { response: updated, changed: true };
+    // 2. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
+    if (responseType === 'on_way') {
+      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
+      if (upgraded) {
+        try {
+          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision, 'discord');
+        } catch (error) {
+          logger.error('Failed to notify about updated Discord response', {
+            error: error instanceof Error ? error.message : error,
+          });
         }
+        return { response: upgraded, changed: true };
       }
-      // Тот же или более низкий статус — no-op, вернуть без уведомлений
-      logger.info('Subdivision already responded to this callout (Discord)', {
-        calloutId: callout.id,
-        subdivisionId: subdivision.id,
-        discordUserId,
-      });
-      return { response: existingResponse, changed: false };
     }
 
-    // 3. Создать запись ответа в БД
-    const response = await CalloutResponseModel.create({
+    // 3. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: `discord_${discordUserId}`,
       vk_user_name: discordUserName,
       response_type: responseType,
     });
+
+    if (!created) {
+      logger.info('Subdivision already responded to this callout (Discord)', {
+        calloutId: callout.id,
+        subdivisionId: subdivision.id,
+        discordUserId,
+      });
+      return { response, changed: false };
+    }
 
     logger.info('Discord response saved to database', {
       responseId: response.id,

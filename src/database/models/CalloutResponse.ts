@@ -178,6 +178,73 @@ export class CalloutResponseModel {
   }
 
   /**
+   * Атомарно создать ответ только если подразделение ещё не отвечало на каллаут.
+   * Использует INSERT ... SELECT WHERE NOT EXISTS — гарантирует отсутствие дублей
+   * даже при параллельных запросах.
+   */
+  static async createIfNotExists(
+    data: CreateCalloutResponseDTO
+  ): Promise<{ response: CalloutResponse; created: boolean }> {
+    const result = await database.run(
+      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, response_type, message)
+       SELECT ?, ?, ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM callout_responses WHERE callout_id = ? AND subdivision_id = ?
+       )`,
+      [
+        data.callout_id,
+        data.subdivision_id,
+        data.vk_user_id,
+        data.vk_user_name,
+        data.response_type || RESPONSE_TYPE.ACKNOWLEDGED,
+        data.message || null,
+        data.callout_id,
+        data.subdivision_id,
+      ]
+    );
+
+    if (result.changes === 0) {
+      const existing = await this.getLastSubdivisionResponse(data.callout_id, data.subdivision_id);
+      return { response: existing!, created: false };
+    }
+
+    logger.info('Callout response created (atomic)', {
+      responseId: result.lastID,
+      calloutId: data.callout_id,
+      vkUserId: data.vk_user_id,
+    });
+
+    const response = await this.findById(result.lastID);
+    if (!response) {
+      throw new Error('Failed to retrieve created response');
+    }
+    return { response, created: true };
+  }
+
+  /**
+   * Атомарно обновить тип ответа с acknowledged на on_way.
+   * Условие `AND response_type = 'acknowledged'` гарантирует, что:
+   * - уже on_way не будет перезаписан
+   * - параллельные вызовы не создадут дублей
+   * Возвращает обновлённую запись или undefined если обновление не произошло.
+   */
+  static async upgradeToOnWay(
+    calloutId: number,
+    subdivisionId: number
+  ): Promise<CalloutResponse | undefined> {
+    const result = await database.run(
+      `UPDATE callout_responses SET response_type = 'on_way'
+       WHERE callout_id = ? AND subdivision_id = ? AND response_type = 'acknowledged'`,
+      [calloutId, subdivisionId]
+    );
+
+    if (result.changes === 0) return undefined;
+
+    logger.info('Response type upgraded to on_way (atomic)', { calloutId, subdivisionId });
+    return await this.getLastSubdivisionResponse(calloutId, subdivisionId);
+  }
+
+  /**
    * Получить статистику ответов подразделения
    */
   static async getSubdivisionStats(subdivisionId: number): Promise<{

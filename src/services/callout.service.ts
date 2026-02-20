@@ -40,6 +40,12 @@ function formatDuration(createdAt: string, closedAt: string | null): string {
  */
 export class CalloutService {
   /**
+   * Таймеры отложенного удаления каналов, ключ — calloutId.
+   * Хранение предотвращает дублирование таймеров и позволяет их отменить.
+   */
+  private static pendingDeletions = new Map<number, NodeJS.Timeout>();
+
+  /**
    * Создать новый каллаут
    */
   static async createCallout(
@@ -421,13 +427,20 @@ export class CalloutService {
       if (config.features.autoDeleteChannels && callout.discord_channel_id) {
         const delay = config.features.channelDeleteDelay;
 
+        // Отменить предыдущий таймер для этого каллаута если он есть
+        const existingTimer = CalloutService.pendingDeletions.get(calloutId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
         logger.info('Scheduling channel deletion', {
           calloutId,
           channelId: callout.discord_channel_id,
           delayMs: delay,
         });
 
-        setTimeout(async () => {
+        const timer = setTimeout(async () => {
+          CalloutService.pendingDeletions.delete(calloutId);
           try {
             await deleteIncidentChannel(guild, callout.discord_channel_id!);
             await CalloutModel.update(callout.id, { discord_channel_id: null });
@@ -443,6 +456,8 @@ export class CalloutService {
             });
           }
         }, delay);
+
+        CalloutService.pendingDeletions.set(calloutId, timer);
       }
 
       return closedCallout;

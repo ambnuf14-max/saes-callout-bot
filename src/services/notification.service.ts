@@ -117,11 +117,8 @@ export class NotificationService {
       let message: string;
       if (status === 'closed') {
         const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
-        const subdivisionsMap = new Map<number, Subdivision>();
-        for (const subId of [...new Set(allResponses.map(r => r.subdivision_id))]) {
-          const sub = await SubdivisionModel.findById(subId);
-          if (sub) subdivisionsMap.set(subId, sub);
-        }
+        const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+        const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
         message = formatVkClosed(callout, subdivision, allResponses, subdivisionsMap);
       } else {
         message = `${EMOJI.INFO} Статус каллаута #${callout.id} обновлен: ${status}`;
@@ -268,12 +265,8 @@ export class NotificationService {
       let message: string;
       if (status === 'closed') {
         const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
-        const subdivisionsMap = new Map<number, Subdivision>();
-        const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
-        for (const subId of subdivisionIds) {
-          const sub = await SubdivisionModel.findById(subId);
-          if (sub) subdivisionsMap.set(subId, sub);
-        }
+        const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+        const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
         let closedByName: string | undefined;
         if (callout.closed_by === 'system') {
           closedByName = 'System';

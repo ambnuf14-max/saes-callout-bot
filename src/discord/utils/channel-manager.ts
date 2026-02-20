@@ -51,9 +51,10 @@ export async function createIncidentChannel(
           });
         }
       } catch (error) {
-        logger.warn('Could not fetch callout channel for category fallback', {
+        logger.error('Could not fetch callout channel for category fallback — check callout_channel_id in server config', {
           error: error instanceof Error ? error.message : error,
           guildId: guild.id,
+          calloutChannelId: server.callout_channel_id,
         });
       }
     }

@@ -93,7 +93,7 @@ export class CalloutGatewayService {
     if (!hasAllowedRole) {
       return {
         allowed: false,
-        reason: `${EMOJI.ERROR} У вас нет нужной роли для создания каллаутов. Обратитесь к администратору.`,
+        reason: `${EMOJI.ERROR} У вас нет фракционных ролей для доступа к системе. Получите их в соответствующем канале.`,
       };
     }
 

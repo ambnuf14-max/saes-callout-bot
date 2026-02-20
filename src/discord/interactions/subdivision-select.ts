@@ -24,9 +24,9 @@ export const subdivisionSelections = new Map<string, { subdivisionId: number; ex
  */
 setInterval(() => {
   const now = Date.now();
-  for (const [userId, entry] of subdivisionSelections) {
+  for (const [key, entry] of subdivisionSelections) {
     if (now >= entry.expiresAt) {
-      subdivisionSelections.delete(userId);
+      subdivisionSelections.delete(key);
     }
   }
 }, 60_000);
