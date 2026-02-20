@@ -154,8 +154,7 @@ export const MESSAGES = {
     SUCCESS_VK: (subdivisionName: string) =>
       `${EMOJI.INFO} Беседа успешно привязана к подразделению "${subdivisionName}". Теперь вы будете получать каллауты в этой беседе.`,
     SUCCESS_TELEGRAM: (subdivisionName: string) =>
-      `${EMOJI.SUCCESS} Группа успешно привязана к подразделению "<b>${subdivisionName}</b>"!\n` +
-      `Теперь вы будете получать каллауты в этой группе.`,
+      `${EMOJI.INFO} Беседа успешно привязана к подразделению "<b>${subdivisionName}</b>". Теперь вы будете получать каллауты в этой беседе.`,
 
     ERROR_INVALID: `${EMOJI.ERROR} Неверный или истекший токен верификации`,
     ERROR_USED: `${EMOJI.ERROR} Этот токен уже использован`,
