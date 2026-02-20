@@ -152,8 +152,7 @@ export const MESSAGES = {
         ? `${EMOJI.SUCCESS} Telegram группа "${chatTitle}" привязана к "${subdivisionName}"`
         : `${EMOJI.SUCCESS} Telegram группа привязана к "${subdivisionName}"`,
     SUCCESS_VK: (subdivisionName: string) =>
-      `${EMOJI.SUCCESS} Беседа успешно привязана к подразделению "${subdivisionName}"!\n` +
-      `Теперь вы будете получать каллауты в этой беседе.`,
+      `${EMOJI.INFO} Беседа успешно привязана к подразделению "${subdivisionName}". Теперь вы будете получать каллауты в этой беседе.`,
     SUCCESS_TELEGRAM: (subdivisionName: string) =>
       `${EMOJI.SUCCESS} Группа успешно привязана к подразделению "<b>${subdivisionName}</b>"!\n` +
       `Теперь вы будете получать каллауты в этой группе.`,

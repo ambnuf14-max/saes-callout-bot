@@ -403,6 +403,12 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
     case AuditEventType.TELEGRAM_RESPONSE_RECEIVED:
       return buildTelegramResponseReceivedEmbed(embed, data as TelegramResponseReceivedData);
 
+    case AuditEventType.VK_CHAT_LINKED:
+      return buildVkChatLinkedEmbed(embed, data as VkChatLinkedData);
+
+    case AuditEventType.TELEGRAM_CHAT_LINKED:
+      return buildTelegramChatLinkedEmbed(embed, data as TelegramChatLinkedData);
+
     case AuditEventType.CALLOUT_ROLE_ADDED:
       return buildCalloutRoleAddedEmbed(embed, data as CalloutRoleData);
 
@@ -652,6 +658,44 @@ function buildTelegramResponseReceivedEmbed(
       { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
       { name: 'Пользователь Telegram', value: `${data.telegramUserName} (${data.telegramUserId})`, inline: false },
     ]);
+}
+
+/**
+ * Embed для привязки VK беседы
+ */
+function buildVkChatLinkedEmbed(
+  embed: EmbedBuilder,
+  data: VkChatLinkedData
+): EmbedBuilder {
+  const fields = [
+    { name: 'Фракция', value: data.factionName, inline: true },
+    { name: 'Подразделение', value: data.subdivisionName, inline: true },
+    { name: 'VK Chat ID', value: data.vkChatId, inline: true },
+  ];
+  if (data.chatTitle) fields.push({ name: 'Название беседы', value: data.chatTitle, inline: false });
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} VK беседа привязана`)
+    .setColor(COLORS.ACTIVE)
+    .addFields(fields);
+}
+
+/**
+ * Embed для привязки Telegram группы
+ */
+function buildTelegramChatLinkedEmbed(
+  embed: EmbedBuilder,
+  data: TelegramChatLinkedData
+): EmbedBuilder {
+  const fields = [
+    { name: 'Фракция', value: data.factionName, inline: true },
+    { name: 'Подразделение', value: data.subdivisionName, inline: true },
+    { name: 'Telegram Chat ID', value: data.telegramChatId, inline: true },
+  ];
+  if (data.chatTitle) fields.push({ name: 'Название группы', value: data.chatTitle, inline: false });
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Telegram группа привязана`)
+    .setColor(COLORS.ACTIVE)
+    .addFields(fields);
 }
 
 /**
