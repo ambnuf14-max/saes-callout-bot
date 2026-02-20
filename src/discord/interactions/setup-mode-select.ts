@@ -720,16 +720,13 @@ export async function showSetupModeSelection(interaction: ButtonInteraction) {
  * Создать панель с кнопкой каллаута
  */
 export async function createCalloutPanel(channel: TextChannel) {
-  const botAvatarUrl = channel.client.user?.displayAvatarURL({ size: 256 }) ?? null;
-
   const embed = new EmbedBuilder()
     .setTitle(MESSAGES.CALLOUT.TITLE_PANEL)
     .setDescription(MESSAGES.CALLOUT.DESCRIPTION_PANEL)
     .setColor(COLORS.ACTIVE)
     .setFooter({ text: 'SAES Callout System' })
+    .setThumbnail('https://www.upload.ee/image/19094728/red_logo_saes.png')
     .setTimestamp();
-
-  if (botAvatarUrl) embed.setThumbnail(botAvatarUrl);
 
   const button = new ButtonBuilder()
     .setCustomId('create_callout')
