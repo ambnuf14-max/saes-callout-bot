@@ -152,10 +152,6 @@ export class VkVerificationTokenModel {
       [now]
     );
 
-    logger.info('Expired verification tokens cleaned up', {
-      deletedCount: result.changes,
-    });
-
     return result.changes || 0;
   }
 
@@ -169,11 +165,6 @@ export class VkVerificationTokenModel {
       'DELETE FROM vk_verification_tokens WHERE is_used = 1 AND used_at < ?',
       [cutoffDate]
     );
-
-    logger.info('Used verification tokens cleaned up', {
-      deletedCount: result.changes,
-      olderThanHours: olderThanHours,
-    });
 
     return result.changes || 0;
   }
