@@ -153,16 +153,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     'admin_sub_edit_image_',
     'admin_sub_edit_color_',
     'admin_sub_edit_footer_',
-    'type_embed_edit_name_',
-    'type_embed_edit_logo_',
-    'type_embed_edit_short_desc_',
-    'type_embed_edit_author_',
-    'type_embed_edit_title_',
-    'type_embed_edit_thumbnail_',
-    'type_embed_edit_description_',
-    'type_embed_edit_image_',
-    'type_embed_edit_color_',
-    'type_embed_edit_footer_',
+    'admin_type_embed_edit_name_',
+    'admin_type_embed_edit_logo_',
+    'admin_type_embed_edit_short_desc_',
+    'admin_type_embed_edit_author_',
+    'admin_type_embed_edit_title_',
+    'admin_type_embed_edit_thumbnail_',
+    'admin_type_embed_edit_description_',
+    'admin_type_embed_edit_image_',
+    'admin_type_embed_edit_color_',
+    'admin_type_embed_edit_footer_',
   ];
   const isModalButton = modalButtons.some(prefix => customId === prefix || customId.startsWith(prefix)) ||
     customId.startsWith('admin_edit_faction_') ||
@@ -742,18 +742,9 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await interaction.editReply(panel);
     }
 
-    // Открыть редактор embed-настроек типа фракции
-    else if (customId.startsWith('admin_type_embed_')) {
-      const typeId = safeParseInt(customId.replace('admin_type_embed_', ''));
-      const { getFactionTypeDraft } = await import('./admin-panel-modal');
-      const draft = getFactionTypeDraft(typeId);
-      const panel = await buildFactionTypeEmbedEditorPanel(typeId, draft);
-      await interaction.editReply(panel);
-    }
-
     // Сохранить embed-настройки типа фракции
-    else if (customId.startsWith('type_embed_save_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_save_', ''));
+    else if (customId.startsWith('admin_type_embed_save_')) {
+      const typeId = safeParseInt(customId.replace('admin_type_embed_save_', ''));
       const { getFactionTypeDraft, clearFactionTypeDraft } = await import('./admin-panel-modal');
       const draftData = getFactionTypeDraft(typeId);
 
@@ -775,8 +766,8 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     }
 
     // Кнопка роли в редакторе типа (не применима на уровне типа)
-    else if (customId.startsWith('type_embed_set_role_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_set_role_', ''));
+    else if (customId.startsWith('admin_type_embed_set_role_')) {
+      const typeId = safeParseInt(customId.replace('admin_type_embed_set_role_', ''));
       await interaction.editReply({
         content: '',
         embeds: [
@@ -796,24 +787,24 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     }
 
     // Кнопки редактирования полей embed типа фракции (показывают modal)
-    else if (customId.startsWith('type_embed_edit_')) {
+    else if (customId.startsWith('admin_type_embed_edit_')) {
       const { getFactionTypeDraft } = await import('./admin-panel-modal');
-      const typeId = safeParseInt(customId.replace(/^type_embed_edit_[^_]+_/, ''));
+      const typeId = safeParseInt(customId.replace(/^admin_type_embed_edit_[^_]+_/, ''));
       const draft = getFactionTypeDraft(typeId);
       const type = await FactionTypeService.getFactionTypeById(typeId);
       const current = type ? { ...type, ...draft } : draft;
 
       let field = '';
-      if (customId.startsWith('type_embed_edit_name_')) field = 'name';
-      else if (customId.startsWith('type_embed_edit_logo_')) field = 'logo';
-      else if (customId.startsWith('type_embed_edit_short_desc_')) field = 'short_desc';
-      else if (customId.startsWith('type_embed_edit_author_')) field = 'author';
-      else if (customId.startsWith('type_embed_edit_title_')) field = 'title';
-      else if (customId.startsWith('type_embed_edit_thumbnail_')) field = 'thumbnail';
-      else if (customId.startsWith('type_embed_edit_description_')) field = 'description';
-      else if (customId.startsWith('type_embed_edit_image_')) field = 'image';
-      else if (customId.startsWith('type_embed_edit_color_')) field = 'color';
-      else if (customId.startsWith('type_embed_edit_footer_')) field = 'footer';
+      if (customId.startsWith('admin_type_embed_edit_name_')) field = 'name';
+      else if (customId.startsWith('admin_type_embed_edit_logo_')) field = 'logo';
+      else if (customId.startsWith('admin_type_embed_edit_short_desc_')) field = 'short_desc';
+      else if (customId.startsWith('admin_type_embed_edit_author_')) field = 'author';
+      else if (customId.startsWith('admin_type_embed_edit_title_')) field = 'title';
+      else if (customId.startsWith('admin_type_embed_edit_thumbnail_')) field = 'thumbnail';
+      else if (customId.startsWith('admin_type_embed_edit_description_')) field = 'description';
+      else if (customId.startsWith('admin_type_embed_edit_image_')) field = 'image';
+      else if (customId.startsWith('admin_type_embed_edit_color_')) field = 'color';
+      else if (customId.startsWith('admin_type_embed_edit_footer_')) field = 'footer';
 
       if (field) {
         const currentValues = {
@@ -834,12 +825,21 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         };
         const modal = buildSubdivisionEmbedFieldModal(
           field as Parameters<typeof buildSubdivisionEmbedFieldModal>[0],
-          `type_embed_modal_${field}_${typeId}`,
+          `admin_modal_type_embed_${field}_${typeId}`,
           currentValues,
           'type_name',
         );
         await interaction.showModal(modal);
       }
+    }
+
+    // Открыть редактор embed-настроек типа фракции
+    else if (customId.startsWith('admin_type_embed_')) {
+      const typeId = safeParseInt(customId.replace('admin_type_embed_', ''));
+      const { getFactionTypeDraft } = await import('./admin-panel-modal');
+      const draft = getFactionTypeDraft(typeId);
+      const panel = await buildFactionTypeEmbedEditorPanel(typeId, draft);
+      await interaction.editReply(panel);
     }
 
     // Создание нового типа фракции (показать modal)

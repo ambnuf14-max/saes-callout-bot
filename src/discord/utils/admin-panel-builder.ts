@@ -1050,12 +1050,12 @@ export async function buildFactionTypeEmbedEditorPanel(
     settingsSectionTitle: 'Настройки типа',
     selectMenuId: 'type_embed_list_preview',
     selectMenuPlaceholder: 'Предпросмотр в списке подразделений',
-    idPrefix: 'type_embed',
+    idPrefix: 'admin_type_embed',
     idSuffix: `${typeId}`,
-    roleButtonId: `type_embed_set_role_${typeId}`,
+    roleButtonId: `admin_type_embed_set_role_${typeId}`,
     actionButtons: [
       new ButtonBuilder()
-        .setCustomId(`type_embed_save_${typeId}`)
+        .setCustomId(`admin_type_embed_save_${typeId}`)
         .setLabel('Сохранить')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()

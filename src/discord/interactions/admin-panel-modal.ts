@@ -198,44 +198,44 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'logo');
     }
     // Редактирование embed-настроек типа фракции
-    else if (customId.startsWith('type_embed_modal_name_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_name_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_name_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_name_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'name');
     }
-    else if (customId.startsWith('type_embed_modal_logo_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_logo_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_logo_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_logo_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'logo');
     }
-    else if (customId.startsWith('type_embed_modal_short_desc_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_short_desc_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_short_desc_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_short_desc_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'short_desc');
     }
-    else if (customId.startsWith('type_embed_modal_title_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_title_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_title_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_title_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'title');
     }
-    else if (customId.startsWith('type_embed_modal_description_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_description_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_description_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_description_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'description');
     }
-    else if (customId.startsWith('type_embed_modal_color_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_color_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_color_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_color_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'color');
     }
-    else if (customId.startsWith('type_embed_modal_author_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_author_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_author_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_author_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'author');
     }
-    else if (customId.startsWith('type_embed_modal_footer_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_footer_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_footer_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_footer_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'footer');
     }
-    else if (customId.startsWith('type_embed_modal_image_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_image_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_image_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_image_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'image');
     }
-    else if (customId.startsWith('type_embed_modal_thumbnail_')) {
-      const typeId = safeParseInt(customId.replace('type_embed_modal_thumbnail_', ''));
+    else if (customId.startsWith('admin_modal_type_embed_thumbnail_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_type_embed_thumbnail_', ''));
       await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'thumbnail');
     }
     // Отклонение изменения с причиной
