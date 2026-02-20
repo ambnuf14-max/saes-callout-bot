@@ -795,6 +795,53 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       });
     }
 
+    // Кнопки редактирования полей embed типа фракции (показывают modal)
+    else if (customId.startsWith('type_embed_edit_')) {
+      const { getFactionTypeDraft } = await import('./admin-panel-modal');
+      const typeId = safeParseInt(customId.replace(/^type_embed_edit_[^_]+_/, ''));
+      const draft = getFactionTypeDraft(typeId);
+      const type = await FactionTypeService.getFactionTypeById(typeId);
+      const current = type ? { ...type, ...draft } : draft;
+
+      let field = '';
+      if (customId.startsWith('type_embed_edit_name_')) field = 'name';
+      else if (customId.startsWith('type_embed_edit_logo_')) field = 'logo';
+      else if (customId.startsWith('type_embed_edit_short_desc_')) field = 'short_desc';
+      else if (customId.startsWith('type_embed_edit_author_')) field = 'author';
+      else if (customId.startsWith('type_embed_edit_title_')) field = 'title';
+      else if (customId.startsWith('type_embed_edit_thumbnail_')) field = 'thumbnail';
+      else if (customId.startsWith('type_embed_edit_description_')) field = 'description';
+      else if (customId.startsWith('type_embed_edit_image_')) field = 'image';
+      else if (customId.startsWith('type_embed_edit_color_')) field = 'color';
+      else if (customId.startsWith('type_embed_edit_footer_')) field = 'footer';
+
+      if (field) {
+        const currentValues = {
+          name: current?.name,
+          logo_url: current?.logo_url,
+          short_description: current?.short_description,
+          embed_author_name: current?.embed_author_name,
+          embed_author_url: current?.embed_author_url,
+          embed_author_icon_url: current?.embed_author_icon_url,
+          embed_title: current?.embed_title,
+          embed_title_url: current?.embed_title_url,
+          embed_thumbnail_url: current?.embed_thumbnail_url,
+          embed_description: current?.embed_description,
+          embed_image_url: current?.embed_image_url,
+          embed_color: current?.embed_color,
+          embed_footer_text: current?.embed_footer_text,
+          embed_footer_icon_url: current?.embed_footer_icon_url,
+        };
+        const modal = buildSubdivisionEmbedFieldModal(
+          field as Parameters<typeof buildSubdivisionEmbedFieldModal>[0],
+          `type_embed_modal_${field}_${typeId}`,
+          currentValues,
+          'type_name',
+        );
+        await interaction.showModal(modal);
+      }
+    }
+
     // Создание нового типа фракции (показать modal)
     else if (customId === 'admin_create_fact_type') {
       const modal = new ModalBuilder()
