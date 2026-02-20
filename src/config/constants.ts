@@ -43,6 +43,9 @@ export const MESSAGES = {
   CALLOUT: {
     BUTTON_CREATE: `New Callout`,
     BUTTON_CLOSE: `Закрыть инцидент`,
+    BUTTON_RESPOND_DISCORD: `Отреагировать`,
+    BUTTON_RESPOND_ACK: `✅ Принято`,
+    BUTTON_RESPOND_ONWAY: `🚗 В пути`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
     BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
 
@@ -63,6 +66,7 @@ export const MESSAGES = {
       `${EMOJI.SUCCESS} Инцидент #${id} закрыт. Канал будет удален через ${delayMinutes} ${delayMinutes === 1 ? 'минуту' : delayMinutes < 5 ? 'минуты' : 'минут'}.`,
 
     ERROR_NO_PERMISSION: `${EMOJI.ERROR} У вас нет прав для закрытия этого каллаута`,
+    ERROR_NO_RESPOND_PERMISSION: `${EMOJI.ERROR} У вас нет роли запрошенного подразделения для реагирования`,
     ERROR_NOT_FOUND: `${EMOJI.ERROR} Каллаут не найден`,
     ERROR_ALREADY_CLOSED: `${EMOJI.ERROR} Этот каллаут уже закрыт`,
   },

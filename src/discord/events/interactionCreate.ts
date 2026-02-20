@@ -10,6 +10,7 @@ import handleFactionPanelModal from '../interactions/faction-panel-modal';
 import handleFactionSelect from '../interactions/faction-select';
 import { handleSetupModeSelect } from '../interactions/setup-mode-select';
 import { handleCloseCalloutButton, handleCloseCalloutModal } from '../interactions/close-callout-button';
+import { handleRespondCalloutButton, handleRespondTypeButton } from '../interactions/respond-callout-button';
 import handleHistoryButton from '../interactions/history-button';
 import {
   handleAdminPanelButton,
@@ -73,6 +74,10 @@ export default async function interactionCreateHandler(
         await handleSetupModeSelect(interaction);
       } else if (interaction.customId.startsWith('close_callout_')) {
         await handleCloseCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('respond_callout_')) {
+        await handleRespondCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('respond_ack_') || interaction.customId.startsWith('respond_onway_')) {
+        await handleRespondTypeButton(interaction);
       } else if (interaction.customId.startsWith('audit_approve_change_') || interaction.customId.startsWith('audit_reject_change_')) {
         await handleAuditLogButton(interaction);
       } else if (interaction.customId.startsWith('admin_') || interaction.customId.startsWith('template_')) {

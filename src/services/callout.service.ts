@@ -1,4 +1,4 @@
-import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable } from 'discord.js';
 import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
@@ -7,6 +7,7 @@ import { CalloutError } from '../utils/error-handler';
 import { createIncidentChannel, deleteIncidentChannel } from '../discord/utils/channel-manager';
 import { buildCalloutEmbed, buildClosedCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
 import { EMOJI, CALLOUT_STATUS, MESSAGES } from '../config/constants';
+import { parseDiscordEmoji } from '../discord/utils/subdivision-settings-helper';
 import NotificationService from './notification.service';
 import config from '../config/config';
 import {
@@ -134,13 +135,30 @@ export class CalloutService {
       // 3. Создать Embed сообщение
       const embed = buildCalloutEmbed(callout, subdivision);
 
-      // 4. Создать кнопку "Закрыть инцидент"
+      // 4. Создать кнопки "Отреагировать" и "Закрыть инцидент"
       const closeButton = new ButtonBuilder()
         .setCustomId(`close_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
         .setStyle(ButtonStyle.Danger);
 
-      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton);
+      const respondButton = new ButtonBuilder()
+        .setCustomId(`respond_callout_${callout.id}`)
+        .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
+        .setStyle(ButtonStyle.Primary);
+
+      // Добавить emoji подразделения на кнопку реагирования
+      const parsedEmoji = parseDiscordEmoji(subdivision.logo_url);
+      if (parsedEmoji) {
+        let emoji: ComponentEmojiResolvable;
+        if (parsedEmoji.id) {
+          emoji = { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false };
+        } else {
+          emoji = parsedEmoji.name;
+        }
+        respondButton.setEmoji(emoji);
+      }
+
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton, respondButton);
 
       // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({

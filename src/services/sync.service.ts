@@ -15,6 +15,7 @@ import {
   AuditEventType,
   VkResponseReceivedData,
   TelegramResponseReceivedData,
+  DiscordResponseReceivedData,
   resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import { buildCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
@@ -238,13 +239,98 @@ export class SyncService {
   }
 
   /**
-   * Отправить уведомление в Discord о реагировании из VK/Telegram
+   * Обработать реагирование на каллаут из Discord
+   */
+  static async handleDiscordResponse(
+    callout: Callout,
+    subdivision: Subdivision,
+    discordUserId: string,
+    discordUserName: string,
+    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
+  ): Promise<{ response: CalloutResponse; changed: boolean }> {
+    logger.info('Processing Discord response', {
+      calloutId: callout.id,
+      subdivisionId: subdivision.id,
+      discordUserId,
+      responseType,
+    });
+
+    // 1. Проверить статус каллаута
+    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
+      throw new CalloutError(
+        `${EMOJI.ERROR} Каллаут #${callout.id} уже закрыт`,
+        'CALLOUT_ALREADY_CLOSED',
+        400
+      );
+    }
+
+    // 2. Проверить, не отвечало ли уже это подразделение
+    const existingResponse = await CalloutResponseModel.getLastSubdivisionResponse(
+      callout.id,
+      subdivision.id
+    );
+
+    if (existingResponse) {
+      // Если уже acknowledged и шлёт on_way — обновить (апгрейд статуса)
+      if (existingResponse.response_type === 'acknowledged' && responseType === 'on_way') {
+        const updated = await CalloutResponseModel.updateResponseType(existingResponse.id, 'on_way');
+        if (updated) {
+          try {
+            await this.notifyDiscordAboutResponse(updated, callout, subdivision, 'discord');
+          } catch (error) {
+            logger.error('Failed to notify about updated Discord response', {
+              error: error instanceof Error ? error.message : error,
+            });
+          }
+          return { response: updated, changed: true };
+        }
+      }
+      // Тот же или более низкий статус — no-op, вернуть без уведомлений
+      logger.info('Subdivision already responded to this callout (Discord)', {
+        calloutId: callout.id,
+        subdivisionId: subdivision.id,
+        discordUserId,
+      });
+      return { response: existingResponse, changed: false };
+    }
+
+    // 3. Создать запись ответа в БД
+    const response = await CalloutResponseModel.create({
+      callout_id: callout.id,
+      subdivision_id: subdivision.id,
+      vk_user_id: `discord_${discordUserId}`,
+      vk_user_name: discordUserName,
+      response_type: responseType,
+    });
+
+    logger.info('Discord response saved to database', {
+      responseId: response.id,
+      calloutId: callout.id,
+      discordUserId,
+      responseType,
+    });
+
+    // 4. Обновить embed, уведомить VK/TG
+    try {
+      await this.notifyDiscordAboutResponse(response, callout, subdivision, 'discord');
+    } catch (error) {
+      logger.error('Failed to notify about Discord response', {
+        error: error instanceof Error ? error.message : error,
+        responseId: response.id,
+      });
+    }
+
+    return { response, changed: true };
+  }
+
+  /**
+   * Отправить уведомление в Discord о реагировании из VK/Telegram/Discord
    */
   static async notifyDiscordAboutResponse(
     response: CalloutResponse,
     callout: Callout,
     subdivision: Subdivision,
-    platform: 'vk' | 'telegram' = 'vk'
+    platform: 'vk' | 'telegram' | 'discord' = 'vk'
   ): Promise<void> {
     if (!callout.discord_channel_id) {
       logger.warn('No Discord channel for callout', {
@@ -293,6 +379,18 @@ export class SyncService {
           thumbnailUrl: responseThumbnail,
         };
         await logAuditEvent(channel.guild, AuditEventType.TELEGRAM_RESPONSE_RECEIVED, tgAuditData);
+      } else if (platform === 'discord') {
+        const discordAuditData: DiscordResponseReceivedData = {
+          userId: response.vk_user_id,
+          userName: response.vk_user_name,
+          calloutId: callout.id,
+          factionName: subdivision.name,
+          discordUserId: response.vk_user_id.replace('discord_', ''),
+          discordUserName: response.vk_user_name,
+          responseType: response.response_type,
+          thumbnailUrl: responseThumbnail,
+        };
+        await logAuditEvent(channel.guild, AuditEventType.DISCORD_RESPONSE_RECEIVED, discordAuditData);
       } else {
         const auditData: VkResponseReceivedData = {
           userId: response.vk_user_id,

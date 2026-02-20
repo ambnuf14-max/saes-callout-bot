@@ -34,6 +34,9 @@ export enum AuditEventType {
   TELEGRAM_RESPONSE_RECEIVED = 'telegram_response_received',
   TELEGRAM_CHAT_LINKED = 'telegram_chat_linked',
 
+  // Discord реагирование
+  DISCORD_RESPONSE_RECEIVED = 'discord_response_received',
+
   // Фракции и подразделения
   FACTION_CREATED = 'faction_created',
   FACTION_UPDATED = 'faction_updated',
@@ -194,6 +197,17 @@ export interface TelegramResponseReceivedData extends BaseAuditEventData {
 }
 
 /**
+ * Данные для события реагирования из Discord
+ */
+export interface DiscordResponseReceivedData extends BaseAuditEventData {
+  calloutId: number;
+  factionName: string;
+  discordUserId: string;
+  discordUserName: string;
+  responseType?: string;
+}
+
+/**
  * Данные для события привязки Telegram группы
  */
 export interface TelegramChatLinkedData extends BaseAuditEventData {
@@ -297,6 +311,7 @@ export type AuditEventData =
   | AuditLogChannelSetData
   | VkResponseReceivedData
   | VkChatLinkedData
+  | DiscordResponseReceivedData
   | FactionEventData
   | SubdivisionEventData
   | FactionTypeCreatedData
@@ -402,6 +417,9 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
 
     case AuditEventType.TELEGRAM_RESPONSE_RECEIVED:
       return buildTelegramResponseReceivedEmbed(embed, data as TelegramResponseReceivedData);
+
+    case AuditEventType.DISCORD_RESPONSE_RECEIVED:
+      return buildDiscordResponseReceivedEmbed(embed, data as DiscordResponseReceivedData);
 
     case AuditEventType.VK_CHAT_LINKED:
       return buildVkChatLinkedEmbed(embed, data as VkChatLinkedData);
@@ -657,6 +675,24 @@ function buildTelegramResponseReceivedEmbed(
       { name: 'Подразделение', value: data.factionName, inline: true },
       { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
       { name: 'Пользователь Telegram', value: `${data.telegramUserName} (${data.telegramUserId})`, inline: false },
+    ]);
+}
+
+/**
+ * Embed для реагирования из Discord
+ */
+function buildDiscordResponseReceivedEmbed(
+  embed: EmbedBuilder,
+  data: DiscordResponseReceivedData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Реагирование из Discord`)
+    .setColor(COLORS.INFO)
+    .addFields([
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Подразделение', value: data.factionName, inline: true },
+      { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
+      { name: 'Пользователь Discord', value: `<@${data.discordUserId}>`, inline: false },
     ]);
 }
 
