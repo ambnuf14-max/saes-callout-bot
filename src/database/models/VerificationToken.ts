@@ -106,9 +106,11 @@ export class VerificationTokenModel {
   ): Promise<VerificationToken | undefined> {
     const usedAt = new Date().toISOString();
 
+    // Очищаем discord_interaction_token при использовании,
+    // чтобы чувствительный токен не оставался в БД
     await database.run(
       `UPDATE verification_tokens
-       SET is_used = 1, used_at = ?, chat_id = ?
+       SET is_used = 1, used_at = ?, chat_id = ?, discord_interaction_token = NULL, discord_application_id = NULL
        WHERE id = ?`,
       [usedAt, chatId, id]
     );

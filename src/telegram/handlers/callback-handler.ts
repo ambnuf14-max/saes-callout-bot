@@ -5,6 +5,7 @@ import { CalloutResponsePayload, parseCompactCallbackData } from '../utils/keybo
 import { handleTelegramError } from '../../utils/error-handler';
 import { EMOJI } from '../../config/constants';
 import { trackTelegramMember } from '../utils/member-tracker';
+import { SubdivisionModel } from '../../database/models';
 
 /**
  * Обработчик callback событий от inline кнопок Telegram
@@ -46,6 +47,32 @@ export async function handleCallbackQuery(
       logger.warn('Invalid callback payload', { payload });
       await bot.answerCallbackQuery(query.id, {
         text: `${EMOJI.ERROR} Неверный формат данных`,
+        show_alert: true,
+      });
+      return;
+    }
+
+    // Валидация числовых полей payload
+    if (!Number.isFinite(payload.callout_id) || !Number.isFinite(payload.subdivision_id)) {
+      logger.warn('Invalid numeric fields in Telegram callback payload', { payload });
+      await bot.answerCallbackQuery(query.id, {
+        text: `${EMOJI.ERROR} Неверный формат данных`,
+        show_alert: true,
+      });
+      return;
+    }
+
+    // Проверить, что callback пришёл из чата, привязанного к подразделению
+    const chatId = query.message?.chat.id;
+    const subdivision = await SubdivisionModel.findById(payload.subdivision_id);
+    if (!subdivision || !subdivision.telegram_chat_id || !chatId || subdivision.telegram_chat_id !== chatId.toString()) {
+      logger.warn('Telegram callback from unauthorized chat', {
+        chatId,
+        subdivisionId: payload.subdivision_id,
+        expectedChatId: subdivision?.telegram_chat_id,
+      });
+      await bot.answerCallbackQuery(query.id, {
+        text: `${EMOJI.ERROR} Эта группа не привязана к подразделению`,
         show_alert: true,
       });
       return;

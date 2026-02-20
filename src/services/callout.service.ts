@@ -14,8 +14,25 @@ import {
   AuditEventType,
   CalloutCreatedData,
   CalloutClosedData,
+  resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import PresenceManager from '../discord/utils/presence-manager';
+
+/**
+ * Форматировать длительность инцидента
+ */
+function formatDuration(createdAt: string, closedAt: string | null): string {
+  const start = new Date(createdAt).getTime();
+  const end = closedAt ? new Date(closedAt).getTime() : Date.now();
+  const diffMs = end - start;
+  const totalMinutes = Math.max(0, Math.floor(diffMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) {
+    return `${hours} ч ${minutes} мин`;
+  }
+  return `${minutes} мин`;
+}
 
 /**
  * Сервис для работы с каллаутами
@@ -144,22 +161,60 @@ export class CalloutService {
         messageId: message.id,
       });
 
-      // Логировать событие в audit log
+      // Отправить уведомления в VK и Telegram последовательно,
+      // т.к. каждый вызов обновляет callout в БД (vk_message_id / telegram_message_id)
+      // и параллельное выполнение может привести к перезатиранию полей
+      let vkStatus: string;
+      if (!subdivision.vk_chat_id) {
+        vkStatus = 'Беседа не привязана';
+      } else {
+        try {
+          await NotificationService.notifyVkAboutCallout(callout, subdivision, data.author_faction_name);
+          vkStatus = '✅ Отправлено';
+        } catch (vkErr) {
+          const vkErrMsg = vkErr instanceof Error ? vkErr.message : String(vkErr);
+          logger.error('Failed to notify VK about callout', {
+            error: vkErrMsg,
+            calloutId: callout.id,
+          });
+          vkStatus = `❌ Ошибка: ${vkErrMsg.substring(0, 200)}`;
+        }
+      }
+
+      let telegramStatus: string;
+      if (!subdivision.telegram_chat_id) {
+        telegramStatus = 'Беседа не привязана';
+      } else {
+        try {
+          await NotificationService.notifyTelegramAboutCallout(callout, subdivision, data.author_faction_name);
+          telegramStatus = '✅ Отправлено';
+        } catch (tgErr) {
+          const tgErrMsg = tgErr instanceof Error ? tgErr.message : String(tgErr);
+          logger.error('Failed to notify Telegram about callout', {
+            error: tgErrMsg,
+            calloutId: callout.id,
+          });
+          telegramStatus = `❌ Ошибка: ${tgErrMsg.substring(0, 200)}`;
+        }
+      }
+
+      // Логировать событие в audit log (после уведомлений, чтобы включить их статус)
       const auditData: CalloutCreatedData = {
         userId: data.author_id,
         userName: data.author_name,
         calloutId: callout.id,
-        factionName: subdivision.name,
+        subdivisionName: subdivision.name,
+        factionName: data.author_faction_name || undefined,
         description: data.description,
         channelId: channel.id,
+        location: callout.location || undefined,
+        briefDescription: callout.brief_description || undefined,
+        tacChannel: callout.tac_channel || undefined,
+        thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
+        vkStatus,
+        telegramStatus,
       };
       await logAuditEvent(guild, AuditEventType.CALLOUT_CREATED, auditData);
-
-      // Отправить уведомления в VK и Telegram параллельно (не критично, ошибки обрабатываются внутри)
-      await Promise.all([
-        NotificationService.notifyVkAboutCallout(callout, subdivision, data.author_faction_name),
-        NotificationService.notifyTelegramAboutCallout(callout, subdivision, data.author_faction_name),
-      ]);
 
       // Получить обновленный каллаут
       const updatedCallout = await CalloutModel.findById(callout.id);
@@ -285,12 +340,8 @@ export class CalloutService {
 
               // Добавить лог инцидента (ответы + запись о закрытии)
               const allResponses = await CalloutResponseModel.findByCalloutId(calloutId);
-              const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
-              const subdivisionsMap = new Map<number, Subdivision>();
-              for (const subId of subdivisionIds) {
-                const sub = await SubdivisionModel.findById(subId);
-                if (sub) subdivisionsMap.set(subId, sub);
-              }
+              const responseSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+              const subdivisionsMap = await SubdivisionModel.findByIds(responseSubIds);
               addResponsesToEmbed(closedEmbed, allResponses, subdivisionsMap, closedCallout);
 
               await message.edit({ embeds: [closedEmbed], components: [] });
@@ -333,13 +384,17 @@ export class CalloutService {
 
       // Логировать событие в audit log
       if (subdivision) {
+        const duration = formatDuration(callout.created_at, closedCallout.closed_at);
         const auditData: CalloutClosedData = {
           userId: closedBy,
-          userName: closedBy, // TODO: получить username если нужно
+          userName: closedBy === 'system' ? 'Система' : closedBy,
           calloutId,
-          factionName: subdivision.name,
+          subdivisionName: subdivision.name,
           reason: reason,
           channelId: callout.discord_channel_id || undefined,
+          closedByDiscordId: closedBy !== 'system' ? closedBy : undefined,
+          duration,
+          thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
         };
         await logAuditEvent(guild, AuditEventType.CALLOUT_CLOSED, auditData);
       }
@@ -357,6 +412,7 @@ export class CalloutService {
         setTimeout(async () => {
           try {
             await deleteIncidentChannel(guild, callout.discord_channel_id!);
+            await CalloutModel.update(callout.id, { discord_channel_id: null });
             logger.info('Channel deleted after delay', {
               calloutId,
               channelId: callout.discord_channel_id,

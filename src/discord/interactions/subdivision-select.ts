@@ -10,6 +10,7 @@ import logger from '../../utils/logger';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { EMOJI, LIMITS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { safeParseInt } from '../../utils/validators';
 
 /**
  * Временное хранилище выбранного подразделения (user_id → {subdivisionId, expiresAt})
@@ -46,7 +47,7 @@ export async function handleSubdivisionSelect(
 
   try {
     // Получить выбранное подразделение ID
-    const subdivisionId = parseInt(interaction.values[0], 10);
+    const subdivisionId = safeParseInt(interaction.values[0], 10);
 
     logger.info('Subdivision selected from menu', {
       userId: interaction.user.id,
@@ -82,8 +83,9 @@ export async function handleSubdivisionSelect(
       return;
     }
 
-    // Сохранить выбор в временное хранилище с TTL
-    subdivisionSelections.set(interaction.user.id, {
+    // Сохранить выбор в временное хранилище с TTL (ключ: guildId:userId для мульти-серверности)
+    const stateKey = `${interaction.guildId}:${interaction.user.id}`;
+    subdivisionSelections.set(stateKey, {
       subdivisionId,
       expiresAt: Date.now() + SELECTION_TTL_MS,
     });
@@ -176,11 +178,12 @@ export async function handleSubdivisionSelect(
 /**
  * Получить выбранное подразделение для пользователя
  */
-export function getSubdivisionSelection(userId: string): number | undefined {
-  const entry = subdivisionSelections.get(userId);
+export function getSubdivisionSelection(guildId: string, userId: string): number | undefined {
+  const key = `${guildId}:${userId}`;
+  const entry = subdivisionSelections.get(key);
   if (!entry) return undefined;
   if (Date.now() >= entry.expiresAt) {
-    subdivisionSelections.delete(userId);
+    subdivisionSelections.delete(key);
     return undefined;
   }
   return entry.subdivisionId;
@@ -189,8 +192,8 @@ export function getSubdivisionSelection(userId: string): number | undefined {
 /**
  * Удалить выбор подразделения после создания каллаута
  */
-export function clearSubdivisionSelection(userId: string): void {
-  subdivisionSelections.delete(userId);
+export function clearSubdivisionSelection(guildId: string, userId: string): void {
+  subdivisionSelections.delete(`${guildId}:${userId}`);
 }
 
 export default handleSubdivisionSelect;

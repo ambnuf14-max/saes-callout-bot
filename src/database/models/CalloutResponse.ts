@@ -150,6 +150,19 @@ export class CalloutResponseModel {
   }
 
   /**
+   * Получить последний ответ подразделения на каллаут (с любой платформы)
+   */
+  static async getLastSubdivisionResponse(
+    calloutId: number,
+    subdivisionId: number
+  ): Promise<CalloutResponse | undefined> {
+    return await database.get<CalloutResponse>(
+      'SELECT * FROM callout_responses WHERE callout_id = ? AND subdivision_id = ? ORDER BY created_at DESC LIMIT 1',
+      [calloutId, subdivisionId]
+    );
+  }
+
+  /**
    * Обновить тип ответа
    */
   static async updateResponseType(

@@ -14,6 +14,8 @@ import {
   logAuditEvent,
   AuditEventType,
   VkResponseReceivedData,
+  TelegramResponseReceivedData,
+  resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import { buildCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
 import { parseDiscordEmoji } from '../discord/utils/subdivision-settings-helper';
@@ -21,7 +23,6 @@ import telegramBot from '../telegram/bot';
 import { formatActiveCalloutWithLog, editMessage as editTelegramMessage } from '../telegram/utils/message-sender';
 import vkBot from '../vk/bot';
 import { formatActiveCalloutWithLog as formatVkActiveWithLog } from '../vk/utils/message-sender';
-import { buildDetailedCalloutKeyboard as buildVkKeyboard } from '../vk/utils/keyboard-builder';
 
 /**
  * Сервис синхронизации между VK, Telegram и Discord
@@ -71,14 +72,14 @@ export class SyncService {
       );
     }
 
-    // 4. Проверить, не отвечал ли уже этот пользователь
-    const existingResponse = await CalloutResponseModel.getLastUserResponse(
+    // 4. Проверить, не отвечало ли уже это подразделение (с любой платформы)
+    const existingResponse = await CalloutResponseModel.getLastSubdivisionResponse(
       callout.id,
-      vkUserId
+      subdivision.id
     );
 
     if (existingResponse) {
-      // Если пользователь уже ответил acknowledged и шлёт on_way — обновить
+      // Если подразделение уже ответило acknowledged и шлёт on_way — обновить
       if (existingResponse.response_type === 'acknowledged' && responseType === 'on_way') {
         const updated = await CalloutResponseModel.updateResponseType(existingResponse.id, 'on_way');
         if (updated) {
@@ -93,9 +94,10 @@ export class SyncService {
           return updated;
         }
       }
-      // Тот же или ниже статус — вернуть существующий
-      logger.info('User already responded to this callout', {
+      // Тот же или ниже статус — вернуть существующий без уведомлений
+      logger.info('Subdivision already responded to this callout', {
         calloutId: callout.id,
+        subdivisionId: subdivision.id,
         vkUserId,
       });
       return existingResponse;
@@ -175,14 +177,14 @@ export class SyncService {
       );
     }
 
-    // 4. Проверить, не отвечал ли уже этот пользователь
-    const existingTgResponse = await CalloutResponseModel.getLastUserResponse(
+    // 4. Проверить, не отвечало ли уже это подразделение (с любой платформы)
+    const existingTgResponse = await CalloutResponseModel.getLastSubdivisionResponse(
       callout.id,
-      telegramUserId
+      subdivision.id
     );
 
     if (existingTgResponse) {
-      // Если пользователь уже ответил acknowledged и шлёт on_way — обновить
+      // Если подразделение уже ответило acknowledged и шлёт on_way — обновить
       if (existingTgResponse.response_type === 'acknowledged' && responseType === 'on_way') {
         const updated = await CalloutResponseModel.updateResponseType(existingTgResponse.id, 'on_way');
         if (updated) {
@@ -196,9 +198,10 @@ export class SyncService {
           return updated;
         }
       }
-      // Тот же или ниже статус — вернуть существующий
-      logger.info('User already responded to this callout', {
+      // Тот же или ниже статус — вернуть существующий без уведомлений
+      logger.info('Subdivision already responded to this callout', {
         calloutId: callout.id,
+        subdivisionId: subdivision.id,
         telegramUserId,
       });
       return existingTgResponse;
@@ -277,33 +280,44 @@ export class SyncService {
       });
 
       // Логировать в audit log
-      const auditData: VkResponseReceivedData = {
-        userId: response.vk_user_id,
-        userName: response.vk_user_name,
-        calloutId: callout.id,
-        factionName: subdivision.name,
-        vkUserId: response.vk_user_id,
-        vkUserName: response.vk_user_name,
-      };
-      await logAuditEvent(channel.guild, AuditEventType.VK_RESPONSE_RECEIVED, auditData);
+      const responseThumbnail = resolveLogoThumbnailUrl(subdivision.logo_url);
+      if (platform === 'telegram') {
+        const tgAuditData: TelegramResponseReceivedData = {
+          userId: response.vk_user_id,
+          userName: response.vk_user_name,
+          calloutId: callout.id,
+          factionName: subdivision.name,
+          telegramUserId: response.vk_user_id,
+          telegramUserName: response.vk_user_name,
+          responseType: response.response_type,
+          thumbnailUrl: responseThumbnail,
+        };
+        await logAuditEvent(channel.guild, AuditEventType.TELEGRAM_RESPONSE_RECEIVED, tgAuditData);
+      } else {
+        const auditData: VkResponseReceivedData = {
+          userId: response.vk_user_id,
+          userName: response.vk_user_name,
+          calloutId: callout.id,
+          factionName: subdivision.name,
+          vkUserId: response.vk_user_id,
+          vkUserName: response.vk_user_name,
+          responseType: response.response_type,
+          thumbnailUrl: responseThumbnail,
+        };
+        await logAuditEvent(channel.guild, AuditEventType.VK_RESPONSE_RECEIVED, auditData);
+      }
+
+      // Загрузить общие данные один раз для всех платформ
+      const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const allSubdivisionIds = [...new Set([callout.subdivision_id, ...allResponses.map(r => r.subdivision_id)])];
+      const subdivisionsMap = await SubdivisionModel.findByIds(allSubdivisionIds);
+      const calloutSubdivision = subdivisionsMap.get(callout.subdivision_id);
 
       // Обновить embed оригинального сообщения с ответами
-      if (callout.discord_message_id) {
+      if (callout.discord_message_id && calloutSubdivision) {
         try {
           const originalMessage = await channel.messages.fetch(callout.discord_message_id);
           if (originalMessage) {
-            const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
-            const subdivisionIds = [...new Set(allResponses.map(r => r.subdivision_id))];
-            const subdivisionsMap = new Map<number, Subdivision>();
-            for (const subId of subdivisionIds) {
-              const sub = await SubdivisionModel.findById(subId);
-              if (sub) subdivisionsMap.set(subId, sub);
-            }
-
-            // Загружаем subdivision каллаута (может отличаться от subdivision ответчика)
-            const calloutSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
-            if (!calloutSubdivision) throw new Error('Callout subdivision not found');
-
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
@@ -320,26 +334,17 @@ export class SyncService {
         }
       }
 
-      // Обновить сообщение в VK с логом инцидента
-      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive()) {
+      // Обновить сообщение в VK с логом инцидента (убрать кнопку — подразделение ответило)
+      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive() && calloutSubdivision?.vk_chat_id) {
         try {
-          const vkSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
-          if (vkSubdivision?.vk_chat_id) {
-            const allVkResponses = await CalloutResponseModel.findByCalloutId(callout.id);
-            const vkSubdivisionsMap = new Map<number, Subdivision>();
-            for (const subId of [...new Set(allVkResponses.map(r => r.subdivision_id))]) {
-              const sub = await SubdivisionModel.findById(subId);
-              if (sub) vkSubdivisionsMap.set(subId, sub);
-            }
-            const vkMessage = formatVkActiveWithLog(callout, vkSubdivision, allVkResponses, vkSubdivisionsMap);
-            const keyboard = buildVkKeyboard(callout.id, callout.subdivision_id);
-            await (vkBot.getApi().api.messages.edit as any)({
-              peer_id: parseInt(vkSubdivision.vk_chat_id),
-              cmid: parseInt(callout.vk_message_id),
-              message: vkMessage,
-              keyboard,
-            });
-          }
+          const vkMessage = formatVkActiveWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
+          const emptyKeyboard = JSON.stringify({ buttons: [], inline: true });
+          await (vkBot.getApi().api.messages.edit as any)({
+            peer_id: parseInt(calloutSubdivision.vk_chat_id),
+            cmid: parseInt(callout.vk_message_id),
+            message: vkMessage,
+            keyboard: emptyKeyboard,
+          });
         } catch (vkError) {
           logger.error('Failed to update VK message with log', {
             error: vkError instanceof Error ? vkError.message : vkError,
@@ -348,25 +353,17 @@ export class SyncService {
         }
       }
 
-      // Обновить сообщение в Telegram с логом инцидента
-      if (callout.telegram_message_id && telegramBot.isActive()) {
+      // Обновить сообщение в Telegram с логом инцидента (убрать кнопку — подразделение ответило)
+      if (callout.telegram_message_id && telegramBot.isActive() && calloutSubdivision?.telegram_chat_id) {
         try {
-          const tgSubdivision = await SubdivisionModel.findById(callout.subdivision_id);
-          if (tgSubdivision?.telegram_chat_id) {
-            const allTgResponses = await CalloutResponseModel.findByCalloutId(callout.id);
-            const tgSubdivisionsMap = new Map<number, Subdivision>();
-            for (const subId of [...new Set(allTgResponses.map(r => r.subdivision_id))]) {
-              const sub = await SubdivisionModel.findById(subId);
-              if (sub) tgSubdivisionsMap.set(subId, sub);
-            }
-            const tgMessage = formatActiveCalloutWithLog(callout, tgSubdivision, allTgResponses, tgSubdivisionsMap);
-            await editTelegramMessage(
-              telegramBot.getApi(),
-              tgSubdivision.telegram_chat_id,
-              parseInt(callout.telegram_message_id),
-              tgMessage
-            );
-          }
+          const tgMessage = formatActiveCalloutWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
+          await editTelegramMessage(
+            telegramBot.getApi(),
+            calloutSubdivision.telegram_chat_id,
+            parseInt(callout.telegram_message_id),
+            tgMessage,
+            true // убрать клавиатуру
+          );
         } catch (tgError) {
           logger.error('Failed to update Telegram message with log', {
             error: tgError instanceof Error ? tgError.message : tgError,

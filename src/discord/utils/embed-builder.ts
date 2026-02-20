@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
 import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
+import { stripUrls } from '../../utils/validators';
 
 /**
  * Утилиты для создания Embed сообщений
@@ -29,17 +30,17 @@ export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): E
     .addFields([
       {
         name: 'Кратко об инциденте',
-        value: callout.brief_description || 'Не указано',
+        value: callout.brief_description ? stripUrls(callout.brief_description) : 'Не указано',
         inline: false,
       },
       {
         name: 'Локация инцидента',
-        value: callout.location || 'Не указано',
+        value: callout.location ? stripUrls(callout.location) : 'Не указано',
         inline: false,
       },
       {
         name: 'Полное описание инцидента',
-        value: callout.description,
+        value: stripUrls(callout.description),
         inline: false,
       },
       ...(callout.tac_channel ? [{
@@ -95,7 +96,7 @@ export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): E
     if (callout.closed_reason) {
       embed.addFields([{
         name: '📝 Причина закрытия',
-        value: callout.closed_reason,
+        value: stripUrls(callout.closed_reason),
         inline: false,
       }]);
     }

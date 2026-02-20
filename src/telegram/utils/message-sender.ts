@@ -129,12 +129,16 @@ export function formatCalloutClosedMessage(
     parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
   }
 
+  const authorLineClosed = callout.author_faction_name
+    ? `<b>Отправил запрос:</b> ${callout.author_name} (${callout.author_faction_name})`
+    : `<b>Отправил запрос:</b> ${callout.author_name}`;
+
   parts.push(
     '',
     `<b>Запрошенные подразделения</b>`,
     subdivision.name,
     '',
-    `<b>Отправил запрос:</b> ${callout.author_name}`,
+    authorLineClosed,
     time,
     '',
     `<b>Статус:</b> 🔒 Закрыт`,
@@ -202,12 +206,16 @@ export function formatActiveCalloutWithLog(
     parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
   }
 
+  const authorLineActive = callout.author_faction_name
+    ? `<b>Отправил запрос:</b> ${callout.author_name} (${callout.author_faction_name})`
+    : `<b>Отправил запрос:</b> ${callout.author_name}`;
+
   parts.push(
     '',
     `<b>Запрошенные подразделения</b>`,
     subdivision.name,
     '',
-    `<b>Отправил запрос:</b> ${callout.author_name}`,
+    authorLineActive,
     `🕐 ${time}`,
   );
 

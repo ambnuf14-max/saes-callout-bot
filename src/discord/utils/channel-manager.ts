@@ -4,6 +4,7 @@ import {
   PermissionFlagsBits,
   TextChannel,
   CategoryChannel,
+  DiscordAPIError,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { Callout, Subdivision } from '../../types/database.types';
@@ -166,6 +167,10 @@ export async function deleteIncidentChannel(
 
     logger.info('Incident channel deleted', { channelId });
   } catch (error) {
+    if (error instanceof DiscordAPIError && error.code === 10003) {
+      logger.warn('Channel already deleted (not found in Discord)', { channelId });
+      return;
+    }
     logger.error('Failed to delete incident channel', {
       error: error instanceof Error ? error.message : error,
       channelId,

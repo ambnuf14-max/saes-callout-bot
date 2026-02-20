@@ -16,6 +16,7 @@ import {
 } from '../utils/subdivision-settings-helper';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { safeParseInt } from '../../utils/validators';
 import { Subdivision } from '../../types/database.types';
 
 // Временное хранилище для draft изменений embed подразделений
@@ -68,72 +69,72 @@ export async function handleFactionPanelModal(interaction: ModalSubmitInteractio
     }
     // Редактирование подразделения
     else if (customId.startsWith('faction_modal_edit_subdivision_')) {
-      const subdivisionId = parseInt(customId.replace('faction_modal_edit_subdivision_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_modal_edit_subdivision_', ''));
       await handleEditSubdivision(interaction, subdivisionId, faction.id);
     }
     // Настройка embed подразделения
     else if (customId.startsWith('faction_modal_configure_embed_')) {
-      const subdivisionId = parseInt(customId.replace('faction_modal_configure_embed_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_modal_configure_embed_', ''));
       await handleConfigureEmbed(interaction, subdivisionId, faction.id);
     }
     // Настройки подразделения (роль, логотип, краткое описание → pending)
     else if (customId.startsWith('faction_modal_settings_')) {
-      const subdivisionId = parseInt(customId.replace('faction_modal_settings_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_modal_settings_', ''));
       await handleEditSettings(interaction, subdivisionId, faction.id);
     }
     // Объединённый модал "Описание / Эмодзи" (название + описание + краткое + эмодзи → pending)
     else if (customId.startsWith('faction_modal_sub_other_')) {
-      const subdivisionId = parseInt(customId.replace('faction_modal_sub_other_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_modal_sub_other_', ''));
       await handleSubOtherSettings(interaction, subdivisionId, faction.id);
     }
     // Обновление фракции (название + эмодзи)
     else if (customId.startsWith('faction_modal_update_faction_')) {
-      const factionId = parseInt(customId.replace('faction_modal_update_faction_', ''));
+      const factionId = safeParseInt(customId.replace('faction_modal_update_faction_', ''));
       await handleUpdateFaction(interaction, factionId, faction.id, faction.server_id);
     }
     // === Редактирование полей embed подразделения (интерактивный редактор) ===
     else if (customId.startsWith('subdivision_modal_name_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_modal_name_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_modal_name_', ''));
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'name');
     }
     else if (customId.startsWith('subdivision_modal_title_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'title');
     }
     else if (customId.startsWith('subdivision_modal_description_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'description');
     }
     else if (customId.startsWith('subdivision_modal_color_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'color');
     }
     else if (customId.startsWith('subdivision_modal_author_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'author');
     }
     else if (customId.startsWith('subdivision_modal_footer_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'footer');
     }
     else if (customId.startsWith('subdivision_modal_image_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'image');
     }
     else if (customId.startsWith('subdivision_modal_thumbnail_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'thumbnail');
     }
     else if (customId.startsWith('subdivision_modal_short_desc_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_modal_short_desc_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_modal_short_desc_', ''));
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'short_desc');
     }
     else if (customId.startsWith('subdivision_modal_logo_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_modal_logo_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_modal_logo_', ''));
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'logo');
     }
     else if (customId.startsWith('subdivision_modal_role_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_modal_role_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_modal_role_', ''));
       await handleSubdivisionFieldEdit(interaction, subdivisionId, 'role');
     }
   } catch (error) {

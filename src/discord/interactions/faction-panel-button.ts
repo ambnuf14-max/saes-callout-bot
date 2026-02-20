@@ -23,6 +23,7 @@ import { buildSubdivisionSettingsModal, buildSubdivisionEmbedFieldModal, handleI
 import { FactionModel, SubdivisionModel } from '../../database/models';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { safeParseInt } from '../../utils/validators';
 
 /**
  * Обработчик кнопок лидерской панели
@@ -49,10 +50,21 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     if (customId === 'faction_view_subdivisions') {
       await handleViewSubdivisions(interaction, faction.id);
     }
-    // История каллаутов фракции
+    // История каллаутов фракции (стр. 1)
     else if (customId.startsWith('faction_callout_history_')) {
       await interaction.deferUpdate();
-      const panel = await buildFactionCalloutHistoryPanel(faction);
+      const panel = await buildFactionCalloutHistoryPanel(faction, 1);
+      await interaction.editReply(panel);
+    }
+    // Пагинация истории каллаутов
+    else if (customId.startsWith('faction_history_prev_') || customId.startsWith('faction_history_next_')) {
+      await interaction.deferUpdate();
+      const parts = customId.split('_');
+      const direction = parts[2]; // 'prev' или 'next'
+      const currentPage = safeParseInt(parts[3], 10);
+      const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+      if (newPage < 1) return;
+      const panel = await buildFactionCalloutHistoryPanel(faction, newPage);
       await interaction.editReply(panel);
     }
     // Добавление подразделения (показать modal)
@@ -69,62 +81,62 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     }
     // Панель привязок
     else if (customId.startsWith('faction_links_')) {
-      const subdivisionId = parseInt(customId.split('_')[2]);
+      const subdivisionId = safeParseInt(customId.split('_')[2]);
       await handleShowLinks(interaction, subdivisionId, faction.id);
     }
     // Панель настроек
     else if (customId.startsWith('faction_settings_')) {
-      const subdivisionId = parseInt(customId.split('_')[2]);
+      const subdivisionId = safeParseInt(customId.split('_')[2]);
       await handleShowSettings(interaction, subdivisionId, faction.id);
     }
     // Возврат к детальной панели подразделения
     else if (customId.startsWith('faction_back_detail_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleBackToDetail(interaction, subdivisionId);
     }
     // Изменение подразделения (название + описание → pending)
     else if (customId.startsWith('faction_edit_sub_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditSubdivisionModal(interaction, subdivisionId);
     }
     // Настройки подразделения (роль, логотип, краткое описание → pending)
     else if (customId.startsWith('faction_edit_settings_')) {
-      const subdivisionId = parseInt(customId.replace('faction_edit_settings_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_edit_settings_', ''));
       await showEditSettingsModal(interaction, subdivisionId);
     }
     // Привязка VK беседы
     else if (customId.startsWith('faction_link_vk_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleLinkVk(interaction, subdivisionId, faction.id);
     }
     // Привязка Telegram группы
     else if (customId.startsWith('faction_link_telegram_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleLinkTelegram(interaction, subdivisionId, faction.id);
     }
     // Отвязка VK беседы
     else if (customId.startsWith('faction_unlink_vk_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleUnlinkVk(interaction, subdivisionId, faction.id);
     }
     // Отвязка Telegram группы
     else if (customId.startsWith('faction_unlink_telegram_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleUnlinkTelegram(interaction, subdivisionId, faction.id);
     }
     // Переключение приема каллаутов
     else if (customId.startsWith('faction_toggle_callouts_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleToggleCallouts(interaction, subdivisionId, faction.id);
     }
     // Standalone: Панель привязок
     else if (customId.startsWith('faction_standalone_links_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleShowLinks(interaction, subdivisionId, faction.id);
     }
     // Standalone: Панель настроек
     else if (customId.startsWith('faction_standalone_settings_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleShowSettings(interaction, subdivisionId, faction.id);
     }
     // Переход к списку подразделений
@@ -133,13 +145,13 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     }
     // Предпросмотр embed подразделения
     else if (customId.startsWith('faction_preview_embed_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handlePreviewEmbed(interaction, subdivisionId);
     }
     // Настройка embed подразделения - открыть интерактивную панель
     else if (customId.startsWith('faction_configure_embed_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       // Передать текущий draft чтобы в предпросмотре была актуальная роль
       const { getSubdivisionDraft } = await import('./faction-panel-modal');
       const currentDraft = getSubdivisionDraft(subdivisionId);
@@ -148,12 +160,12 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     }
     // Удаление подразделения (показать подтверждение)
     else if (customId.startsWith('faction_delete_sub_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showDeleteConfirmation(interaction, subdivisionId, faction.id);
     }
     // Подтверждение удаления
     else if (customId.startsWith('faction_confirm_delete_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleDeleteSubdivision(interaction, subdivisionId, faction.id);
     }
     // Отмена удаления
@@ -167,70 +179,70 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     }
     // Редактирование фракции (название + эмодзи)
     else if (customId.startsWith('faction_edit_faction_')) {
-      const factionId = parseInt(customId.replace('faction_edit_faction_', ''));
+      const factionId = safeParseInt(customId.replace('faction_edit_faction_', ''));
       await showEditFactionModal(interaction, factionId);
     }
     // Отмена pending запроса
     else if (customId.startsWith('faction_cancel_change_')) {
-      const changeId = parseInt(customId.replace('faction_cancel_change_', ''));
+      const changeId = safeParseInt(customId.replace('faction_cancel_change_', ''));
       await handleCancelChange(interaction, changeId, faction.id);
     }
     // === Редактирование полей embed подразделения ===
 
     // Редактирование названия подразделения
     else if (customId.startsWith('subdivision_edit_name_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEmbedEditorNameModal(interaction, subdivisionId);
     }
     // Редактирование заголовка (с URL)
     else if (customId.startsWith('subdivision_edit_title_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditTitleModal(interaction, subdivisionId);
     }
     // Редактирование описания
     else if (customId.startsWith('subdivision_edit_description_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditDescriptionModal(interaction, subdivisionId);
     }
     // Редактирование цвета
     else if (customId.startsWith('subdivision_edit_color_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditColorModal(interaction, subdivisionId);
     }
     // Редактирование автора
     else if (customId.startsWith('subdivision_edit_author_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditAuthorModal(interaction, subdivisionId);
     }
     // Редактирование футера
     else if (customId.startsWith('subdivision_edit_footer_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditFooterModal(interaction, subdivisionId);
     }
     // Редактирование изображения
     else if (customId.startsWith('subdivision_edit_image_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditImageModal(interaction, subdivisionId);
     }
     // Редактирование миниатюры
     else if (customId.startsWith('subdivision_edit_thumbnail_')) {
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await showEditThumbnailModal(interaction, subdivisionId);
     }
     // Краткое описание (интерактивный редактор)
     else if (customId.startsWith('subdivision_edit_short_desc_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_edit_short_desc_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_edit_short_desc_', ''));
       await showEmbedEditorShortDescModal(interaction, subdivisionId);
     }
     // Логотип (интерактивный редактор)
     else if (customId.startsWith('subdivision_edit_logo_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_edit_logo_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_edit_logo_', ''));
       await showEmbedEditorLogoModal(interaction, subdivisionId);
     }
     // Discord роль (интерактивный редактор) — показать панель выбора роли
     else if (customId.startsWith('subdivision_edit_role_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.replace('subdivision_edit_role_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_edit_role_', ''));
       // Передать текущее значение из draft если есть
       const { getSubdivisionDraft } = await import('./faction-panel-modal');
       const draft = getSubdivisionDraft(subdivisionId);
@@ -241,7 +253,7 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     // Очистить роль из draft (из панели выбора роли)
     else if (customId.startsWith('subdivision_role_clear_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.replace('subdivision_role_clear_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_role_clear_', ''));
       const { setSubdivisionDraftRole } = await import('./faction-panel-modal');
       setSubdivisionDraftRole(subdivisionId, null);
       const panel = await buildSubdivisionRolePanel(subdivisionId, null);
@@ -250,13 +262,13 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     // Отправка на одобрение
     else if (customId.startsWith('subdivision_submit_embed_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.split('_')[3]);
+      const subdivisionId = safeParseInt(customId.split('_')[3]);
       await handleSubmitEmbedChanges(interaction, subdivisionId, faction.id);
     }
     // Возврат к настройкам из редактора embed
     else if (customId.startsWith('faction_back_to_settings_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.split('_')[4]);
+      const subdivisionId = safeParseInt(customId.split('_')[4]);
       const subdivision = await SubdivisionModel.findById(subdivisionId);
       if (subdivision) {
         const panel = await buildSettingsPanel(subdivision);
@@ -265,13 +277,13 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     }
     // Описание / Эмодзи — открыть модал с объединёнными полями
     else if (customId.startsWith('faction_sub_other_settings_')) {
-      const subdivisionId = parseInt(customId.replace('faction_sub_other_settings_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_sub_other_settings_', ''));
       await showSubdivisionOtherSettingsModal(interaction, subdivisionId);
     }
     // Очистить роль в настройках (pending change)
     else if (customId.startsWith('faction_settings_role_clear_')) {
       await interaction.deferUpdate();
-      const subdivisionId = parseInt(customId.replace('faction_settings_role_clear_', ''));
+      const subdivisionId = safeParseInt(customId.replace('faction_settings_role_clear_', ''));
       await handleSettingsRoleClear(interaction, subdivisionId, faction.id);
     }
   } catch (error) {
@@ -885,7 +897,7 @@ export async function handleFactionSubdivisionSelect(interaction: import('discor
     return;
   }
 
-  const subdivisionId = parseInt(interaction.values[0]);
+  const subdivisionId = safeParseInt(interaction.values[0]);
   const subdivision = await SubdivisionModel.findById(subdivisionId);
 
   if (!subdivision || subdivision.faction_id !== faction.id) {
@@ -982,7 +994,7 @@ export async function handleFactionRoleSelect(interaction: RoleSelectMenuInterac
 
   try {
     if (customId.startsWith('subdivision_role_')) {
-      const subdivisionId = parseInt(customId.replace('subdivision_role_', ''));
+      const subdivisionId = safeParseInt(customId.replace('subdivision_role_', ''));
 
       // Проверить принадлежность подразделения фракции
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -1133,7 +1145,7 @@ export async function handleFactionSettingsRoleSelect(interaction: RoleSelectMen
     return;
   }
 
-  const subdivisionId = parseInt(interaction.customId.replace('faction_settings_role_', ''));
+  const subdivisionId = safeParseInt(interaction.customId.replace('faction_settings_role_', ''));
 
   try {
     const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);

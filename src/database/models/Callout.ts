@@ -12,13 +12,14 @@ export class CalloutModel {
    */
   static async create(data: CreateCalloutDTO): Promise<Callout> {
     const result = await database.run(
-      `INSERT INTO callouts (server_id, subdivision_id, author_id, author_name, description, brief_description, location, tac_channel, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO callouts (server_id, subdivision_id, author_id, author_name, author_faction_name, description, brief_description, location, tac_channel, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.server_id,
         data.subdivision_id,
         data.author_id,
         data.author_name,
+        data.author_faction_name || null,
         data.description,
         data.brief_description || null,
         data.location || null,
@@ -213,6 +214,35 @@ export class CalloutModel {
   }
 
   /**
+   * Получить каллауты фракции с пагинацией
+   */
+  static async findByFactionIdPaginated(
+    factionId: number,
+    page: number = 1,
+    pageSize: number = 5
+  ): Promise<{ callouts: Callout[]; total: number }> {
+    const countResult = await database.get<{ count: number }>(
+      `SELECT COUNT(*) as count FROM callouts c
+       JOIN subdivisions s ON c.subdivision_id = s.id
+       WHERE s.faction_id = ?`,
+      [factionId]
+    );
+    const total = countResult?.count || 0;
+
+    const offset = (page - 1) * pageSize;
+    const callouts = await database.all<Callout>(
+      `SELECT c.* FROM callouts c
+       JOIN subdivisions s ON c.subdivision_id = s.id
+       WHERE s.faction_id = ?
+       ORDER BY c.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [factionId, pageSize, offset]
+    );
+
+    return { callouts, total };
+  }
+
+  /**
    * Получить каллауты с фильтрацией и пагинацией
    */
   static async findFiltered(
@@ -310,7 +340,12 @@ export class CalloutModel {
    * Найти закрытые каллауты с каналом, закрытые раньше чем minAgeMs миллисекунд назад
    */
   static async findClosedWithChannelOlderThan(minAgeMs: number): Promise<Callout[]> {
-    const cutoff = new Date(Date.now() - minAgeMs).toISOString();
+    // SQLite хранит CURRENT_TIMESTAMP как 'YYYY-MM-DD HH:MM:SS' (без T и Z),
+    // поэтому приводим cutoff к тому же формату для корректного строкового сравнения
+    const cutoff = new Date(Date.now() - minAgeMs)
+      .toISOString()
+      .replace('T', ' ')
+      .replace(/\.\d{3}Z$/, '');
     return await database.all<Callout>(
       `SELECT * FROM callouts
        WHERE status != ?

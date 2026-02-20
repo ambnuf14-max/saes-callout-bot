@@ -560,43 +560,96 @@ export async function buildSubdivisionEmbedEditorPanel(
   });
 }
 
+const HISTORY_PAGE_SIZE = 5;
+
 /**
- * Панель истории каллаутов фракции (последние 15)
+ * Панель истории каллаутов фракции с пагинацией
  */
-export async function buildFactionCalloutHistoryPanel(faction: Faction) {
-  const callouts = await CalloutModel.findByFactionId(faction.id, 15);
+export async function buildFactionCalloutHistoryPanel(faction: Faction, page: number = 1) {
+  const { callouts, total } = await CalloutModel.findByFactionIdPaginated(
+    faction.id,
+    page,
+    HISTORY_PAGE_SIZE
+  );
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.INFO)
     .setTitle(`📜 История каллаутов: ${faction.name}`)
     .setTimestamp()
-    .setFooter({ text: `Показаны последние ${Math.min(callouts.length, 15)} каллаутов` });
+    .setFooter({ text: `Страница ${page}/${totalPages} · Всего: ${total}` });
 
   if (callouts.length === 0) {
     embed.setDescription('Каллауты ещё не поступали.');
   } else {
-    const lines = await Promise.all(
-      callouts.map(async (callout) => {
-        const statusEmoji = callout.status === CALLOUT_STATUS.ACTIVE ? EMOJI.ACTIVE : EMOJI.CLOSED;
-        const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
-        const subdivName = subdivision?.name ?? 'Неизвестно';
-        const date = new Date(callout.created_at).toLocaleDateString('ru-RU', {
-          timeZone: 'Europe/Moscow',
-          day: '2-digit',
-          month: '2-digit',
-        });
-        return `${statusEmoji} **#${callout.id}** ${subdivName} | <@${callout.author_id}> | ${date}`;
-      })
-    );
-    embed.setDescription(lines.join('\n'));
+    const subdivisionIds = [...new Set(callouts.map(c => c.subdivision_id))];
+    const subdivisionsMap = await SubdivisionModel.findByIds(subdivisionIds);
+
+    const blocks = callouts.map((callout) => {
+      const subdivision = subdivisionsMap.get(callout.subdivision_id);
+      const subdivName = subdivision?.name ?? 'Неизвестно';
+
+      const text = (callout as any).brief_description || callout.description;
+      const truncated = text.length > 100 ? text.substring(0, 97) + '...' : text;
+
+      const duration = calcDuration(callout.created_at, callout.closed_at ?? new Date().toISOString());
+
+      let block = `**Incident #${callout.id} - ${subdivName}**\n`;
+      block += `Кратко: ${truncated}\n`;
+      if (callout.location) block += `Локация: ${callout.location}\n`;
+      block += `Время: ${duration}`;
+
+      return block;
+    });
+
+    embed.setDescription(blocks.join('\n\n──────────\n\n'));
   }
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('faction_back_main')
-      .setLabel('Назад')
-      .setStyle(ButtonStyle.Secondary)
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  if (totalPages > 1) {
+    const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`faction_history_prev_${page}`)
+        .setLabel('< Назад')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page <= 1),
+      new ButtonBuilder()
+        .setCustomId(`faction_history_next_${page}`)
+        .setLabel('Вперёд >')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= totalPages)
+    );
+    components.push(navRow);
+  }
+
+  components.push(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('faction_back_main')
+        .setLabel('В меню')
+        .setStyle(ButtonStyle.Secondary)
+    )
   );
 
-  return { embeds: [embed], components: [row] };
+  return { embeds: [embed], components };
+}
+
+function formatShortDateTime(isoString: string): string {
+  return new Date(isoString).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function calcDuration(createdAt: string, closedAt: string): string {
+  const diffMs = new Date(closedAt).getTime() - new Date(createdAt).getTime();
+  const totalMinutes = Math.max(0, Math.floor(diffMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours} ч ${minutes} мин`;
+  return `${minutes} мин`;
 }

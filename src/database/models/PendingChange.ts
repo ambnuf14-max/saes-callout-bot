@@ -292,6 +292,7 @@ export class PendingChangeModel {
       reviewed_at: result.reviewed_at,
       rejection_reason: result.rejection_reason,
       change_data: result.change_data,
+      audit_log_message_id: result.audit_log_message_id ?? null,
       created_at: result.created_at,
       updated_at: result.updated_at,
     };
@@ -304,6 +305,16 @@ export class PendingChangeModel {
       subdivision_name: result.subdivision_name,
       parsed_data,
     };
+  }
+
+  /**
+   * Сохранить ID сообщения в audit log канале
+   */
+  static async setAuditLogMessageId(id: number, messageId: string): Promise<void> {
+    await database.run(
+      'UPDATE pending_changes SET audit_log_message_id = ? WHERE id = ?',
+      [messageId, id]
+    );
   }
 
   /**
@@ -339,6 +350,7 @@ export class PendingChangeModel {
         reviewed_at: result.reviewed_at,
         rejection_reason: result.rejection_reason,
         change_data: result.change_data,
+        audit_log_message_id: result.audit_log_message_id ?? null,
         created_at: result.created_at,
         updated_at: result.updated_at,
       };

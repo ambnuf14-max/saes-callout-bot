@@ -79,6 +79,7 @@ export interface Callout {
   subdivision_id: number;
   author_id: string;
   author_name: string;
+  author_faction_name: string | null;
   description: string;
   brief_description: string | null;
   location: string | null;
@@ -103,11 +104,11 @@ export interface CreateCalloutDTO {
   location?: string;
   tac_channel?: string;
   brief_description?: string;
-  author_faction_name?: string; // не хранится в БД, только для уведомлений
+  author_faction_name?: string;
 }
 
 export interface UpdateCalloutDTO {
-  discord_channel_id?: string;
+  discord_channel_id?: string | null;
   discord_message_id?: string;
   vk_message_id?: string;
   telegram_message_id?: string;
@@ -370,6 +371,7 @@ export interface PendingChange {
   reviewed_at: string | null;
   rejection_reason: string | null;
   change_data: string; // JSON string
+  audit_log_message_id: string | null;
   created_at: string;
   updated_at: string;
 }

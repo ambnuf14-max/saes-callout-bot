@@ -5,7 +5,7 @@ import { CalloutResponsePayload } from '../utils/keyboard-builder';
 import { handleVkError } from '../../utils/error-handler';
 import { EMOJI } from '../../config/constants';
 import vkBot from '../bot';
-import { CalloutModel } from '../../database/models';
+import { CalloutModel, SubdivisionModel } from '../../database/models';
 
 /**
  * Обработчик callback событий от кнопок VK
@@ -31,6 +31,31 @@ export async function handleCallbackEvent(
       await context.answer({
         type: 'show_snackbar',
         text: `${EMOJI.ERROR} Неверный формат данных`,
+      });
+      return;
+    }
+
+    // Валидация числовых полей payload
+    if (!Number.isFinite(payload.callout_id) || !Number.isFinite(payload.subdivision_id)) {
+      logger.warn('Invalid numeric fields in callback payload', { payload });
+      await context.answer({
+        type: 'show_snackbar',
+        text: `${EMOJI.ERROR} Неверный формат данных`,
+      });
+      return;
+    }
+
+    // Проверить, что callback пришёл из чата, привязанного к подразделению
+    const subdivision = await SubdivisionModel.findById(payload.subdivision_id);
+    if (!subdivision || !subdivision.vk_chat_id || subdivision.vk_chat_id !== context.peerId.toString()) {
+      logger.warn('VK callback from unauthorized chat', {
+        peerId: context.peerId,
+        subdivisionId: payload.subdivision_id,
+        expectedChatId: subdivision?.vk_chat_id,
+      });
+      await context.answer({
+        type: 'show_snackbar',
+        text: `${EMOJI.ERROR} Эта беседа не привязана к подразделению`,
       });
       return;
     }

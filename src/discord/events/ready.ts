@@ -108,6 +108,7 @@ async function cleanupOrphanedChannels(client: Client): Promise<void> {
       if (!guild) continue;
 
       await deleteIncidentChannel(guild, callout.discord_channel_id);
+      await CalloutModel.update(callout.id, { discord_channel_id: null });
 
       logger.info('Deleted orphaned incident channel', {
         calloutId: callout.id,

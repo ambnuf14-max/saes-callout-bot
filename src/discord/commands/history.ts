@@ -157,10 +157,14 @@ export async function buildHistoryResponse(
   if (callouts.length === 0) {
     embed.setDescription('Каллауты не найдены');
   } else {
+    // Batch-загрузка подразделений (вместо N отдельных запросов)
+    const subdivisionIds = [...new Set(callouts.map((c: Callout) => c.subdivision_id))];
+    const subdivisionsMap = await SubdivisionModel.findByIds(subdivisionIds);
+
     const blocks = await Promise.all(
       callouts.map(async (callout: Callout) => {
         const statusEmoji = callout.status === CALLOUT_STATUS.ACTIVE ? EMOJI.ACTIVE : EMOJI.CLOSED;
-        const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
+        const subdivision = subdivisionsMap.get(callout.subdivision_id);
         const subdivName = subdivision?.name || 'Unknown';
 
         let block = `${statusEmoji} **#${callout.id}** — ${subdivName}\n`;

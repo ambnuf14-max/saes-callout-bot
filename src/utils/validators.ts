@@ -132,4 +132,24 @@ export const validators = {
   },
 };
 
+/**
+ * Удалить URL из текста (замена на [ссылка удалена])
+ * Предотвращает tracking pixels и фишинговые ссылки в embed-полях
+ */
+export function stripUrls(text: string): string {
+  return text.replace(/https?:\/\/[^\s<>]+/gi, '[ссылка удалена]');
+}
+
+/**
+ * Безопасный parseInt с выбросом ошибки при NaN
+ * Замена стандартного parseInt для парсинга ID из customId кнопок
+ */
+export function safeParseInt(value: string, radix?: number): number {
+  const result = parseInt(value, radix);
+  if (isNaN(result)) {
+    throw new Error(`Invalid integer value: "${value}"`);
+  }
+  return result;
+}
+
 export default validators;

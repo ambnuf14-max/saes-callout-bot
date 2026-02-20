@@ -44,6 +44,25 @@ export class SubdivisionModel {
   }
 
   /**
+   * Найти несколько подразделений по массиву ID (batch)
+   */
+  static async findByIds(ids: number[]): Promise<Map<number, Subdivision>> {
+    const map = new Map<number, Subdivision>();
+    if (ids.length === 0) return map;
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = await database.all<Subdivision>(
+      `SELECT * FROM subdivisions WHERE id IN (${placeholders})`,
+      ids
+    );
+
+    for (const row of rows) {
+      map.set(row.id, row);
+    }
+    return map;
+  }
+
+  /**
    * Найти подразделение по имени во фракции
    */
   static async findByName(factionId: number, name: string): Promise<Subdivision | undefined> {

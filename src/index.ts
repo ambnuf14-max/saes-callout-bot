@@ -28,15 +28,11 @@ async function main() {
     const discordBot = (await import('./discord/bot')).default;
     await discordBot.start();
 
-    // Инициализация VK бота
-    logger.info('Starting VK bot...');
+    // Инициализация VK и Telegram ботов параллельно
+    logger.info('Starting VK and Telegram bots...');
     const vkBot = (await import('./vk/bot')).default;
-    await vkBot.start();
-
-    // Инициализация Telegram бота
-    logger.info('Starting Telegram bot...');
     const telegramBot = (await import('./telegram/bot')).default;
-    await telegramBot.start();
+    await Promise.all([vkBot.start(), telegramBot.start()]);
 
     // Запустить периодическую проверку истёкших токенов (каждые 30 секунд)
     setInterval(() => notifyExpiredTokens(discordBot), 30 * 1000);

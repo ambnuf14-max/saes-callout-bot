@@ -3,6 +3,7 @@ import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
 import { FactionService } from '../../services/faction.service';
 import { FactionTypeService } from '../../services/faction-type.service';
+import { safeParseInt } from '../../utils/validators';
 import { PendingChangeService } from '../../services/pending-change.service';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { isAdministrator } from '../utils/permission-checker';
@@ -93,7 +94,7 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
     }
     // Редактирование фракции
     else if (customId.startsWith('admin_modal_edit_fact_')) {
-      const factionId = parseInt(customId.replace('admin_modal_edit_fact_', ''));
+      const factionId = safeParseInt(customId.replace('admin_modal_edit_fact_', ''));
       await handleEditFaction(interaction, factionId, server.id);
     }
     // Создание типа фракции
@@ -102,133 +103,133 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
     }
     // Редактирование типа фракции
     else if (customId.startsWith('admin_modal_edit_fact_type_')) {
-      const typeId = parseInt(customId.replace('admin_modal_edit_fact_type_', ''));
+      const typeId = safeParseInt(customId.replace('admin_modal_edit_fact_type_', ''));
       await handleEditFactionType(interaction, typeId);
     }
     // Добавление шаблона подразделения
     else if (customId.startsWith('admin_modal_add_template_')) {
-      const typeId = parseInt(customId.replace('admin_modal_add_template_', ''));
+      const typeId = safeParseInt(customId.replace('admin_modal_add_template_', ''));
       await handleAddTemplate(interaction, typeId);
     }
     // Редактирование названия шаблона
     else if (customId.startsWith('template_modal_name_')) {
       const parts = customId.replace('template_modal_name_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'name');
     }
     // Редактирование заголовка embed (объединённый модал: заголовок + URL)
     else if (customId.startsWith('template_modal_title_')) {
       const parts = customId.replace('template_modal_title_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'title');
     }
     // Редактирование описания
     else if (customId.startsWith('template_modal_description_')) {
       const parts = customId.replace('template_modal_description_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'description');
     }
     // Редактирование цвета
     else if (customId.startsWith('template_modal_color_')) {
       const parts = customId.replace('template_modal_color_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'color');
     }
     // Редактирование автора
     else if (customId.startsWith('template_modal_author_')) {
       const parts = customId.replace('template_modal_author_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'author');
     }
     // Редактирование футера
     else if (customId.startsWith('template_modal_footer_')) {
       const parts = customId.replace('template_modal_footer_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'footer');
     }
     // Редактирование изображения
     else if (customId.startsWith('template_modal_image_')) {
       const parts = customId.replace('template_modal_image_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'image');
     }
     // Редактирование миниатюры
     else if (customId.startsWith('template_modal_thumbnail_')) {
       const parts = customId.replace('template_modal_thumbnail_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'thumbnail');
     }
     // Редактирование краткого описания шаблона
     else if (customId.startsWith('template_modal_short_desc_')) {
       const parts = customId.replace('template_modal_short_desc_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'short_desc');
     }
     // Редактирование логотипа шаблона
     else if (customId.startsWith('template_modal_logo_')) {
       const parts = customId.replace('template_modal_logo_', '').split('_');
-      const typeId = parseInt(parts[0]);
-      const templateId = parseInt(parts[1]);
+      const typeId = safeParseInt(parts[0]);
+      const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'logo');
     }
     // Отклонение изменения с причиной
     else if (customId.startsWith('admin_modal_reject_change_')) {
-      const changeId = parseInt(customId.replace('admin_modal_reject_change_', ''));
+      const changeId = safeParseInt(customId.replace('admin_modal_reject_change_', ''));
       await handleRejectChange(interaction, changeId, server.id);
     }
     // Прямое редактирование настроек подразделения администратором (без pending)
     else if (customId.startsWith('admin_modal_sub_settings_')) {
-      const subdivisionId = parseInt(customId.replace('admin_modal_sub_settings_', ''));
+      const subdivisionId = safeParseInt(customId.replace('admin_modal_sub_settings_', ''));
       await handleAdminEditSubdivisionSettings(interaction, subdivisionId);
     }
     // Редактор подразделения (admin): редактирование полей (draft-based)
     else if (customId.startsWith('admin_modal_sub_edit_name_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_name_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_name_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'name');
     }
     else if (customId.startsWith('admin_modal_sub_edit_logo_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_logo_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_logo_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'logo');
     }
     else if (customId.startsWith('admin_modal_sub_edit_short_desc_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_short_desc_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_short_desc_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'short_desc');
     }
     else if (customId.startsWith('admin_modal_sub_edit_author_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_author_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_author_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'author');
     }
     else if (customId.startsWith('admin_modal_sub_edit_title_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_title_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_title_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'title');
     }
     else if (customId.startsWith('admin_modal_sub_edit_thumbnail_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_thumbnail_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_thumbnail_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'thumbnail');
     }
     else if (customId.startsWith('admin_modal_sub_edit_description_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_description_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_description_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'description');
     }
     else if (customId.startsWith('admin_modal_sub_edit_image_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_image_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_image_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'image');
     }
     else if (customId.startsWith('admin_modal_sub_edit_color_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_color_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_color_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'color');
     }
     else if (customId.startsWith('admin_modal_sub_edit_footer_')) {
-      const subId = parseInt(customId.replace('admin_modal_sub_edit_footer_', ''));
+      const subId = safeParseInt(customId.replace('admin_modal_sub_edit_footer_', ''));
       await handleSubEditorFieldEdit(interaction, subId, 'footer');
     }
   } catch (error) {
@@ -260,7 +261,7 @@ async function handleAddFaction(
   }
 
   // Получить состояние с ролями и типом
-  const state = getAddFactionState(interaction.user.id);
+  const state = getAddFactionState(interaction.guildId!, interaction.user.id);
   if (!state || !state.generalLeaderRoleId || !state.departmentRoleId) {
     await interaction.editReply({
       content: `${EMOJI.ERROR} Сессия добавления фракции истекла. Попробуйте снова.`,
@@ -281,7 +282,7 @@ async function handleAddFaction(
   }, state.selectedTypeId);
 
   // Очистить состояние
-  clearAddFactionState(interaction.user.id);
+  clearAddFactionState(interaction.guildId!, interaction.user.id);
 
   logger.info('Faction created via admin panel', {
     factionId: faction.id,
@@ -571,7 +572,7 @@ export async function handleAuditLogModal(interaction: ModalSubmitInteraction) {
   const customId = interaction.customId;
 
   if (customId.startsWith('audit_modal_reject_change_')) {
-    const changeId = parseInt(customId.replace('audit_modal_reject_change_', ''));
+    const changeId = safeParseInt(customId.replace('audit_modal_reject_change_', ''));
     const reason = interaction.fields.getTextInputValue('rejection_reason').trim();
 
     try {

@@ -15,6 +15,9 @@ import runStandaloneNeedsSetupMigration from './migrations/014_standalone_needs_
 import runCalloutTacChannelMigration from './migrations/015_callout_tac_channel';
 import runCalloutBriefDescriptionMigration from './migrations/016_callout_brief_description';
 import runTelegramMembersMigration from './migrations/017_telegram_members';
+import runAddMissingIndexesMigration from './migrations/018_add_missing_indexes';
+import runCalloutAuthorFactionMigration from './migrations/019_callout_author_faction';
+import runPendingChangeAuditMessageMigration from './migrations/020_pending_change_audit_message';
 
 /**
  * SQL схема для всех таблиц
@@ -178,6 +181,9 @@ export async function runMigrations(): Promise<void> {
     await runCalloutTacChannelMigration();
     await runCalloutBriefDescriptionMigration();
     await runTelegramMembersMigration();
+    await runAddMissingIndexesMigration();
+    await runCalloutAuthorFactionMigration();
+    await runPendingChangeAuditMessageMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

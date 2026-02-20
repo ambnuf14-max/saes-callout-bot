@@ -192,6 +192,7 @@ async function notifyDiscordAboutVerification(
       const guild = guilds.find((g) => g.id === discordBot.client.guilds.cache.first()?.id);
 
       if (guild) {
+        const { resolveLogoThumbnailUrl } = await import('../../discord/utils/audit-logger');
         await logAuditEvent(guild, AuditEventType.TELEGRAM_CHAT_LINKED, {
           userId: token.created_by,
           userName: 'Лидер фракции',
@@ -199,6 +200,7 @@ async function notifyDiscordAboutVerification(
           factionName: faction.name,
           telegramChatId: telegramChatId,
           chatTitle: chatTitle,
+          thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
         });
       }
     } catch (auditError) {

@@ -8,6 +8,7 @@ import CalloutService from '../../services/callout.service';
 export class PresenceManager {
   private static client: Client | null = null;
   private static updateInterval: NodeJS.Timeout | null = null;
+  private static lastKnownCount = -1;
 
   /**
    * Инициализировать менеджер статуса
@@ -38,6 +39,10 @@ export class PresenceManager {
     try {
       // Получить количество активных каллаутов
       const activeCallouts = await CalloutService.getActiveCalloutsCount();
+
+      // Пропустить обновление если счётчик не изменился
+      if (activeCallouts === this.lastKnownCount) return;
+      this.lastKnownCount = activeCallouts;
 
       let activityName: string;
       let activityType: ActivityType;

@@ -48,7 +48,7 @@ export async function handleCalloutModalSubmit(
     const description = interaction.fields.getTextInputValue('description_input');
 
     // Получить подразделение из временного хранилища
-    const subdivisionId = getSubdivisionSelection(interaction.user.id);
+    const subdivisionId = getSubdivisionSelection(interaction.guild.id, interaction.user.id);
 
     if (!subdivisionId) {
       throw new CalloutError(
@@ -110,7 +110,7 @@ export async function handleCalloutModalSubmit(
 
     if (!permissionCheck.allowed) {
       // Очистить временное хранилище перед выходом
-      clearSubdivisionSelection(interaction.user.id);
+      clearSubdivisionSelection(interaction.guild.id, interaction.user.id);
       await interaction.editReply({
         content: permissionCheck.reason || `${EMOJI.ERROR} Недостаточно прав`,
       });
@@ -152,7 +152,7 @@ export async function handleCalloutModalSubmit(
     });
 
     // Очистить временное хранилище
-    clearSubdivisionSelection(interaction.user.id);
+    clearSubdivisionSelection(interaction.guild.id, interaction.user.id);
 
     // Записать время создания каллаута для rate limiting (администраторы не учитываются)
     await CalloutGatewayService.recordCalloutCreation(interaction.user.id, server.id, isAdmin);
@@ -193,7 +193,7 @@ export async function handleCalloutModalSubmit(
     });
 
     // Очистить временное хранилище даже при ошибке
-    clearSubdivisionSelection(interaction.user.id);
+    clearSubdivisionSelection(interaction.guild.id, interaction.user.id);
   }
 }
 

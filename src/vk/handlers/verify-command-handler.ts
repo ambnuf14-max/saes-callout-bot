@@ -171,17 +171,18 @@ async function notifyDiscordAboutVerification(
 
     // Залогировать событие в audit log
     try {
-      const { FactionModel } = await import('../../database/models');
+      const { FactionModel, ServerModel } = await import('../../database/models');
       const { logAuditEvent, AuditEventType } = await import('../../discord/utils/audit-logger');
 
       const faction = await FactionModel.findById(subdivision.faction_id);
       if (!faction) return;
 
-      // Получить guild
-      const guilds = discordBot.client.guilds.cache;
-      const guild = guilds.find(g => g.id === discordBot.client.guilds.cache.first()?.id);
+      // Получить guild по server_id подразделения
+      const server = await ServerModel.findById(subdivision.server_id);
+      const guild = server ? discordBot.client.guilds.cache.get(server.guild_id) : undefined;
 
       if (guild) {
+        const { resolveLogoThumbnailUrl } = await import('../../discord/utils/audit-logger');
         await logAuditEvent(guild, AuditEventType.VK_CHAT_LINKED, {
           userId: token.created_by,
           userName: 'Лидер фракции',
@@ -189,6 +190,7 @@ async function notifyDiscordAboutVerification(
           factionName: faction.name,
           vkChatId: vkChatId,
           chatTitle: chatTitle,
+          thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
         });
       }
     } catch (auditError) {

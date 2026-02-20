@@ -11,16 +11,21 @@ import {
 import PendingChangeModel from '../database/models/PendingChange';
 import SubdivisionModel from '../database/models/Subdivision';
 import FactionModel from '../database/models/Faction';
+import ServerModel from '../database/models/Server';
 import SubdivisionService from './subdivision.service';
 import { CalloutError } from '../utils/error-handler';
 import logger from '../utils/logger';
 import { Guild } from 'discord.js';
+import discordBot from '../discord/bot';
 import {
   logAuditEvent,
   logPendingChangeWithButtons,
+  editPendingChangeAuditMessage,
   AuditEventType,
   ChangeApprovedData,
   ChangeRejectedData,
+  ChangeCancelledData,
+  resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import { getChangeTypeLabel } from '../discord/utils/change-formatter';
 
@@ -332,7 +337,8 @@ export class PendingChangeService {
       throw new CalloutError('Запрос уже обработан', 'CHANGE_ALREADY_PROCESSED', 400);
     }
 
-    // Получить детали для audit log
+    // Получить детали ДО применения (после delete_subdivision подразделение исчезнет из JOIN)
+    const changeWithDetails = await PendingChangeModel.findWithDetails(changeId);
     const faction = await FactionModel.findById(change.faction_id);
     const changeTypeLabel = getChangeTypeLabel(change.change_type);
     const details = await this.getChangeDetails(change);
@@ -378,6 +384,18 @@ export class PendingChangeService {
       reviewedBy,
     });
 
+    // Редактировать исходное сообщение в audit log (убрать кнопки, показать итог)
+    if (changeWithDetails) {
+      try {
+        await editPendingChangeAuditMessage(guild, changeWithDetails, 'approved', reviewedBy);
+      } catch (error) {
+        logger.warn('Failed to edit pending change audit message on approve', {
+          changeId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
     // Отправить audit log уведомление
     if (faction) {
       try {
@@ -390,6 +408,8 @@ export class PendingChangeService {
           factionName: faction.name,
           details,
           reviewerName: reviewer.user.tag,
+          reviewerId: reviewedBy,
+          thumbnailUrl: resolveLogoThumbnailUrl(faction.logo_url),
         };
         await logAuditEvent(guild, AuditEventType.CHANGE_APPROVED, auditData);
       } catch (error) {
@@ -398,6 +418,19 @@ export class PendingChangeService {
           error: error instanceof Error ? error.message : error,
         });
       }
+    }
+
+    // DM уведомление автору запроса
+    try {
+      const requester = await discordBot.client.users.fetch(change.requested_by);
+      await requester.send(
+        `✅ **Твой запрос одобрен!**\n` +
+        `**Тип:** ${changeTypeLabel}\n` +
+        (faction ? `**Фракция:** ${faction.name}\n` : '') +
+        `**Одобрил:** <@${reviewedBy}>`
+      );
+    } catch {
+      // DM не критичны (пользователь мог закрыть их)
     }
   }
 
@@ -428,6 +461,21 @@ export class PendingChangeService {
       reason,
     });
 
+    // Редактировать исходное сообщение в audit log
+    if (guild) {
+      try {
+        const changeWithDetails = await PendingChangeModel.findWithDetails(changeId);
+        if (changeWithDetails) {
+          await editPendingChangeAuditMessage(guild, changeWithDetails, 'rejected', reviewedBy, reason);
+        }
+      } catch (error) {
+        logger.warn('Failed to edit pending change audit message on reject', {
+          changeId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
     // Отправить audit log уведомление
     if (guild) {
       try {
@@ -444,7 +492,9 @@ export class PendingChangeService {
             factionName: faction.name,
             details,
             reviewerName: reviewer.user.tag,
+            reviewerId: reviewedBy,
             reason: reason || 'Не указана',
+            thumbnailUrl: resolveLogoThumbnailUrl(faction.logo_url),
           };
           await logAuditEvent(guild, AuditEventType.CHANGE_REJECTED, auditData);
         }
@@ -454,6 +504,21 @@ export class PendingChangeService {
           error: error instanceof Error ? error.message : error,
         });
       }
+    }
+
+    // DM уведомление автору запроса
+    try {
+      const faction = await FactionModel.findById(change.faction_id);
+      const changeTypeLabel = getChangeTypeLabel(change.change_type);
+      const requester = await discordBot.client.users.fetch(change.requested_by);
+      await requester.send(
+        `❌ **Твой запрос отклонён**\n` +
+        `**Тип:** ${changeTypeLabel}\n` +
+        (faction ? `**Фракция:** ${faction.name}\n` : '') +
+        `**Причина:** ${reason || 'Не указана'}`
+      );
+    } catch {
+      // DM не критичны
     }
   }
 
@@ -486,6 +551,54 @@ export class PendingChangeService {
       changeType: change.change_type,
       cancelledBy: requesterId,
     });
+
+    // Получить реальное имя пользователя и guild
+    let requesterName = requesterId;
+    try {
+      const user = await discordBot.client.users.fetch(requesterId);
+      requesterName = user.displayName || user.username;
+    } catch {
+      // не критично
+    }
+
+    const server = await ServerModel.findById(change.server_id);
+    const guild = server ? discordBot.client.guilds.cache.get(server.guild_id) : undefined;
+
+    // Редактировать исходное сообщение в audit log
+    if (guild) {
+      try {
+        const changeWithDetails = await PendingChangeModel.findWithDetails(changeId);
+        if (changeWithDetails) {
+          await editPendingChangeAuditMessage(guild, changeWithDetails, 'cancelled');
+        }
+      } catch (error) {
+        logger.warn('Failed to edit pending change audit message on cancel', {
+          changeId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+    }
+
+    // Логировать отмену в audit log
+    try {
+      if (guild) {
+        const faction = await FactionModel.findById(change.faction_id);
+        const auditData: ChangeCancelledData = {
+          userId: requesterId,
+          userName: requesterName,
+          changeType: getChangeTypeLabel(change.change_type),
+          factionName: faction?.name || 'Неизвестно',
+          details: `Запрос #${changeId} отменён автором`,
+          thumbnailUrl: resolveLogoThumbnailUrl(faction?.logo_url),
+        };
+        await logAuditEvent(guild, AuditEventType.CHANGE_CANCELLED, auditData);
+      }
+    } catch (auditError) {
+      logger.error('Failed to log change cancellation audit event', {
+        error: auditError instanceof Error ? auditError.message : auditError,
+        changeId,
+      });
+    }
   }
 
   /**

@@ -8,6 +8,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
+import { safeParseInt } from '../../utils/validators';
 import CalloutService from '../../services/callout.service';
 import { getUserRoleIds } from '../utils/permission-checker';
 import { EMOJI, MESSAGES } from '../../config/constants';
@@ -22,7 +23,7 @@ export async function handleCloseCalloutButton(interaction: ButtonInteraction) {
 
   const customId = interaction.customId;
   // Формат: close_callout_{calloutId}
-  const calloutId = parseInt(customId.replace('close_callout_', ''));
+  const calloutId = safeParseInt(customId.replace('close_callout_', ''));
 
   if (isNaN(calloutId)) {
     await interaction.reply({
@@ -113,7 +114,7 @@ export async function handleCloseCalloutModal(interaction: ModalSubmitInteractio
 
   const customId = interaction.customId;
   // Формат: close_callout_modal_{calloutId}
-  const calloutId = parseInt(customId.replace('close_callout_modal_', ''));
+  const calloutId = safeParseInt(customId.replace('close_callout_modal_', ''));
 
   if (isNaN(calloutId)) {
     await interaction.reply({

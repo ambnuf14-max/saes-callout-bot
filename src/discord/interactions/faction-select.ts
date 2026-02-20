@@ -6,6 +6,7 @@ import { buildSubdivisionDetailPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { handleInteractionError } from '../utils/subdivision-settings-helper';
+import { safeParseInt } from '../../utils/validators';
 
 /**
  * Обработчик select menu для выбора подразделения
@@ -43,7 +44,7 @@ export async function handleFactionSelect(interaction: StringSelectMenuInteracti
 async function handleSelectSubdivision(interaction: StringSelectMenuInteraction) {
   await interaction.deferUpdate();
 
-  const subdivisionId = parseInt(interaction.values[0]);
+  const subdivisionId = safeParseInt(interaction.values[0]);
 
   // Получить подразделение
   const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
