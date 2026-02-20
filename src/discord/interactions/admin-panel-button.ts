@@ -789,10 +789,6 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Кнопки редактирования полей embed типа фракции (показывают modal)
     else if (customId.startsWith('admin_type_embed_edit_')) {
       const { getFactionTypeDraft } = await import('./admin-panel-modal');
-      const typeId = safeParseInt(customId.replace(/^admin_type_embed_edit_[^_]+_/, ''));
-      const draft = getFactionTypeDraft(typeId);
-      const type = await FactionTypeService.getFactionTypeById(typeId);
-      const current = type ? { ...type, ...draft } : draft;
 
       let field = '';
       if (customId.startsWith('admin_type_embed_edit_name_')) field = 'name';
@@ -805,6 +801,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       else if (customId.startsWith('admin_type_embed_edit_image_')) field = 'image';
       else if (customId.startsWith('admin_type_embed_edit_color_')) field = 'color';
       else if (customId.startsWith('admin_type_embed_edit_footer_')) field = 'footer';
+
+      const typeId = safeParseInt(customId.replace(`admin_type_embed_edit_${field}_`, ''));
+      const draft = getFactionTypeDraft(typeId);
+      const type = await FactionTypeService.getFactionTypeById(typeId);
+      const current = type ? { ...type, ...draft } : draft;
 
       if (field) {
         const currentValues = {

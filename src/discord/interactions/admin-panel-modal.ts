@@ -108,6 +108,11 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
     if (customId === 'admin_modal_add_fact') {
       await handleAddFaction(interaction, server.id);
     }
+    // Редактирование типа фракции
+    else if (customId.startsWith('admin_modal_edit_fact_type_')) {
+      const typeId = safeParseInt(customId.replace('admin_modal_edit_fact_type_', ''));
+      await handleEditFactionType(interaction, typeId);
+    }
     // Редактирование фракции
     else if (customId.startsWith('admin_modal_edit_fact_')) {
       const factionId = safeParseInt(customId.replace('admin_modal_edit_fact_', ''));
@@ -116,11 +121,6 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
     // Создание типа фракции
     else if (customId === 'admin_modal_create_fact_type') {
       await handleCreateFactionType(interaction, server.id);
-    }
-    // Редактирование типа фракции
-    else if (customId.startsWith('admin_modal_edit_fact_type_')) {
-      const typeId = safeParseInt(customId.replace('admin_modal_edit_fact_type_', ''));
-      await handleEditFactionType(interaction, typeId);
     }
     // Добавление шаблона подразделения
     else if (customId.startsWith('admin_modal_add_template_')) {
