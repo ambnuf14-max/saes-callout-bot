@@ -335,8 +335,13 @@ export function buildLeaderRolesSection(server: Server) {
     );
   }
 
-  // Кнопки: назад
+  // Кнопки: назад + ввод вручную
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('role_manual_input_admin_add_leader_role')
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('admin_back')
       .setLabel('Назад')
@@ -399,6 +404,11 @@ export function buildCalloutRolesSection(server: Server) {
   }
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('role_manual_input_admin_add_callout_role')
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('admin_back')
       .setLabel('Назад')
@@ -1052,6 +1062,11 @@ export async function buildTemplateRolePanel(typeId: number, templateId: number,
 
   const buttons: ButtonBuilder[] = [
     new ButtonBuilder()
+      .setCustomId(`role_manual_input_admin_template_role_${typeId}_${templateId}`)
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`admin_template_role_back_${typeId}_${templateId}`)
       .setLabel('Назад к шаблону')
       .setStyle(ButtonStyle.Secondary),
@@ -1206,6 +1221,11 @@ export async function buildAdminSubEditorRolePanel(
     .setPlaceholder('Выберите роль подразделения...');
 
   const buttons: ButtonBuilder[] = [
+    new ButtonBuilder()
+      .setCustomId(`role_manual_input_admin_sub_editor_role_${factionId}_${subdivisionId}`)
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`admin_sub_editor_role_back_${factionId}_${subdivisionId}`)
       .setLabel('Назад к редактору')

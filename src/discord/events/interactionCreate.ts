@@ -19,6 +19,7 @@ import {
   handleAuditLogButton,
 } from '../interactions/admin-panel-button';
 import { handleAdminPanelModal, handleAuditLogModal } from '../interactions/admin-panel-modal';
+import { handleRoleManualButton, handleRoleManualModal } from '../interactions/role-manual-input';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -59,7 +60,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId === 'create_callout') {
+      if (interaction.customId.startsWith('role_manual_input_')) {
+        await handleRoleManualButton(interaction);
+      } else if (interaction.customId === 'create_callout') {
         await handleCreateCalloutButton(interaction);
       } else if (
         interaction.customId.startsWith('setup_mode_') ||
@@ -90,7 +93,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId === 'callout_modal') {
+      if (interaction.customId.startsWith('role_modal_')) {
+        await handleRoleManualModal(interaction);
+      } else if (interaction.customId === 'callout_modal') {
         await handleCalloutModalSubmit(interaction);
       } else if (interaction.customId.startsWith('close_callout_modal_')) {
         await handleCloseCalloutModal(interaction);

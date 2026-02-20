@@ -268,6 +268,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
       const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
+          .setCustomId('role_manual_input_admin_fact_step1_role')
+          .setLabel('Ввести ID')
+          .setEmoji('⌨️')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId('admin_factions')
           .setLabel('Отмена')
           .setEmoji('❌')
@@ -1676,6 +1681,11 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       const row = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect);
 
       const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('role_manual_input_admin_fact_step2_role')
+          .setLabel('Ввести ID')
+          .setEmoji('⌨️')
+          .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId('admin_factions')
           .setLabel('Отмена')

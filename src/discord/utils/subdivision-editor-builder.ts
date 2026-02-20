@@ -576,6 +576,11 @@ export function buildSubdivisionSettingsPanelCore(
       .setLabel('Привязки')
       .setEmoji('🔗')
       .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`role_manual_input_${config.roleSelectId}`)
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
   ];
 
   if (config.deleteButtonId) {

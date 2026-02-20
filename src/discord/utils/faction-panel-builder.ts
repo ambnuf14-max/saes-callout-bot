@@ -471,6 +471,11 @@ export async function buildSubdivisionRolePanel(subdivisionId: number, draftRole
 
   const buttons: ButtonBuilder[] = [
     new ButtonBuilder()
+      .setCustomId(`role_manual_input_subdivision_role_${subdivisionId}`)
+      .setLabel('Ввести ID')
+      .setEmoji('⌨️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`faction_configure_embed_${subdivisionId}`)
       .setLabel('Назад к редактору')
       .setStyle(ButtonStyle.Secondary),
