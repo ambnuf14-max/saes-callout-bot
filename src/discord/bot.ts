@@ -18,6 +18,7 @@ import historyCommand from './commands/history';
 // Импорт обработчиков событий
 import readyHandler from './events/ready';
 import interactionCreateHandler from './events/interactionCreate';
+import channelDeleteHandler from './events/channelDelete';
 
 /**
  * Класс Discord бота
@@ -70,6 +71,12 @@ class DiscordBot {
 
     this.client.on('interactionCreate', (interaction) =>
       interactionCreateHandler(interaction, this.commands)
+    );
+
+    this.client.on('channelDelete', (channel) =>
+      channelDeleteHandler(channel).catch(err =>
+        logger.error('Unhandled error in channelDelete handler', { error: err instanceof Error ? err.message : err })
+      )
     );
 
     logger.info('Event handlers registered');
