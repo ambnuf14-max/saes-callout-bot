@@ -4,7 +4,6 @@ import {
   Partials,
   REST,
   Routes,
-  SlashCommandBuilder,
   Collection,
 } from 'discord.js';
 import config from '../config/config';
@@ -59,7 +58,16 @@ class DiscordBot {
    * Регистрация обработчиков событий
    */
   private registerEventHandlers() {
-    this.client.once('clientReady', () => readyHandler(this.client));
+    this.client.once('clientReady', async () => {
+      const guildIds = Array.from(this.client.guilds.cache.keys());
+      await this.deployCommands(guildIds);
+      readyHandler(this.client);
+    });
+
+    this.client.on('guildCreate', async (guild) => {
+      await this.deployCommands([guild.id]);
+    });
+
     this.client.on('interactionCreate', (interaction) =>
       interactionCreateHandler(interaction, this.commands)
     );
@@ -68,30 +76,28 @@ class DiscordBot {
   }
 
   /**
-   * Развертывание slash команд в Discord
+   * Развертывание slash команд для указанных гильдий
    */
-  async deployCommands() {
-    try {
-      const commandsData = Array.from(this.commands.values()).map((cmd) =>
-        cmd.data.toJSON()
-      );
+  async deployCommands(guildIds: string[]) {
+    const commandsData = Array.from(this.commands.values()).map((cmd) =>
+      cmd.data.toJSON()
+    );
 
-      logger.info('Deploying slash commands to Discord...', {
-        count: commandsData.length,
-      });
+    const rest = new REST({ version: '10' }).setToken(config.discord.token);
 
-      const rest = new REST({ version: '10' }).setToken(config.discord.token);
-
-      // Регистрация команд глобально (может занять до 1 часа)
-      // Для быстрого тестирования используйте guild-specific команды
-      await rest.put(Routes.applicationCommands(config.discord.clientId), {
-        body: commandsData,
-      });
-
-      logger.info('Slash commands deployed successfully');
-    } catch (error) {
-      logger.error('Failed to deploy slash commands', { error });
-      throw error;
+    for (const guildId of guildIds) {
+      try {
+        await rest.put(
+          Routes.applicationGuildCommands(config.discord.clientId, guildId),
+          { body: commandsData }
+        );
+        logger.info('Slash commands deployed to guild', { guildId });
+      } catch (error) {
+        logger.error('Failed to deploy slash commands to guild', {
+          guildId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
     }
   }
 
@@ -102,9 +108,6 @@ class DiscordBot {
     try {
       this.registerCommands();
       this.registerEventHandlers();
-
-      // Развертывание команд в Discord
-      await this.deployCommands();
 
       // Подключение к Discord
       await this.client.login(config.discord.token);
