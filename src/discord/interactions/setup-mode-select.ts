@@ -725,7 +725,7 @@ export async function createCalloutPanel(channel: TextChannel) {
     .setDescription(MESSAGES.CALLOUT.DESCRIPTION_PANEL)
     .setColor(COLORS.ACTIVE)
     .setFooter({ text: 'SAES Callout System' })
-    .setThumbnail('https://www.upload.ee/image/19094728/red_logo_saes.png')
+    .setThumbnail('https://cdn.discordapp.com/emojis/1377308280669605928.png?size=128')
     .setTimestamp();
 
   const button = new ButtonBuilder()
