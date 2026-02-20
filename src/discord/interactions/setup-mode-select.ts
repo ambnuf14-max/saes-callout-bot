@@ -552,6 +552,15 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
         deny: [PermissionFlagsBits.SendMessages],
       },
+      {
+        id: guild.members.me!.id, // Бот — может отправлять сообщения
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      },
     ],
   });
 
