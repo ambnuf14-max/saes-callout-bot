@@ -14,6 +14,7 @@ import {
   buildFactionTypeDetailPanel,
   buildPendingChangesPanel,
   buildTemplateEditorPanel,
+  buildFactionTypeEmbedEditorPanel,
   buildFactionSubdivisionsPanel,
   buildAdminSubdivisionSettingsPanel,
   buildAdminSubdivisionEditorPanel,
@@ -29,7 +30,7 @@ import {
 import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
-import { SubdivisionTemplate, Subdivision } from '../../types/database.types';
+import { SubdivisionTemplate, Subdivision, FactionType } from '../../types/database.types';
 
 // Временное хранилище для draft изменений шаблонов
 const templateDraftState = createDraftState<SubdivisionTemplate>();
@@ -44,6 +45,21 @@ export function setTemplateDraft(typeId: number, templateId: number, data: Parti
 
 export function clearTemplateDraft(typeId: number, templateId: number) {
   templateDraftState.clear(`${typeId}_${templateId}`);
+}
+
+// Временное хранилище для draft embed-настроек типа фракции
+const factionTypeDraftState = createDraftState<FactionType>();
+
+export function getFactionTypeDraft(typeId: number): Partial<FactionType> | undefined {
+  return factionTypeDraftState.get(typeId.toString());
+}
+
+export function setFactionTypeDraft(typeId: number, data: Partial<FactionType>) {
+  factionTypeDraftState.set(typeId.toString(), data);
+}
+
+export function clearFactionTypeDraft(typeId: number) {
+  factionTypeDraftState.clear(typeId.toString());
 }
 
 // Временное хранилище для draft изменений подразделений (администратор, прямое редактирование)
@@ -180,6 +196,47 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
       await handleTemplateFieldEdit(interaction, typeId, templateId, 'logo');
+    }
+    // Редактирование embed-настроек типа фракции
+    else if (customId.startsWith('type_embed_modal_name_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_name_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'name');
+    }
+    else if (customId.startsWith('type_embed_modal_logo_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_logo_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'logo');
+    }
+    else if (customId.startsWith('type_embed_modal_short_desc_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_short_desc_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'short_desc');
+    }
+    else if (customId.startsWith('type_embed_modal_title_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_title_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'title');
+    }
+    else if (customId.startsWith('type_embed_modal_description_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_description_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'description');
+    }
+    else if (customId.startsWith('type_embed_modal_color_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_color_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'color');
+    }
+    else if (customId.startsWith('type_embed_modal_author_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_author_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'author');
+    }
+    else if (customId.startsWith('type_embed_modal_footer_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_footer_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'footer');
+    }
+    else if (customId.startsWith('type_embed_modal_image_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_image_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'image');
+    }
+    else if (customId.startsWith('type_embed_modal_thumbnail_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_modal_thumbnail_', ''));
+      await handleFactionTypeEmbedFieldEdit(interaction, typeId, 'thumbnail');
     }
     // Отклонение изменения с причиной
     else if (customId.startsWith('admin_modal_reject_change_')) {
@@ -552,6 +609,34 @@ async function handleSubEditorFieldEdit(
   });
 }
 
+
+/**
+ * Редактирование поля embed-настроек типа фракции (draft-based)
+ */
+async function handleFactionTypeEmbedFieldEdit(
+  interaction: ModalSubmitInteraction,
+  typeId: number,
+  field: string
+) {
+  await interaction.deferUpdate();
+
+  const result = parseEmbedFieldFromModal(interaction, field, { nameInputCustomId: 'type_name', validateUrls: true });
+  if (!result.ok) {
+    await interaction.followUp({ content: result.errorMessage, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  setFactionTypeDraft(typeId, result.data as Partial<FactionType>);
+
+  const currentDraft = getFactionTypeDraft(typeId);
+  const panel = await buildFactionTypeEmbedEditorPanel(typeId, currentDraft);
+  await interaction.editReply(panel);
+
+  await interaction.followUp({
+    content: `${EMOJI.SUCCESS} Предпросмотр обновлен. Нажмите "Сохранить" чтобы применить изменения.`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
 
 /**
  * Обработчик модальных окон из Audit Log канала (audit_modal_reject_change_)

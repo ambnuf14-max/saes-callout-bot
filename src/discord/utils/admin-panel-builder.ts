@@ -749,7 +749,7 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
   const sortedTemplates = typeWithTemplates.templates
     .sort((a, b) => a.display_order - b.display_order);
 
-  const mainButtonsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const mainButtonComponents: ButtonBuilder[] = [
     new ButtonBuilder()
       .setCustomId(`admin_add_template_${typeId}`)
       .setLabel('Добавить шаблон')
@@ -760,7 +760,19 @@ export async function buildFactionTypeDetailPanel(typeId: number) {
       .setLabel('Редактировать тип')
       .setEmoji('✏️')
       .setStyle(ButtonStyle.Primary),
-  );
+  ];
+
+  if (sortedTemplates.length === 0) {
+    mainButtonComponents.push(
+      new ButtonBuilder()
+        .setCustomId(`admin_type_embed_${typeId}`)
+        .setLabel('Embed по умолчанию')
+        .setEmoji('🎨')
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  const mainButtonsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...mainButtonComponents);
 
   const secondButtonsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -994,6 +1006,58 @@ export async function buildTemplateEditorPanel(
         .setCustomId(`admin_delete_template_${typeId}_${templateId}`)
         .setLabel('Удалить')
         .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`admin_view_fact_type_${typeId}`)
+        .setLabel('Назад')
+        .setStyle(ButtonStyle.Secondary),
+    ],
+  });
+}
+
+/**
+ * Панель редактирования embed-настроек типа фракции (применяется к дефолтному подразделению)
+ */
+export async function buildFactionTypeEmbedEditorPanel(
+  typeId: number,
+  draftData?: Partial<FactionType>
+) {
+  const type = await FactionTypeService.getFactionTypeById(typeId);
+
+  if (!type) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.ERROR)
+      .setTitle(`${EMOJI.ERROR} Тип не найден`)
+      .setDescription('Тип фракции не найден или был удален.');
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('admin_back_to_fact_types')
+        .setLabel('Назад к типам')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [row] };
+  }
+
+  const currentData = draftData ? { ...type, ...draftData } : type;
+
+  return buildSubdivisionEditorPanel(currentData, {
+    editorTitle: `🎨 Embed по умолчанию: ${type.name}`,
+    editorDescription:
+      'Настройте embed для дефолтного подразделения.\n' +
+      'Применяется при создании фракции этого типа без шаблонов подразделений.\n\n' +
+      '**После завершения нажмите "Сохранить"**',
+    settingsSectionTitle: 'Настройки типа',
+    selectMenuId: 'type_embed_list_preview',
+    selectMenuPlaceholder: 'Предпросмотр в списке подразделений',
+    idPrefix: 'type_embed',
+    idSuffix: `${typeId}`,
+    roleButtonId: `type_embed_set_role_${typeId}`,
+    actionButtons: [
+      new ButtonBuilder()
+        .setCustomId(`type_embed_save_${typeId}`)
+        .setLabel('Сохранить')
+        .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`admin_view_fact_type_${typeId}`)
         .setLabel('Назад')

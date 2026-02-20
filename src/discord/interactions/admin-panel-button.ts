@@ -41,6 +41,7 @@ import {
   buildAdminSubEditorRolePanel,
   buildAdminLinksPanel,
   buildAdminDeleteConfirmation,
+  buildFactionTypeEmbedEditorPanel,
 } from '../utils/admin-panel-builder';
 import { buildVerificationInstructions } from '../utils/faction-panel-builder';
 import { VerificationService } from '../../services/verification.service';
@@ -152,6 +153,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     'admin_sub_edit_image_',
     'admin_sub_edit_color_',
     'admin_sub_edit_footer_',
+    'type_embed_edit_name_',
+    'type_embed_edit_logo_',
+    'type_embed_edit_short_desc_',
+    'type_embed_edit_author_',
+    'type_embed_edit_title_',
+    'type_embed_edit_thumbnail_',
+    'type_embed_edit_description_',
+    'type_embed_edit_image_',
+    'type_embed_edit_color_',
+    'type_embed_edit_footer_',
   ];
   const isModalButton = modalButtons.some(prefix => customId === prefix || customId.startsWith(prefix)) ||
     customId.startsWith('admin_edit_faction_') ||
@@ -729,6 +740,59 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(customId.replace('admin_view_fact_type_', ''));
       const panel = await buildFactionTypeDetailPanel(typeId);
       await interaction.editReply(panel);
+    }
+
+    // Открыть редактор embed-настроек типа фракции
+    else if (customId.startsWith('admin_type_embed_')) {
+      const typeId = safeParseInt(customId.replace('admin_type_embed_', ''));
+      const { getFactionTypeDraft } = await import('./admin-panel-modal');
+      const draft = getFactionTypeDraft(typeId);
+      const panel = await buildFactionTypeEmbedEditorPanel(typeId, draft);
+      await interaction.editReply(panel);
+    }
+
+    // Сохранить embed-настройки типа фракции
+    else if (customId.startsWith('type_embed_save_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_save_', ''));
+      const { getFactionTypeDraft, clearFactionTypeDraft } = await import('./admin-panel-modal');
+      const draftData = getFactionTypeDraft(typeId);
+
+      if (!draftData || Object.keys(draftData).length === 0) {
+        await interaction.editReply({ content: `${EMOJI.WARNING} Нет изменений для сохранения`, embeds: [], components: [] });
+        return;
+      }
+
+      await FactionTypeService.updateFactionTypeEmbed(typeId, draftData as any);
+      clearFactionTypeDraft(typeId);
+
+      const panel = await buildFactionTypeDetailPanel(typeId);
+      await interaction.editReply(panel);
+
+      await interaction.followUp({
+        content: `${EMOJI.SUCCESS} Embed-настройки типа сохранены.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Кнопка роли в редакторе типа (не применима на уровне типа)
+    else if (customId.startsWith('type_embed_set_role_')) {
+      const typeId = safeParseInt(customId.replace('type_embed_set_role_', ''));
+      await interaction.editReply({
+        content: '',
+        embeds: [
+          new EmbedBuilder()
+            .setColor(COLORS.INFO)
+            .setDescription('ℹ️ Роль задаётся на уровне шаблона подразделения, а не на уровне типа.'),
+        ],
+        components: [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`admin_type_embed_${typeId}`)
+              .setLabel('Назад')
+              .setStyle(ButtonStyle.Secondary),
+          ),
+        ],
+      });
     }
 
     // Создание нового типа фракции (показать modal)

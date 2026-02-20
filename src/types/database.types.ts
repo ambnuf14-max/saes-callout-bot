@@ -265,6 +265,19 @@ export interface FactionType {
   name: string;
   description: string | null;
   is_active: boolean;
+  embed_author_name: string | null;
+  embed_author_url: string | null;
+  embed_author_icon_url: string | null;
+  embed_title: string | null;
+  embed_title_url: string | null;
+  embed_description: string | null;
+  embed_color: string | null;
+  embed_image_url: string | null;
+  embed_thumbnail_url: string | null;
+  embed_footer_text: string | null;
+  embed_footer_icon_url: string | null;
+  logo_url: string | null;
+  short_description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -279,6 +292,22 @@ export interface UpdateFactionTypeDTO {
   name?: string;
   description?: string;
   is_active?: boolean;
+}
+
+export interface UpdateFactionTypeEmbedDTO {
+  embed_author_name?: string | null;
+  embed_author_url?: string | null;
+  embed_author_icon_url?: string | null;
+  embed_title?: string | null;
+  embed_title_url?: string | null;
+  embed_description?: string | null;
+  embed_color?: string | null;
+  embed_image_url?: string | null;
+  embed_thumbnail_url?: string | null;
+  embed_footer_text?: string | null;
+  embed_footer_icon_url?: string | null;
+  logo_url?: string | null;
+  short_description?: string | null;
 }
 
 // ============ SUBDIVISION TEMPLATES ============

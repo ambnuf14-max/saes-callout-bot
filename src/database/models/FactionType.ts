@@ -4,6 +4,7 @@ import {
   FactionType,
   CreateFactionTypeDTO,
   UpdateFactionTypeDTO,
+  UpdateFactionTypeEmbedDTO,
   FactionTypeWithTemplates,
 } from '../../types/database.types';
 
@@ -100,6 +101,41 @@ export class FactionTypeModel {
 
     logger.info('Faction type updated', { typeId: id });
 
+    return await this.findById(id);
+  }
+
+  /**
+   * Обновить embed-настройки типа
+   */
+  static async updateEmbed(id: number, data: UpdateFactionTypeEmbedDTO): Promise<FactionType | undefined> {
+    const fields = [
+      'embed_author_name', 'embed_author_url', 'embed_author_icon_url',
+      'embed_title', 'embed_title_url', 'embed_description', 'embed_color',
+      'embed_image_url', 'embed_thumbnail_url', 'embed_footer_text',
+      'embed_footer_icon_url', 'logo_url', 'short_description',
+    ] as const;
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    for (const field of fields) {
+      if ((data as any)[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        params.push((data as any)[field]);
+      }
+    }
+
+    if (updates.length === 0) return await this.findById(id);
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+
+    await database.run(
+      `UPDATE faction_types SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    logger.info('Faction type embed updated', { typeId: id });
     return await this.findById(id);
   }
 

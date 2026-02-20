@@ -2,6 +2,7 @@ import {
   FactionType,
   CreateFactionTypeDTO,
   UpdateFactionTypeDTO,
+  UpdateFactionTypeEmbedDTO,
   SubdivisionTemplate,
   CreateSubdivisionTemplateDTO,
   UpdateSubdivisionTemplateDTO,
@@ -216,6 +217,33 @@ export class FactionTypeService {
 
     if (templates.length === 0) {
       // Если нет шаблонов - дефолтное подразделение уже создано в Faction.create()
+      // Применить embed-настройки типа к дефолтному подразделению (если заданы)
+      const factionType = await FactionTypeModel.findById(typeId);
+      if (factionType && this.hasTypeEmbedSettings(factionType)) {
+        const defaultSub = await SubdivisionModel.findDefaultByFactionId(factionId);
+        if (defaultSub) {
+          await SubdivisionModel.update(defaultSub.id, {
+            embed_author_name: factionType.embed_author_name || undefined,
+            embed_author_url: factionType.embed_author_url || undefined,
+            embed_author_icon_url: factionType.embed_author_icon_url || undefined,
+            embed_title: factionType.embed_title || undefined,
+            embed_title_url: factionType.embed_title_url || undefined,
+            embed_description: factionType.embed_description || undefined,
+            embed_color: factionType.embed_color || undefined,
+            embed_image_url: factionType.embed_image_url || undefined,
+            embed_thumbnail_url: factionType.embed_thumbnail_url || undefined,
+            embed_footer_text: factionType.embed_footer_text || undefined,
+            embed_footer_icon_url: factionType.embed_footer_icon_url || undefined,
+            short_description: factionType.short_description || undefined,
+            logo_url: factionType.logo_url || undefined,
+          });
+          logger.debug('Applied faction type embed settings to default subdivision', {
+            factionId,
+            typeId,
+            subdivisionId: defaultSub.id,
+          });
+        }
+      }
       logger.debug('No templates found, keeping default subdivision');
       return [];
     }
@@ -293,6 +321,42 @@ export class FactionTypeService {
       template.embed_author_name ||
       template.embed_footer_text
     );
+  }
+
+  /**
+   * Проверить, есть ли embed-настройки в типе фракции
+   */
+  private static hasTypeEmbedSettings(type: FactionType): boolean {
+    return !!(
+      type.embed_title || type.embed_description || type.embed_color ||
+      type.embed_image_url || type.embed_thumbnail_url || type.embed_author_name ||
+      type.embed_footer_text || type.logo_url || type.short_description ||
+      type.embed_author_url || type.embed_author_icon_url || type.embed_title_url ||
+      type.embed_footer_icon_url
+    );
+  }
+
+  /**
+   * Обновить embed-настройки типа фракции
+   */
+  static async updateFactionTypeEmbed(
+    id: number,
+    data: UpdateFactionTypeEmbedDTO
+  ): Promise<FactionType | undefined> {
+    const type = await FactionTypeModel.findById(id);
+    if (!type) {
+      throw new CalloutError('Тип фракции не найден', 'TYPE_NOT_FOUND', 404);
+    }
+
+    if (data.embed_color && !this.isValidHexColor(data.embed_color)) {
+      throw new CalloutError(
+        'Неверный формат цвета. Используйте hex (например, #FF0000)',
+        'INVALID_COLOR_FORMAT',
+        400
+      );
+    }
+
+    return await FactionTypeModel.updateEmbed(id, data);
   }
 
   /**
