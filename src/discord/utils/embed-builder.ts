@@ -129,11 +129,6 @@ export function buildResponseEmbed(
         value: response.vk_user_name,
         inline: true,
       },
-      {
-        name: 'Тип ответа',
-        value: getResponseTypeLabel(response.response_type),
-        inline: true,
-      },
     ])
     .setFooter({ text: `Ответ из ${platformName}` })
     .setTimestamp(new Date(response.created_at));
@@ -248,22 +243,6 @@ export function buildStatsEmbed(stats: {
       },
     ])
     .setTimestamp();
-}
-
-/**
- * Получить метку для типа ответа
- */
-function getResponseTypeLabel(responseType: string): string {
-  switch (responseType) {
-    case 'acknowledged':
-      return 'Принято к сведению';
-    case 'on_way':
-      return 'В пути';
-    case 'arrived':
-      return 'Прибыли на место';
-    default:
-      return responseType;
-  }
 }
 
 export default {

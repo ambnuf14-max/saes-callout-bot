@@ -11,13 +11,12 @@ export interface CalloutResponsePayload {
   action: 'respond';
   callout_id: number;
   subdivision_id: number;
-  type?: 'acknowledged' | 'on_way';
 }
 
 /**
- * Создать клавиатуру с кнопками "Принято" и "В пути"
+ * Создать клавиатуру с кнопкой "Отреагировать на инцидент"
  * Используем компактный формат callback_data для соблюдения лимита Telegram (64 байта):
- * r:{callout_id}:{subdivision_id}:{type_short}
+ * r:{callout_id}:{subdivision_id}
  */
 export function buildDetailedCalloutKeyboard(
   calloutId: number,
@@ -28,7 +27,7 @@ export function buildDetailedCalloutKeyboard(
       [
         {
           text: 'Отреагировать на инцидент',
-          callback_data: `r:${calloutId}:${subdivisionId}:a`,
+          callback_data: `r:${calloutId}:${subdivisionId}`,
         },
       ],
     ],
@@ -38,17 +37,15 @@ export function buildDetailedCalloutKeyboard(
 /**
  * Распарсить компактный callback_data в CalloutResponsePayload
  */
-export function parseCompactCallbackData(data: string): (CalloutResponsePayload & { type?: 'acknowledged' | 'on_way' }) | null {
-  // Компактный формат: r:{callout_id}:{subdivision_id}:{type_short}
+export function parseCompactCallbackData(data: string): CalloutResponsePayload | null {
+  // Компактный формат: r:{callout_id}:{subdivision_id}
   if (data.startsWith('r:')) {
     const parts = data.split(':');
     if (parts.length < 3) return null;
-    const typeMap: Record<string, 'acknowledged' | 'on_way'> = { a: 'acknowledged', w: 'on_way' };
     return {
       action: 'respond',
       callout_id: parseInt(parts[1], 10),
       subdivision_id: parseInt(parts[2], 10),
-      type: parts[3] ? typeMap[parts[3]] : undefined,
     };
   }
 

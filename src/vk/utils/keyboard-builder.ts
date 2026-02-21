@@ -11,17 +11,16 @@ export interface CalloutResponsePayload {
   action: 'respond';
   callout_id: number;
   subdivision_id: number;
-  type?: 'acknowledged' | 'on_way';
 }
 
 /**
- * Создать клавиатуру с кнопками "Принято" и "В пути"
+ * Создать клавиатуру с кнопкой "Отреагировать на инцидент"
  */
 export function buildDetailedCalloutKeyboard(
   calloutId: number,
   subdivisionId: number
 ): string {
-  const acknowledgedPayload: CalloutResponsePayload = {
+  const payload: CalloutResponsePayload = {
     action: 'respond',
     callout_id: calloutId,
     subdivision_id: subdivisionId,
@@ -30,7 +29,7 @@ export function buildDetailedCalloutKeyboard(
   const keyboard = Keyboard.builder()
     .callbackButton({
       label: 'Отреагировать на инцидент',
-      payload: JSON.stringify({ ...acknowledgedPayload, type: 'acknowledged' }),
+      payload: JSON.stringify(payload),
       color: Keyboard.NEGATIVE_COLOR,
     })
     .inline()

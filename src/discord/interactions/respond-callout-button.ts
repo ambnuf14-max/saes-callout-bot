@@ -1,8 +1,5 @@
 import {
   ButtonInteraction,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
@@ -15,7 +12,7 @@ import { CalloutError } from '../../utils/error-handler';
 
 /**
  * Обработчик нажатия кнопки "Отреагировать" на каллаут из Discord.
- * Показывает ephemeral с выбором "Принято" / "В пути".
+ * Сразу фиксирует реагирование без выбора типа.
  */
 export async function handleRespondCalloutButton(interaction: ButtonInteraction): Promise<void> {
   if (!interaction.guild) return;
@@ -29,30 +26,23 @@ export async function handleRespondCalloutButton(interaction: ButtonInteraction)
     return;
   }
 
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   try {
     const callout = await CalloutModel.findById(calloutId);
     if (!callout) {
-      await interaction.reply({
-        content: MESSAGES.CALLOUT.ERROR_NOT_FOUND,
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_NOT_FOUND });
       return;
     }
 
     if (callout.status !== CALLOUT_STATUS.ACTIVE) {
-      await interaction.reply({
-        content: MESSAGES.CALLOUT.ERROR_ALREADY_CLOSED,
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_ALREADY_CLOSED });
       return;
     }
 
     const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
     if (!subdivision) {
-      await interaction.reply({
-        content: `${EMOJI.ERROR} Подразделение не найдено`,
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено` });
       return;
     }
 
@@ -64,30 +54,34 @@ export async function handleRespondCalloutButton(interaction: ButtonInteraction)
     const hasLeaderAccess = await isLeader(member);
 
     if (!hasSubdivisionRole && !hasLeaderAccess) {
-      await interaction.reply({
-        content: MESSAGES.CALLOUT.ERROR_NO_RESPOND_PERMISSION,
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_NO_RESPOND_PERMISSION });
       return;
     }
 
-    // Показать выбор типа реакции
-    const ackButton = new ButtonBuilder()
-      .setCustomId(`respond_ack_${calloutId}`)
-      .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_ACK)
-      .setStyle(ButtonStyle.Success);
+    const userName = interaction.member && 'displayName' in interaction.member
+      ? (interaction.member.displayName as string)
+      : interaction.user.username;
 
-    const onWayButton = new ButtonBuilder()
-      .setCustomId(`respond_onway_${calloutId}`)
-      .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_ONWAY)
-      .setStyle(ButtonStyle.Primary);
+    const { response, changed } = await SyncService.handleDiscordResponse(
+      callout,
+      subdivision,
+      interaction.user.id,
+      userName
+    );
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(ackButton, onWayButton);
+    let content: string;
+    if (!changed) {
+      content = `${EMOJI.WARNING} Подразделение уже отреагировало на инцидент **#${calloutId}**`;
+    } else {
+      content = `${EMOJI.SUCCESS} Реагирование зафиксировано для инцидента **#${calloutId}**!`;
+    }
 
-    await interaction.reply({
-      content: `Выберите тип реагирования на инцидент **#${calloutId}** (${subdivision.name}):`,
-      components: [row],
-      flags: MessageFlags.Ephemeral,
+    await interaction.editReply({ content });
+
+    logger.info('Discord respond recorded', {
+      calloutId,
+      subdivisionId: subdivision.id,
+      userId: interaction.user.id,
     });
   } catch (error) {
     logger.error('Error handling respond callout button', {
@@ -100,96 +94,6 @@ export async function handleRespondCalloutButton(interaction: ButtonInteraction)
       ? error.message
       : `${EMOJI.ERROR} Не удалось обработать реагирование`;
 
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content });
-    } else {
-      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-    }
-  }
-}
-
-/**
- * Обработчик выбора типа реагирования ("Принято" / "В пути")
- */
-export async function handleRespondTypeButton(interaction: ButtonInteraction): Promise<void> {
-  if (!interaction.guild) return;
-
-  const isOnWay = interaction.customId.startsWith('respond_onway_');
-  const calloutId = safeParseInt(
-    interaction.customId.replace('respond_ack_', '').replace('respond_onway_', '')
-  );
-
-  if (isNaN(calloutId)) {
-    // Кнопка внутри ephemeral — используем update() чтобы заменить содержимое
-    await interaction.update({ content: `${EMOJI.ERROR} Неверный ID каллаута`, components: [] });
-    return;
-  }
-
-  await interaction.deferUpdate();
-
-  try {
-    const callout = await CalloutModel.findById(calloutId);
-    if (!callout) {
-      await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_NOT_FOUND, components: [] });
-      return;
-    }
-
-    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
-      await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_ALREADY_CLOSED, components: [] });
-      return;
-    }
-
-    const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
-    if (!subdivision) {
-      await interaction.editReply({
-        content: `${EMOJI.ERROR} Подразделение не найдено`,
-        components: [],
-      });
-      return;
-    }
-
-    const responseType = isOnWay ? 'on_way' : 'acknowledged';
-    const userName = interaction.member && 'displayName' in interaction.member
-      ? (interaction.member.displayName as string)
-      : interaction.user.username;
-
-    const { response, changed } = await SyncService.handleDiscordResponse(
-      callout,
-      subdivision,
-      interaction.user.id,
-      userName,
-      responseType
-    );
-
-    let content: string;
-    if (!changed) {
-      // No-op: подразделение уже реагировало с тем же или более высоким статусом
-      const existingLabel = response.response_type === 'on_way' ? '🚗 В пути' : '✅ Принято';
-      content = `${EMOJI.WARNING} Подразделение уже отметило статус **${existingLabel}** для инцидента **#${calloutId}**`;
-    } else {
-      const typeLabel = responseType === 'on_way' ? '🚗 В пути' : '✅ Принято';
-      content = `${EMOJI.SUCCESS} Реагирование **${typeLabel}** зафиксировано для инцидента **#${calloutId}**!`;
-    }
-
-    await interaction.editReply({ content, components: [] });
-
-    logger.info('Discord respond recorded', {
-      calloutId,
-      subdivisionId: subdivision.id,
-      userId: interaction.user.id,
-      responseType,
-    });
-  } catch (error) {
-    logger.error('Error handling respond type button', {
-      error: error instanceof Error ? error.message : error,
-      calloutId,
-      userId: interaction.user.id,
-    });
-
-    const content = error instanceof CalloutError
-      ? error.message
-      : `${EMOJI.ERROR} Не удалось зафиксировать реагирование`;
-
-    await interaction.editReply({ content, components: [] });
+    await interaction.editReply({ content });
   }
 }

@@ -35,8 +35,7 @@ export class SyncService {
   static async handleVkResponse(
     payload: CalloutResponsePayload,
     vkUserId: string,
-    vkUserName: string,
-    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
+    vkUserName: string
   ): Promise<CalloutResponse> {
     logger.info('Processing VK response', {
       calloutId: payload.callout_id,
@@ -73,28 +72,13 @@ export class SyncService {
       );
     }
 
-    // 4. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
-    if (responseType === 'on_way') {
-      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
-      if (upgraded) {
-        try {
-          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision);
-        } catch (error) {
-          logger.error('Failed to notify Discord about updated VK response', {
-            error: error instanceof Error ? error.message : error,
-          });
-        }
-        return upgraded;
-      }
-    }
-
-    // 5. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    // 4. Атомарно создать ответ (только если подразделение ещё не отвечало)
     const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: vkUserId,
       vk_user_name: vkUserName,
-      response_type: responseType,
+      response_type: 'acknowledged',
     });
 
     if (!created) {
@@ -110,10 +94,9 @@ export class SyncService {
       responseId: response.id,
       calloutId: callout.id,
       vkUserId,
-      responseType,
     });
 
-    // 6. Отправить уведомление в Discord
+    // 5. Отправить уведомление в Discord
     try {
       await this.notifyDiscordAboutResponse(response, callout, subdivision);
     } catch (error) {
@@ -121,7 +104,6 @@ export class SyncService {
         error: error instanceof Error ? error.message : error,
         responseId: response.id,
       });
-      // Не критично, запись в БД уже создана
     }
 
     return response;
@@ -133,8 +115,7 @@ export class SyncService {
   static async handleTelegramResponse(
     payload: CalloutResponsePayload,
     telegramUserId: string,
-    telegramUserName: string,
-    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
+    telegramUserName: string
   ): Promise<CalloutResponse> {
     logger.info('Processing Telegram response', {
       calloutId: payload.callout_id,
@@ -171,28 +152,13 @@ export class SyncService {
       );
     }
 
-    // 4. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
-    if (responseType === 'on_way') {
-      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
-      if (upgraded) {
-        try {
-          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision, 'telegram');
-        } catch (error) {
-          logger.error('Failed to notify Discord about updated Telegram response', {
-            error: error instanceof Error ? error.message : error,
-          });
-        }
-        return upgraded;
-      }
-    }
-
-    // 5. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    // 4. Атомарно создать ответ (только если подразделение ещё не отвечало)
     const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: telegramUserId,
       vk_user_name: telegramUserName,
-      response_type: responseType,
+      response_type: 'acknowledged',
     });
 
     if (!created) {
@@ -208,10 +174,9 @@ export class SyncService {
       responseId: response.id,
       calloutId: callout.id,
       telegramUserId,
-      responseType,
     });
 
-    // 6. Отправить уведомление в Discord
+    // 5. Отправить уведомление в Discord
     try {
       await this.notifyDiscordAboutResponse(response, callout, subdivision, 'telegram');
     } catch (error) {
@@ -219,7 +184,6 @@ export class SyncService {
         error: error instanceof Error ? error.message : error,
         responseId: response.id,
       });
-      // Не критично, запись в БД уже создана
     }
 
     return response;
@@ -232,14 +196,12 @@ export class SyncService {
     callout: Callout,
     subdivision: Subdivision,
     discordUserId: string,
-    discordUserName: string,
-    responseType: 'acknowledged' | 'on_way' = 'acknowledged'
+    discordUserName: string
   ): Promise<{ response: CalloutResponse; changed: boolean }> {
     logger.info('Processing Discord response', {
       calloutId: callout.id,
       subdivisionId: subdivision.id,
       discordUserId,
-      responseType,
     });
 
     // 1. Проверить статус каллаута
@@ -251,28 +213,13 @@ export class SyncService {
       );
     }
 
-    // 2. Если запрос on_way — попробовать атомарно обновить acknowledged → on_way
-    if (responseType === 'on_way') {
-      const upgraded = await CalloutResponseModel.upgradeToOnWay(callout.id, subdivision.id);
-      if (upgraded) {
-        try {
-          await this.notifyDiscordAboutResponse(upgraded, callout, subdivision, 'discord');
-        } catch (error) {
-          logger.error('Failed to notify about updated Discord response', {
-            error: error instanceof Error ? error.message : error,
-          });
-        }
-        return { response: upgraded, changed: true };
-      }
-    }
-
-    // 3. Атомарно создать ответ (только если подразделение ещё не отвечало)
+    // 2. Атомарно создать ответ (только если подразделение ещё не отвечало)
     const { response, created } = await CalloutResponseModel.createIfNotExists({
       callout_id: callout.id,
       subdivision_id: subdivision.id,
       vk_user_id: `discord_${discordUserId}`,
       vk_user_name: discordUserName,
-      response_type: responseType,
+      response_type: 'acknowledged',
     });
 
     if (!created) {
@@ -288,10 +235,9 @@ export class SyncService {
       responseId: response.id,
       calloutId: callout.id,
       discordUserId,
-      responseType,
     });
 
-    // 4. Обновить embed, уведомить VK/TG
+    // 3. Обновить embed, уведомить VK/TG
     try {
       await this.notifyDiscordAboutResponse(response, callout, subdivision, 'discord');
     } catch (error) {

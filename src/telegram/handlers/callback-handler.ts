@@ -86,26 +86,20 @@ export async function handleCallbackQuery(
     });
 
     // Обработать ответ через SyncService
-    const responseType = payload.type || 'acknowledged';
     const response = await SyncService.handleTelegramResponse(
       payload,
       `telegram_${userId}`,
-      userName,
-      responseType
+      userName
     );
 
     logger.info('Telegram response processed successfully', {
       responseId: response.id,
       calloutId: payload.callout_id,
-      responseType,
     });
 
     // Отправить подтверждение пользователю
-    const answerText = responseType === 'on_way'
-      ? `${EMOJI.SUCCESS} Статус "В пути" отправлен в Discord!`
-      : `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`;
     await bot.answerCallbackQuery(query.id, {
-      text: answerText,
+      text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`,
       show_alert: false,
     });
   } catch (error) {

@@ -44,8 +44,6 @@ export const MESSAGES = {
     BUTTON_CREATE: `New Callout`,
     BUTTON_CLOSE: `Закрыть инцидент`,
     BUTTON_RESPOND_DISCORD: `Отреагировать`,
-    BUTTON_RESPOND_ACK: `✅ Принято`,
-    BUTTON_RESPOND_ONWAY: `🚗 В пути`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
     BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
 
