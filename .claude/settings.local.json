@@ -36,7 +36,8 @@
       "Bash(node_modules/.bin/tsc:*)",
       "Bash(DOCKER_BUILDKIT=0 docker build:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ]
   }
 }
