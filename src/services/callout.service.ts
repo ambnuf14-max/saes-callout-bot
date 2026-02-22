@@ -18,6 +18,7 @@ import {
   CalloutAutoClosedData,
   NotificationFailedData,
   resolveLogoThumbnailUrl,
+  logAuditEventWithForwarding,
 } from '../discord/utils/audit-logger';
 import PresenceManager from '../discord/utils/presence-manager';
 
@@ -260,7 +261,7 @@ export class CalloutService {
         vkStatus,
         telegramStatus,
       };
-      await logAuditEvent(guild, AuditEventType.CALLOUT_CREATED, auditData);
+      await logAuditEventWithForwarding(guild, AuditEventType.CALLOUT_CREATED, auditData);
 
       // Получить обновленный каллаут
       const updatedCallout = await CalloutModel.findById(callout.id);
@@ -441,7 +442,7 @@ export class CalloutService {
             duration,
             thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
           };
-          await logAuditEvent(guild, AuditEventType.CALLOUT_AUTO_CLOSED, autoAuditData);
+          await logAuditEventWithForwarding(guild, AuditEventType.CALLOUT_AUTO_CLOSED, autoAuditData);
         } else {
           const auditData: CalloutClosedData = {
             userId: closedBy,
@@ -454,7 +455,7 @@ export class CalloutService {
             duration,
             thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
           };
-          await logAuditEvent(guild, AuditEventType.CALLOUT_CLOSED, auditData);
+          await logAuditEventWithForwarding(guild, AuditEventType.CALLOUT_CLOSED, auditData);
         }
       }
 

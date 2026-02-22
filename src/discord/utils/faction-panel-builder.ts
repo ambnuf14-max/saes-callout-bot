@@ -96,6 +96,11 @@ export function buildStandaloneMainPanel(faction: Faction, defaultSubdivision: S
 
   const buttons: ButtonBuilder[] = [
     new ButtonBuilder()
+      .setCustomId('faction_generate_link_token')
+      .setLabel('Привязать сервер')
+      .setEmoji('🖥️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`faction_standalone_links_${defaultSubdivision.id}`)
       .setLabel('Привязки')
       .setEmoji('🔗')
@@ -174,6 +179,11 @@ export function buildMainPanel(faction: Faction, subdivisionCount: number, activ
   }
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('faction_generate_link_token')
+      .setLabel('Привязать сервер фракции')
+      .setEmoji('🔗')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('faction_view_subdivisions')
       .setLabel('Список подразделений')

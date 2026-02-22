@@ -22,8 +22,11 @@ import {
   buildFactionCalloutHistoryPanel,
 } from '../utils/faction-panel-builder';
 import { buildSubdivisionSettingsModal, buildSubdivisionEmbedFieldModal, handleInteractionError } from '../utils/subdivision-settings-helper';
-import { FactionModel, SubdivisionModel } from '../../database/models';
-import { EMOJI, MESSAGES } from '../../config/constants';
+import { FactionModel, SubdivisionModel, ServerModel } from '../../database/models';
+import { EMOJI, MESSAGES, COLORS } from '../../config/constants';
+import { EmbedBuilder } from 'discord.js';
+import { FactionLinkService } from '../../services/faction-link.service';
+import { FactionLinkTokenModel } from '../../database/models/FactionLinkToken';
 import { CalloutError } from '../../utils/error-handler';
 import { safeParseInt } from '../../utils/validators';
 
@@ -72,6 +75,40 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
     // Добавление подразделения (показать modal)
     else if (customId === 'faction_add_subdivision') {
       await showAddSubdivisionModal(interaction, faction);
+    }
+    // Генерация токена для привязки faction-сервера
+    else if (customId === 'faction_generate_link_token') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const server = await ServerModel.findByGuildId(interaction.guild!.id);
+        if (!server) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Сервер не найден в БД` });
+          return;
+        }
+        const token = await FactionLinkService.generateLinkToken({
+          main_server_id: server.id,
+          faction_id: faction.id,
+          created_by: interaction.user.id,
+        });
+        const remaining = FactionLinkTokenModel.getRemainingMinutes(token);
+        const embed = new EmbedBuilder()
+          .setColor(COLORS.INFO)
+          .setTitle('🔗 Токен привязки сервера фракции')
+          .setDescription(
+            `**Токен:** \`${token.token}\`\n\n` +
+            `Действителен **${remaining} мин**.\n\n` +
+            `**Инструкция:**\n` +
+            `1. Добавьте бота на Discord-сервер вашей фракции\n` +
+            `2. Там запустите команду \`/link ${token.token}\` (только для Administrator)\n` +
+            `3. После привязки используйте \`/settings\` для настройки`
+          )
+          .addFields({ name: 'Фракция', value: faction.name, inline: true })
+          .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Ошибка генерации токена';
+        await interaction.editReply({ content: `${EMOJI.ERROR} ${msg}` });
+      }
     }
     // Возврат к главной панели
     else if (customId === 'faction_back_main') {

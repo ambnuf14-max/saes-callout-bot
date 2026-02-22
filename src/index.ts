@@ -5,6 +5,8 @@ import { runMigrations } from './database/migrations';
 import { VerificationTokenModel } from './database/models/VerificationToken';
 import { COLORS, EMOJI } from './config/constants';
 import { VerificationService } from './services/verification.service';
+import { FactionLinkService } from './services/faction-link.service';
+import { FactionLinkTokenModel } from './database/models/FactionLinkToken';
 import { CalloutGatewayService } from './services/callout-gateway.service';
 import { CalloutModel } from './database/models/Callout';
 import { ServerModel } from './database/models/Server';
@@ -36,6 +38,7 @@ async function main() {
 
     // Запустить периодическую проверку истёкших токенов (каждые 30 секунд)
     setInterval(() => notifyExpiredTokens(discordBot), 30 * 1000);
+    setInterval(() => notifyExpiredFactionLinkTokens(discordBot), 30 * 1000);
 
     // Периодическая очистка БД (каждые 30 минут)
     setInterval(runScheduledCleanup, 30 * 60 * 1000);
@@ -105,6 +108,49 @@ async function notifyExpiredTokens(discordBot: any): Promise<void> {
 }
 
 /**
+ * Проверить истёкшие токены привязки faction-серверов и отредактировать сообщения в Discord
+ */
+async function notifyExpiredFactionLinkTokens(discordBot: any): Promise<void> {
+  try {
+    const expiredTokens = await FactionLinkTokenModel.findExpiredWithInteractionToken();
+    if (expiredTokens.length === 0) return;
+
+    for (const token of expiredTokens) {
+      try {
+        const expiredEmbed = new EmbedBuilder()
+          .setColor(COLORS.ERROR)
+          .setTitle(`${EMOJI.ERROR} Токен привязки сервера истёк`)
+          .setDescription(
+            `Токен \`${token.token}\` больше недействителен.\n` +
+            `Запросите новый токен через лидерскую панель фракции (\`/faction\` → "Привязать сервер фракции").`
+          )
+          .setTimestamp();
+
+        await discordBot.client.rest.patch(
+          `/webhooks/${token.discord_application_id}/${token.discord_interaction_token}/messages/@original`,
+          { body: { embeds: [expiredEmbed.toJSON()], components: [] } }
+        );
+
+        logger.info('Notified Discord about expired faction link token', { tokenId: token.id });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        if (errMsg.includes('Unknown Webhook') || errMsg.includes('Invalid Webhook Token') || errMsg.includes('10015')) {
+          logger.debug('Webhook token also expired, cannot edit message', { tokenId: token.id });
+        } else {
+          logger.warn('Failed to notify about expired faction link token', { tokenId: token.id, error: errMsg });
+        }
+      }
+
+      await FactionLinkTokenModel.clearInteractionToken(token.id);
+    }
+  } catch (error) {
+    logger.error('Error in notifyExpiredFactionLinkTokens', {
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+}
+
+/**
  * Авто-закрытие каллаутов, которые были активны дольше заданного таймаута
  */
 async function autoCloseExpiredCallouts(discordBot: any): Promise<void> {
@@ -141,14 +187,16 @@ async function autoCloseExpiredCallouts(discordBot: any): Promise<void> {
  */
 async function runScheduledCleanup(): Promise<void> {
   try {
-    const [expiredTokens, usedTokens, oldRateLimits] = await Promise.all([
+    const [expiredTokens, usedTokens, oldRateLimits, expiredLinkTokens, usedLinkTokens] = await Promise.all([
       VerificationService.cleanupExpiredTokens(),
       VerificationService.cleanupUsedTokens(24),
       CalloutGatewayService.cleanupOldRateLimits(30),
+      FactionLinkService.cleanupExpiredTokens(),
+      FactionLinkService.cleanupUsedTokens(24),
     ]);
 
-    if (expiredTokens > 0 || usedTokens > 0 || oldRateLimits > 0) {
-      logger.info('Scheduled cleanup completed', { expiredTokens, usedTokens, oldRateLimits });
+    if (expiredTokens > 0 || usedTokens > 0 || oldRateLimits > 0 || expiredLinkTokens > 0 || usedLinkTokens > 0) {
+      logger.info('Scheduled cleanup completed', { expiredTokens, usedTokens, oldRateLimits, expiredLinkTokens, usedLinkTokens });
     }
   } catch (error) {
     logger.error('Error in scheduled cleanup', {
