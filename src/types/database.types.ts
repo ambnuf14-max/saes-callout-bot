@@ -124,7 +124,7 @@ export interface CalloutResponse {
   subdivision_id: number;
   vk_user_id: string;              // Сохраняем для обратной совместимости
   vk_user_name: string;            // Сохраняем для обратной совместимости
-  response_type: 'acknowledged' | 'on_way' | 'arrived';
+  response_type: 'acknowledged';
   message: string | null;
   created_at: string;
 }
@@ -134,7 +134,7 @@ export interface CreateCalloutResponseDTO {
   subdivision_id: number;
   vk_user_id: string;              // Используется как user_id для обеих платформ
   vk_user_name: string;            // Используется как user_name для обеих платформ
-  response_type?: 'acknowledged' | 'on_way' | 'arrived';
+  response_type?: 'acknowledged';
   message?: string;
 }
 

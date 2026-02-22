@@ -172,7 +172,6 @@ export interface VkResponseReceivedData extends BaseAuditEventData {
   factionName: string;
   vkUserId: string;
   vkUserName: string;
-  responseType?: string;
 }
 
 /**
@@ -193,7 +192,6 @@ export interface TelegramResponseReceivedData extends BaseAuditEventData {
   factionName: string;
   telegramUserId: string;
   telegramUserName: string;
-  responseType?: string;
 }
 
 /**
@@ -204,7 +202,6 @@ export interface DiscordResponseReceivedData extends BaseAuditEventData {
   factionName: string;
   discordUserId: string;
   discordUserName: string;
-  responseType?: string;
 }
 
 /**
@@ -636,12 +633,6 @@ function buildAuditLogChannelSetEmbed(
     .addFields([{ name: 'Канал', value: `<#${data.channelId}>`, inline: false }]);
 }
 
-function formatResponseType(responseType?: string): string {
-  if (responseType === 'on_way') return 'В пути';
-  if (responseType === 'acknowledged') return 'Принято';
-  return responseType || 'Принято';
-}
-
 /**
  * Embed для получения VK ответа
  */
@@ -655,7 +646,6 @@ function buildVkResponseReceivedEmbed(
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.factionName, inline: true },
-      { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
       { name: 'Пользователь VK', value: `${data.vkUserName} (${data.vkUserId})`, inline: false },
     ]);
 }
@@ -673,7 +663,6 @@ function buildTelegramResponseReceivedEmbed(
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.factionName, inline: true },
-      { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
       { name: 'Пользователь Telegram', value: `${data.telegramUserName} (${data.telegramUserId})`, inline: false },
     ]);
 }
@@ -691,7 +680,6 @@ function buildDiscordResponseReceivedEmbed(
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.factionName, inline: true },
-      { name: 'Тип реакции', value: formatResponseType(data.responseType), inline: true },
       { name: 'Пользователь Discord', value: `<@${data.discordUserId}>`, inline: false },
     ]);
 }

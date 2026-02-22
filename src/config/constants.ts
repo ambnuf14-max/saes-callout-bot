@@ -43,7 +43,7 @@ export const MESSAGES = {
   CALLOUT: {
     BUTTON_CREATE: `New Callout`,
     BUTTON_CLOSE: `Закрыть инцидент`,
-    BUTTON_RESPOND_DISCORD: `Отреагировать`,
+    BUTTON_RESPOND_DISCORD: `Отреагировать на инцидент`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
     BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
 
@@ -172,9 +172,7 @@ export const CALLOUT_STATUS = {
   CANCELLED: 'cancelled',
 } as const;
 
-// Типы ответов фракций
+// Тип ответа фракции (всегда acknowledged)
 export const RESPONSE_TYPE = {
-  ACKNOWLEDGED: 'acknowledged', // Принято к сведению
-  ON_WAY: 'on_way',            // В пути
-  ARRIVED: 'arrived',          // Прибыли
+  ACKNOWLEDGED: 'acknowledged',
 } as const;

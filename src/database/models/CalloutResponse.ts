@@ -162,20 +162,6 @@ export class CalloutResponseModel {
     );
   }
 
-  /**
-   * Обновить тип ответа
-   */
-  static async updateResponseType(
-    id: number,
-    responseType: 'acknowledged' | 'on_way' | 'arrived'
-  ): Promise<CalloutResponse | undefined> {
-    await database.run(
-      'UPDATE callout_responses SET response_type = ? WHERE id = ?',
-      [responseType, id]
-    );
-    logger.info('Response type updated', { responseId: id, responseType });
-    return await this.findById(id);
-  }
 
   /**
    * Атомарно создать ответ только если подразделение ещё не отвечало на каллаут.
@@ -221,28 +207,6 @@ export class CalloutResponseModel {
     return { response, created: true };
   }
 
-  /**
-   * Атомарно обновить тип ответа с acknowledged на on_way.
-   * Условие `AND response_type = 'acknowledged'` гарантирует, что:
-   * - уже on_way не будет перезаписан
-   * - параллельные вызовы не создадут дублей
-   * Возвращает обновлённую запись или undefined если обновление не произошло.
-   */
-  static async upgradeToOnWay(
-    calloutId: number,
-    subdivisionId: number
-  ): Promise<CalloutResponse | undefined> {
-    const result = await database.run(
-      `UPDATE callout_responses SET response_type = 'on_way'
-       WHERE callout_id = ? AND subdivision_id = ? AND response_type = 'acknowledged'`,
-      [calloutId, subdivisionId]
-    );
-
-    if (result.changes === 0) return undefined;
-
-    logger.info('Response type upgraded to on_way (atomic)', { calloutId, subdivisionId });
-    return await this.getLastSubdivisionResponse(calloutId, subdivisionId);
-  }
 
   /**
    * Получить статистику ответов подразделения

@@ -302,7 +302,6 @@ export class SyncService {
           factionName: subdivision.name,
           telegramUserId: response.vk_user_id,
           telegramUserName: response.vk_user_name,
-          responseType: response.response_type,
           thumbnailUrl: responseThumbnail,
         };
         await logAuditEvent(channel.guild, AuditEventType.TELEGRAM_RESPONSE_RECEIVED, tgAuditData);
@@ -314,7 +313,6 @@ export class SyncService {
           factionName: subdivision.name,
           discordUserId: response.vk_user_id.replace('discord_', ''),
           discordUserName: response.vk_user_name,
-          responseType: response.response_type,
           thumbnailUrl: responseThumbnail,
         };
         await logAuditEvent(channel.guild, AuditEventType.DISCORD_RESPONSE_RECEIVED, discordAuditData);
@@ -326,7 +324,6 @@ export class SyncService {
           factionName: subdivision.name,
           vkUserId: response.vk_user_id,
           vkUserName: response.vk_user_name,
-          responseType: response.response_type,
           thumbnailUrl: responseThumbnail,
         };
         await logAuditEvent(channel.guild, AuditEventType.VK_RESPONSE_RECEIVED, auditData);

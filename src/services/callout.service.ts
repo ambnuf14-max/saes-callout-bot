@@ -141,16 +141,16 @@ export class CalloutService {
       // 3. Создать Embed сообщение
       const embed = buildCalloutEmbed(callout, subdivision);
 
-      // 4. Создать кнопки "Отреагировать" и "Закрыть инцидент"
+      // 4. Создать кнопки "Отреагировать на инцидент" и "Закрыть инцидент"
+      const respondButton = new ButtonBuilder()
+        .setCustomId(`respond_callout_${callout.id}`)
+        .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
+        .setStyle(ButtonStyle.Danger);
+
       const closeButton = new ButtonBuilder()
         .setCustomId(`close_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
         .setStyle(ButtonStyle.Danger);
-
-      const respondButton = new ButtonBuilder()
-        .setCustomId(`respond_callout_${callout.id}`)
-        .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
-        .setStyle(ButtonStyle.Primary);
 
       // Добавить emoji подразделения на кнопку реагирования
       const parsedEmoji = parseDiscordEmoji(subdivision.logo_url);
@@ -164,7 +164,7 @@ export class CalloutService {
         respondButton.setEmoji(emoji);
       }
 
-      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton, respondButton);
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, closeButton);
 
       // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({
