@@ -157,7 +157,9 @@ export interface CalloutAutoClosedData extends BaseAuditEventData {
 export interface FactionAddedData extends BaseAuditEventData {
   factionName: string;
   roleId: string;
-  vkChatId: string;
+  vkChatId?: string;
+  description?: string;
+  logoUrl?: string;
 }
 
 /**
@@ -270,6 +272,7 @@ export interface FactionEventData extends BaseAuditEventData {
 export interface SubdivisionEventData extends BaseAuditEventData {
   subdivisionName: string;
   factionName: string;
+  changes?: string[];
 }
 
 /**
@@ -502,6 +505,15 @@ export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData)
     case AuditEventType.FACTION_REMOVED:
       return buildFactionRemovedEmbed(embed, data as FactionRemovedData);
 
+    case AuditEventType.SUBDIVISION_ADDED:
+      return buildSubdivisionAddedEmbed(embed, data as SubdivisionEventData);
+
+    case AuditEventType.SUBDIVISION_UPDATED:
+      return buildSubdivisionUpdatedEmbed(embed, data as SubdivisionEventData);
+
+    case AuditEventType.SUBDIVISION_REMOVED:
+      return buildSubdivisionRemovedEmbed(embed, data as SubdivisionEventData);
+
     case AuditEventType.SETTINGS_UPDATED:
       return buildSettingsUpdatedEmbed(embed, data as SettingsUpdatedData);
 
@@ -627,8 +639,16 @@ function buildCalloutCreatedEmbed(
 
   embed.addFields({ name: 'Создатель', value: `<@${data.userId}>`, inline: true });
 
+  if (data.location) {
+    embed.addFields({ name: 'Место', value: data.location, inline: true });
+  }
+
   if (data.briefDescription) {
     embed.addFields({ name: 'Кратко', value: data.briefDescription.substring(0, 512), inline: false });
+  }
+
+  if (data.tacChannel) {
+    embed.addFields({ name: 'Такт. канал', value: data.tacChannel, inline: true });
   }
 
   const notificationLines: string[] = [];
@@ -710,14 +730,24 @@ function buildFactionAddedEmbed(
   embed: EmbedBuilder,
   data: FactionAddedData
 ): EmbedBuilder {
+  const fields: { name: string; value: string; inline: boolean }[] = [
+    { name: 'Название', value: data.factionName, inline: true },
+    { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
+    { name: 'Добавил', value: `<@${data.userId}>`, inline: true },
+  ];
+  if (data.description) {
+    fields.push({ name: 'Описание', value: data.description, inline: false });
+  }
+  if (data.logoUrl) {
+    fields.push({ name: 'Логотип', value: data.logoUrl, inline: true });
+  }
+  if (data.vkChatId) {
+    fields.push({ name: 'VK Беседа', value: data.vkChatId, inline: true });
+  }
   return embed
     .setTitle(`${EMOJI.SUCCESS} Фракция добавлена`)
     .setColor(COLORS.ACTIVE)
-    .addFields([
-      { name: 'Название', value: data.factionName, inline: true },
-      { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
-      { name: 'VK Беседа', value: data.vkChatId, inline: true },
-    ]);
+    .addFields(fields);
 }
 
 /**
@@ -731,7 +761,8 @@ function buildFactionUpdatedEmbed(
     .setTitle(`${EMOJI.INFO} Фракция обновлена`)
     .setColor(COLORS.INFO)
     .addFields([
-      { name: 'Фракция', value: data.factionName, inline: false },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
       { name: 'Изменения', value: data.changes.join('\n'), inline: false },
     ]);
 }
@@ -746,7 +777,65 @@ function buildFactionRemovedEmbed(
   return embed
     .setTitle(`${EMOJI.WARNING} Фракция удалена`)
     .setColor(COLORS.WARNING)
-    .addFields([{ name: 'Фракция', value: data.factionName, inline: false }]);
+    .addFields([
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Удалил', value: `<@${data.userId}>`, inline: true },
+    ]);
+}
+
+/**
+ * Embed для добавления подразделения
+ */
+function buildSubdivisionAddedEmbed(
+  embed: EmbedBuilder,
+  data: SubdivisionEventData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Подразделение добавлено`)
+    .setColor(COLORS.ACTIVE)
+    .addFields([
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Добавил', value: `<@${data.userId}>`, inline: true },
+    ]);
+}
+
+/**
+ * Embed для обновления подразделения
+ */
+function buildSubdivisionUpdatedEmbed(
+  embed: EmbedBuilder,
+  data: SubdivisionEventData
+): EmbedBuilder {
+  embed
+    .setTitle(`${EMOJI.INFO} Подразделение обновлено`)
+    .setColor(COLORS.INFO)
+    .addFields([
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
+    ]);
+  if (data.changes && data.changes.length > 0) {
+    embed.addFields({ name: 'Изменения', value: data.changes.join('\n'), inline: false });
+  }
+  return embed;
+}
+
+/**
+ * Embed для удаления подразделения
+ */
+function buildSubdivisionRemovedEmbed(
+  embed: EmbedBuilder,
+  data: SubdivisionEventData
+): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.WARNING} Подразделение удалено`)
+    .setColor(COLORS.WARNING)
+    .addFields([
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Удалил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -759,7 +848,10 @@ function buildSettingsUpdatedEmbed(
   return embed
     .setTitle(`${EMOJI.INFO} Настройки сервера обновлены`)
     .setColor(COLORS.INFO)
-    .addFields([{ name: 'Изменения', value: data.changes.join('\n'), inline: false }]);
+    .addFields([
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
+      { name: 'Изменения', value: data.changes.join('\n'), inline: false },
+    ]);
 }
 
 /**
@@ -772,7 +864,10 @@ function buildLeaderRoleAddedEmbed(
   return embed
     .setTitle(`${EMOJI.SUCCESS} Лидерская роль добавлена`)
     .setColor(COLORS.ACTIVE)
-    .addFields([{ name: 'Роль', value: `<@&${data.roleId}>`, inline: false }]);
+    .addFields([
+      { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
+      { name: 'Добавил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -785,7 +880,10 @@ function buildLeaderRoleRemovedEmbed(
   return embed
     .setTitle(`${EMOJI.WARNING} Лидерская роль удалена`)
     .setColor(COLORS.WARNING)
-    .addFields([{ name: 'Роль', value: `<@&${data.roleId}>`, inline: false }]);
+    .addFields([
+      { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
+      { name: 'Удалил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -798,7 +896,10 @@ function buildAuditLogChannelSetEmbed(
   return embed
     .setTitle(`${EMOJI.SUCCESS} Audit Log канал настроен`)
     .setColor(COLORS.ACTIVE)
-    .addFields([{ name: 'Канал', value: `<#${data.channelId}>`, inline: false }]);
+    .addFields([
+      { name: 'Канал', value: `<#${data.channelId}>`, inline: true },
+      { name: 'Установил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -877,15 +978,15 @@ function buildVkChatLinkedEmbed(
 ): EmbedBuilder {
   embed.setThumbnail(PLATFORM_THUMBNAIL['VK']);
   const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.vkChatId})` : data.vkChatId;
-  const fields = [
-    { name: 'Фракция', value: data.factionName, inline: true },
-    { name: 'Подразделение', value: data.subdivisionName, inline: true },
-    { name: 'VK Беседа', value: chatLabel, inline: true },
-  ];
   return embed
     .setTitle(`${EMOJI.SUCCESS} VK беседа привязана`)
     .setColor(COLORS.ACTIVE)
-    .addFields(fields);
+    .addFields([
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'VK Беседа', value: chatLabel, inline: true },
+      { name: 'Привязал', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -897,15 +998,15 @@ function buildTelegramChatLinkedEmbed(
 ): EmbedBuilder {
   embed.setThumbnail(PLATFORM_THUMBNAIL['Telegram']);
   const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.telegramChatId})` : data.telegramChatId;
-  const fields = [
-    { name: 'Фракция', value: data.factionName, inline: true },
-    { name: 'Подразделение', value: data.subdivisionName, inline: true },
-    { name: 'Telegram Группа', value: chatLabel, inline: true },
-  ];
   return embed
     .setTitle(`${EMOJI.SUCCESS} Telegram группа привязана`)
     .setColor(COLORS.ACTIVE)
-    .addFields(fields);
+    .addFields([
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Telegram Группа', value: chatLabel, inline: true },
+      { name: 'Привязал', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -918,7 +1019,10 @@ function buildCalloutRoleAddedEmbed(
   return embed
     .setTitle(`${EMOJI.SUCCESS} Роль каллаутов добавлена`)
     .setColor(COLORS.ACTIVE)
-    .addFields([{ name: 'Роль', value: `<@&${data.roleId}>`, inline: false }]);
+    .addFields([
+      { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
+      { name: 'Добавил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -931,7 +1035,10 @@ function buildCalloutRoleRemovedEmbed(
   return embed
     .setTitle(`${EMOJI.WARNING} Роль каллаутов удалена`)
     .setColor(COLORS.WARNING)
-    .addFields([{ name: 'Роль', value: `<@&${data.roleId}>`, inline: false }]);
+    .addFields([
+      { name: 'Роль', value: `<@&${data.roleId}>`, inline: true },
+      { name: 'Удалил', value: `<@${data.userId}>`, inline: true },
+    ]);
 }
 
 /**
@@ -941,8 +1048,9 @@ function buildFactionTypeCreatedEmbed(
   embed: EmbedBuilder,
   data: FactionTypeCreatedData
 ): EmbedBuilder {
-  const fields = [
-    { name: 'Название типа', value: data.typeName, inline: false },
+  const fields: { name: string; value: string; inline: boolean }[] = [
+    { name: 'Название типа', value: data.typeName, inline: true },
+    { name: 'Создал', value: `<@${data.userId}>`, inline: true },
   ];
 
   if (data.description) {
@@ -966,7 +1074,8 @@ function buildFactionTypeUpdatedEmbed(
     .setTitle(`${EMOJI.INFO} Тип фракции обновлен`)
     .setColor(COLORS.INFO)
     .addFields([
-      { name: 'Тип', value: data.typeName, inline: false },
+      { name: 'Тип', value: data.typeName, inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
       { name: 'Изменения', value: data.changes.join('\n'), inline: false },
     ]);
 }
@@ -982,7 +1091,8 @@ function buildFactionTypeDeletedEmbed(
     .setTitle(`${EMOJI.WARNING} Тип фракции удален`)
     .setColor(COLORS.WARNING)
     .addFields([
-      { name: 'Тип', value: data.typeName, inline: false },
+      { name: 'Тип', value: data.typeName, inline: true },
+      { name: 'Удалил', value: `<@${data.userId}>`, inline: true },
     ]);
 }
 
@@ -999,6 +1109,7 @@ function buildTemplateAddedEmbed(
     .addFields([
       { name: 'Тип фракции', value: data.typeName, inline: true },
       { name: 'Название шаблона', value: data.templateName, inline: true },
+      { name: 'Добавил', value: `<@${data.userId}>`, inline: true },
     ]);
 }
 
@@ -1075,6 +1186,7 @@ function buildChangeCancelledEmbed(
     .addFields([
       { name: 'Тип', value: data.changeType, inline: true },
       { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Отменил', value: `<@${data.userId}>`, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
 }

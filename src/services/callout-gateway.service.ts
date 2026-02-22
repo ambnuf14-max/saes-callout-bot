@@ -203,7 +203,7 @@ export class CalloutGatewayService {
   /**
    * Очистить старые записи rate limit (для обслуживания БД)
    */
-  static async cleanupOldRateLimits(daysOld = 30): Promise<void> {
+  static async cleanupOldRateLimits(daysOld = 30): Promise<number> {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysOld);
@@ -217,10 +217,13 @@ export class CalloutGatewayService {
         deletedCount: result.changes,
         daysOld,
       });
+
+      return result.changes ?? 0;
     } catch (error) {
       logger.error('Failed to cleanup old rate limits', {
         error: error instanceof Error ? error.message : error,
       });
+      return 0;
     }
   }
 }

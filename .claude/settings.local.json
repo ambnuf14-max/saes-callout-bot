@@ -41,7 +41,8 @@
       "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npm test 2>&1)",
       "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npm run preview:audit -- 1472976157015277698 2>&1)",
       "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npx ts-node scripts/_preview-security.ts 2>&1)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npx ts-node scripts/preview-audit-embeds.ts 1472976157015277698 2>&1)"
     ]
   }
 }

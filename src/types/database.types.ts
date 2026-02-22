@@ -118,12 +118,15 @@ export interface UpdateCalloutDTO {
   closed_at?: string;
 }
 
+export type ResponsePlatform = 'vk' | 'telegram' | 'discord';
+
 export interface CalloutResponse {
   id: number;
   callout_id: number;
   subdivision_id: number;
-  vk_user_id: string;              // Сохраняем для обратной совместимости
-  vk_user_name: string;            // Сохраняем для обратной совместимости
+  vk_user_id: string;
+  vk_user_name: string;
+  platform: ResponsePlatform;
   response_type: 'acknowledged';
   message: string | null;
   created_at: string;
@@ -132,8 +135,9 @@ export interface CalloutResponse {
 export interface CreateCalloutResponseDTO {
   callout_id: number;
   subdivision_id: number;
-  vk_user_id: string;              // Используется как user_id для обеих платформ
-  vk_user_name: string;            // Используется как user_name для обеих платформ
+  vk_user_id: string;
+  vk_user_name: string;
+  platform?: ResponsePlatform;
   response_type?: 'acknowledged';
   message?: string;
 }

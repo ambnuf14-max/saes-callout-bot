@@ -384,13 +384,13 @@ export class CalloutModel {
 
     const [hourRow, dowRow] = await Promise.all([
       database.get<{ hour: string; count: number }>(
-        `SELECT strftime('%H', created_at) as hour, COUNT(*) as count
+        `SELECT strftime('%H', datetime(created_at, '+3 hours')) as hour, COUNT(*) as count
          FROM callouts WHERE ${where}
          GROUP BY hour ORDER BY count DESC LIMIT 1`,
         params
       ),
       database.get<{ dow: string; count: number }>(
-        `SELECT strftime('%w', created_at) as dow, COUNT(*) as count
+        `SELECT strftime('%w', datetime(created_at, '+3 hours')) as dow, COUNT(*) as count
          FROM callouts WHERE ${where}
          GROUP BY dow ORDER BY count DESC LIMIT 1`,
         params

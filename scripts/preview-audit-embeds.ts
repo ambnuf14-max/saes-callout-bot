@@ -37,59 +37,124 @@ const PREVIEW_EVENTS: Array<{
   type: AuditEventType;
   data: Parameters<typeof buildAuditEmbed>[1];
 }> = [
-  // ── Статус ботов ────────────────────────────────────────────────────────
+  // ── Каллауты ─────────────────────────────────────────────────────────────
   {
-    type: AuditEventType.BOT_CONNECTED,
-    data: { userId: 'system', userName: 'Система', platform: 'VK', mode: 'Long Poll' },
-  },
-  {
-    type: AuditEventType.BOT_CONNECTED,
-    data: { userId: 'system', userName: 'Система', platform: 'Telegram', mode: 'Long Poll' },
-  },
-  {
-    type: AuditEventType.BOT_CONNECTION_FAILED,
-    data: {
-      userId: 'system', userName: 'Система', platform: 'VK',
-      errorMessage: 'VkError [5]: User authorization failed: invalid access_token (4)',
-    },
-  },
-  {
-    type: AuditEventType.BOT_CONNECTION_FAILED,
-    data: {
-      userId: 'system', userName: 'Система', platform: 'Telegram',
-      errorMessage: 'ETELEGRAM: 401 Unauthorized',
-    },
-  },
-
-  // ── Реагирование (добавлены chatId) ─────────────────────────────────────
-  {
-    type: AuditEventType.VK_RESPONSE_RECEIVED,
+    type: AuditEventType.CALLOUT_CREATED,
     data: {
       ...BASE,
       calloutId: 42,
-      factionName: 'LSPD Patrol Division',
-      vkUserId: '7654321',
-      vkUserName: 'Ivan Petrov',
-      chatId: '2000000001',
-      chatTitle: 'LSPD | Patrol беседа',
+      subdivisionName: 'LSPD Patrol Division',
+      factionName: 'LSPD',
+      description: 'Стрельба на Грув Стрит',
+      channelId: '1234567890123456789',
+      location: 'Грув Стрит, Лос-Сантос',
+      briefDescription: 'Вооружённое столкновение банд',
+      tacChannel: 'TAC-3',
       thumbnailUrl: 'https://cdn.discordapp.com/embed/avatars/2.png',
-    },
-  },
-  {
-    type: AuditEventType.TELEGRAM_RESPONSE_RECEIVED,
-    data: {
-      ...BASE,
-      calloutId: 42,
-      factionName: 'LSPD Patrol Division',
-      telegramUserId: '9876543',
-      telegramUserName: 'Aleksey Smirnov',
-      chatId: '-1001234567890',
-      chatTitle: 'FIB | Special Ops группа',
-      thumbnailUrl: 'https://cdn.discordapp.com/embed/avatars/2.png',
+      vkStatus: '✅ Отправлено',
+      telegramStatus: '✅ Отправлено',
     },
   },
 
-  // ── Интеграции: привязка (добавлен thumbnail платформы) ─────────────────
+  // ── Настройки сервера ─────────────────────────────────────────────────────
+  {
+    type: AuditEventType.SETTINGS_UPDATED,
+    data: {
+      ...BASE,
+      changes: ['Callout канал: <#1234567890>', 'Timeout: 30 мин'],
+    },
+  },
+  {
+    type: AuditEventType.LEADER_ROLE_ADDED,
+    data: { ...BASE, roleId: '1234567890123456789' },
+  },
+  {
+    type: AuditEventType.LEADER_ROLE_REMOVED,
+    data: { ...BASE, roleId: '1234567890123456789' },
+  },
+  {
+    type: AuditEventType.CALLOUT_ROLE_ADDED,
+    data: { ...BASE, roleId: '1234567890123456789' },
+  },
+  {
+    type: AuditEventType.CALLOUT_ROLE_REMOVED,
+    data: { ...BASE, roleId: '1234567890123456789' },
+  },
+  {
+    type: AuditEventType.AUDIT_LOG_CHANNEL_SET,
+    data: { ...BASE, channelId: '1234567890123456789' },
+  },
+
+  // ── Фракции ───────────────────────────────────────────────────────────────
+  {
+    type: AuditEventType.FACTION_CREATED,
+    data: {
+      ...BASE,
+      factionName: 'LSPD',
+      roleId: '1234567890123456789',
+      description: 'Los Santos Police Department — главное полицейское управление',
+      logoUrl: '🚔',
+    },
+  },
+  {
+    type: AuditEventType.FACTION_UPDATED,
+    data: {
+      ...BASE,
+      factionName: 'LSPD',
+      changes: ['Название: Los Santos Police Department', 'Логотип изменён'],
+    },
+  },
+  {
+    type: AuditEventType.FACTION_REMOVED,
+    data: { ...BASE, factionName: 'FIB' },
+  },
+
+  // ── Типы фракций ──────────────────────────────────────────────────────────
+  {
+    type: AuditEventType.FACTION_TYPE_CREATED,
+    data: {
+      ...BASE,
+      typeName: 'Полицейские',
+      description: 'Все силовые структуры Лос-Сантоса',
+    },
+  },
+  {
+    type: AuditEventType.FACTION_TYPE_UPDATED,
+    data: {
+      ...BASE,
+      typeName: 'Полицейские',
+      changes: ['Название: Law Enforcement', 'Описание изменено'],
+    },
+  },
+  {
+    type: AuditEventType.FACTION_TYPE_DELETED,
+    data: { ...BASE, typeName: 'Гражданские' },
+  },
+  {
+    type: AuditEventType.TEMPLATE_ADDED,
+    data: { ...BASE, typeName: 'Полицейские', templateName: 'Патруль' },
+  },
+
+  // ── Подразделения ─────────────────────────────────────────────────────────
+  {
+    type: AuditEventType.SUBDIVISION_ADDED,
+    data: { ...BASE, subdivisionName: 'LSPD Patrol Division', factionName: 'LSPD' },
+  },
+  {
+    type: AuditEventType.SUBDIVISION_UPDATED,
+    data: {
+      ...BASE,
+      subdivisionName: 'LSPD Patrol Division',
+      factionName: 'LSPD',
+      changes: ['Краткое описание', 'Логотип'],
+    },
+  },
+  {
+    type: AuditEventType.SUBDIVISION_REMOVED,
+    data: { ...BASE, subdivisionName: 'FIB Special Ops', factionName: 'FIB' },
+  },
+
+  // ── Интеграции: привязка ──────────────────────────────────────────────────
   {
     type: AuditEventType.VK_CHAT_LINKED,
     data: {
@@ -111,53 +176,14 @@ const PREVIEW_EVENTS: Array<{
     },
   },
 
-  // ── Интеграции: отвязка (добавлен thumbnail платформы) ──────────────────
+  // ── Система одобрения ─────────────────────────────────────────────────────
   {
-    type: AuditEventType.VK_CHAT_UNLINKED,
+    type: AuditEventType.CHANGE_CANCELLED,
     data: {
       ...BASE,
-      subdivisionName: 'LSPD Patrol Division',
+      changeType: 'Создание подразделения',
       factionName: 'LSPD',
-      chatId: '2000000001',
-      chatTitle: 'LSPD | Patrol беседа',
-    },
-  },
-  {
-    type: AuditEventType.TELEGRAM_CHAT_UNLINKED,
-    data: {
-      ...BASE,
-      subdivisionName: 'FIB Special Ops',
-      factionName: 'FIB',
-      chatId: '-1001234567890',
-      chatTitle: 'FIB | Special Ops группа',
-    },
-  },
-
-  // ── Ошибки уведомлений (добавлены chatId) ───────────────────────────────
-  {
-    type: AuditEventType.VK_NOTIFICATION_FAILED,
-    data: {
-      ...BASE,
-      userId: 'system',
-      userName: 'Система',
-      calloutId: 44,
-      subdivisionName: 'LSPD Patrol Division',
-      errorMessage: 'VkError [100]: One of the parameters specified was missing or invalid: peer_id is incorrect, chat not found',
-      chatId: '2000000001',
-      chatTitle: 'LSPD | Patrol беседа',
-    },
-  },
-  {
-    type: AuditEventType.TELEGRAM_NOTIFICATION_FAILED,
-    data: {
-      ...BASE,
-      userId: 'system',
-      userName: 'Система',
-      calloutId: 44,
-      subdivisionName: 'FIB Special Ops',
-      errorMessage: 'ETELEGRAM: 400 Bad Request: chat not found',
-      chatId: '-1001234567890',
-      chatTitle: 'FIB | Special Ops группа',
+      details: 'LSPD Motorcycle Unit — новое подразделение',
     },
   },
 ];
@@ -165,11 +191,13 @@ const PREVIEW_EVENTS: Array<{
 // ─── Разделители между группами ────────────────────────────────────────────
 
 const SECTION_DIVIDERS: Partial<Record<AuditEventType, string>> = {
-  [AuditEventType.BOT_CONNECTED]:          '─────────────── 🤖 СТАТУС БОТОВ ───────────────',
-  [AuditEventType.VK_RESPONSE_RECEIVED]:   '─────────────── 📣 РЕАГИРОВАНИЕ ───────────────',
-  [AuditEventType.VK_CHAT_LINKED]:         '─────────────── 🔗 ИНТЕГРАЦИИ: ПРИВЯЗКА ───────────────',
-  [AuditEventType.VK_CHAT_UNLINKED]:       '─────────────── 🔗 ИНТЕГРАЦИИ: ОТВЯЗКА ───────────────',
-  [AuditEventType.VK_NOTIFICATION_FAILED]: '─────────────── ❌ ОШИБКИ УВЕДОМЛЕНИЙ ───────────────',
+  [AuditEventType.CALLOUT_CREATED]:      '─────────────── 📋 КАЛЛАУТЫ ───────────────',
+  [AuditEventType.SETTINGS_UPDATED]:     '─────────────── ⚙️ НАСТРОЙКИ СЕРВЕРА ───────────────',
+  [AuditEventType.FACTION_CREATED]:      '─────────────── 🏛 ФРАКЦИИ ───────────────',
+  [AuditEventType.FACTION_TYPE_CREATED]: '─────────────── 📁 ТИПЫ ФРАКЦИЙ ───────────────',
+  [AuditEventType.SUBDIVISION_ADDED]:    '─────────────── 🏢 ПОДРАЗДЕЛЕНИЯ ───────────────',
+  [AuditEventType.VK_CHAT_LINKED]:       '─────────────── 🔗 ИНТЕГРАЦИИ: ПРИВЯЗКА ───────────────',
+  [AuditEventType.CHANGE_CANCELLED]:     '─────────────── 📝 СИСТЕМА ОДОБРЕНИЯ ───────────────',
 };
 
 // ─── Основной скрипт ───────────────────────────────────────────────────────

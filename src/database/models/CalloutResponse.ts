@@ -12,13 +12,14 @@ export class CalloutResponseModel {
    */
   static async create(data: CreateCalloutResponseDTO): Promise<CalloutResponse> {
     const result = await database.run(
-      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, response_type, message)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, platform, response_type, message)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.callout_id,
         data.subdivision_id,
         data.vk_user_id,
         data.vk_user_name,
+        data.platform || 'vk',
         data.response_type || RESPONSE_TYPE.ACKNOWLEDGED,
         data.message || null,
       ]
@@ -172,8 +173,8 @@ export class CalloutResponseModel {
     data: CreateCalloutResponseDTO
   ): Promise<{ response: CalloutResponse; created: boolean }> {
     const result = await database.run(
-      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, response_type, message)
-       SELECT ?, ?, ?, ?, ?, ?
+      `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, platform, response_type, message)
+       SELECT ?, ?, ?, ?, ?, ?, ?
        WHERE NOT EXISTS (
          SELECT 1 FROM callout_responses WHERE callout_id = ? AND subdivision_id = ?
        )`,
@@ -182,6 +183,7 @@ export class CalloutResponseModel {
         data.subdivision_id,
         data.vk_user_id,
         data.vk_user_name,
+        data.platform || 'vk',
         data.response_type || RESPONSE_TYPE.ACKNOWLEDGED,
         data.message || null,
         data.callout_id,

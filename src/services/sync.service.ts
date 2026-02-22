@@ -78,6 +78,7 @@ export class SyncService {
       subdivision_id: subdivision.id,
       vk_user_id: vkUserId,
       vk_user_name: vkUserName,
+      platform: 'vk',
       response_type: 'acknowledged',
     });
 
@@ -158,6 +159,7 @@ export class SyncService {
       subdivision_id: subdivision.id,
       vk_user_id: telegramUserId,
       vk_user_name: telegramUserName,
+      platform: 'telegram',
       response_type: 'acknowledged',
     });
 
@@ -219,6 +221,7 @@ export class SyncService {
       subdivision_id: subdivision.id,
       vk_user_id: `discord_${discordUserId}`,
       vk_user_name: discordUserName,
+      platform: 'discord',
       response_type: 'acknowledged',
     });
 
@@ -441,10 +444,10 @@ export class SyncService {
       }
     }
 
-    const responderMention = response.vk_user_id.startsWith('discord_')
+    const responderMention = response.platform === 'discord'
       ? `(<@${response.vk_user_id.replace('discord_', '')}>)`
       : `(${response.vk_user_name})`;
-    return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент. ${responderMention}`;
+    return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент ${responderMention}.`;
   }
 
   /**

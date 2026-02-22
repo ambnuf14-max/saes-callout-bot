@@ -141,14 +141,14 @@ async function autoCloseExpiredCallouts(discordBot: any): Promise<void> {
  */
 async function runScheduledCleanup(): Promise<void> {
   try {
-    const [expiredTokens, usedTokens] = await Promise.all([
+    const [expiredTokens, usedTokens, oldRateLimits] = await Promise.all([
       VerificationService.cleanupExpiredTokens(),
       VerificationService.cleanupUsedTokens(24),
       CalloutGatewayService.cleanupOldRateLimits(30),
     ]);
 
-    if (expiredTokens > 0 || usedTokens > 0) {
-      logger.info('Scheduled cleanup completed', { expiredTokens, usedTokens });
+    if (expiredTokens > 0 || usedTokens > 0 || oldRateLimits > 0) {
+      logger.info('Scheduled cleanup completed', { expiredTokens, usedTokens, oldRateLimits });
     }
   } catch (error) {
     logger.error('Error in scheduled cleanup', {

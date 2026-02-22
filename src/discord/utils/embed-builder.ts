@@ -167,7 +167,7 @@ export function addResponsesToEmbed(
     const time = formatMoscowTime(new Date(r.created_at));
     const emoji = subdiv ? formatSubdivisionEmoji(subdiv) : '';
     const name = subdiv?.name || 'Unknown';
-    const responderMention = r.vk_user_id.startsWith('discord_')
+    const responderMention = r.platform === 'discord'
       ? ` (<@${r.vk_user_id.replace('discord_', '')}>)`
       : ` (${r.vk_user_name})`;
     logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки${responderMention}.`);

@@ -29,7 +29,14 @@ import {
 } from '../utils/subdivision-settings-helper';
 import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
-import { logAuditEvent, AuditEventType, PresenceAssetSetData } from '../utils/audit-logger';
+import {
+  logAuditEvent,
+  AuditEventType,
+  PresenceAssetSetData,
+  FactionAddedData,
+  FactionUpdatedData,
+  SubdivisionEventData,
+} from '../utils/audit-logger';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
 import { SubdivisionTemplate, Subdivision, FactionType } from '../../types/database.types';
 
@@ -358,6 +365,18 @@ async function handleAddFaction(
   // Показать детальную панель новой фракции
   const panel = buildFactionDetailPanel(faction);
   await interaction.editReply(panel);
+
+  if (interaction.guild) {
+    const auditData: FactionAddedData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      factionName: faction.name,
+      roleId: state.departmentRoleId,
+      description: faction.description || undefined,
+      logoUrl: faction.logo_url || undefined,
+    };
+    logAuditEvent(interaction.guild, AuditEventType.FACTION_CREATED, auditData).catch(() => {});
+  }
 }
 
 /**
@@ -392,6 +411,20 @@ async function handleEditFaction(
 
   const panel = buildFactionDetailPanel(faction);
   await interaction.editReply(panel);
+
+  if (interaction.guild) {
+    const changes: string[] = [];
+    if (name !== faction.name) changes.push(`Название: ${name}`);
+    if (description !== (faction.description || '')) changes.push(`Описание изменено`);
+    if (logoUrl !== (faction.logo_url || '')) changes.push(`Логотип изменён`);
+    const auditData: FactionUpdatedData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      factionName: faction.name,
+      changes: changes.length > 0 ? changes : ['Данные обновлены'],
+    };
+    logAuditEvent(interaction.guild, AuditEventType.FACTION_UPDATED, auditData).catch(() => {});
+  }
 }
 
 /**
@@ -582,6 +615,22 @@ async function handleAdminEditSubdivisionSettings(
     content: `${EMOJI.SUCCESS} Настройки подразделения **${subdivision.name}** обновлены`,
     flags: MessageFlags.Ephemeral,
   });
+
+  if (interaction.guild) {
+    const faction = await FactionService.getFactionById(subdivision.faction_id);
+    const changes: string[] = [];
+    if (settingsData.short_description !== undefined) changes.push('Краткое описание');
+    if (settingsData.logo_url !== undefined) changes.push('Логотип');
+    if (settingsData.discord_role_id !== undefined) changes.push('Discord роль');
+    const auditData: SubdivisionEventData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      subdivisionName: subdivision.name,
+      factionName: faction?.name || 'Unknown',
+      changes: changes.length > 0 ? changes : undefined,
+    };
+    logAuditEvent(interaction.guild, AuditEventType.SUBDIVISION_UPDATED, auditData).catch(() => {});
+  }
 }
 
 /**

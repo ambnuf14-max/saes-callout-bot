@@ -64,6 +64,8 @@ import {
   ChatUnlinkedData,
   VerificationTokenCreatedData,
   UnauthorizedAccessData,
+  FactionRemovedData,
+  SubdivisionEventData,
 } from '../utils/audit-logger';
 
 // Состояние для добавления фракции (3-4 шага)
@@ -396,6 +398,15 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         userId: interaction.user.id,
       });
 
+      if (interaction.guild) {
+        const auditData: FactionRemovedData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          factionName: faction.name,
+        };
+        logAuditEvent(interaction.guild, AuditEventType.FACTION_REMOVED, auditData).catch(() => {});
+      }
+
       // Вернуться к списку
       const panel = await buildFactionsSection(server);
       await interaction.editReply(panel);
@@ -712,6 +723,26 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const nonDefault = allSubs.filter((s: any) => !s.is_default);
       const panel = buildFactionSubdivisionsPanel(faction, nonDefault);
       await interaction.editReply(panel);
+
+      if (interaction.guild) {
+        const updatedSub = allSubs.find((s: any) => s.id === subId);
+        const FIELD_LABELS: Record<string, string> = {
+          name: 'Название',
+          description: 'Описание',
+          short_description: 'Краткое описание',
+          logo_url: 'Логотип',
+          discord_role_id: 'Discord роль',
+        };
+        const changes = Object.keys(draftData).map(k => FIELD_LABELS[k] || k);
+        const auditData: SubdivisionEventData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: updatedSub?.name || String(subId),
+          factionName: faction.name,
+          changes: changes.length > 0 ? changes : undefined,
+        };
+        logAuditEvent(interaction.guild, AuditEventType.SUBDIVISION_UPDATED, auditData).catch(() => {});
+      }
 
       await interaction.followUp({
         content: `${EMOJI.SUCCESS} Подразделение успешно обновлено!`,

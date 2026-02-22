@@ -102,11 +102,13 @@ export class PresenceManager {
       const elapsedMin = Math.floor(elapsedMs / 60000);
       const subName = subdivision?.name || 'Unknown';
 
-      // Строка 1 (name): подразделение + номер инцидента
-      const name = `🚨 Active Incident — ${subName}`;
+      // Строка 1 (name): 🚨 Active Incident, 📍 Локация
+      const nameParts = ['🚨 Active Incident'];
+      if (callout.location) nameParts.push(`📍 ${callout.location}`);
+      const name = nameParts.join(', ');
 
-      // Строка 2 (state): локация / описание / время
-      const state = this.buildState(callout, elapsedMin);
+      // Строка 2 (state): SubName, ⏱ Время
+      const state = `${subName}, ⏱ ${elapsedMin} мин`;
 
       this.client.user.setPresence({
         activities: [{
@@ -134,16 +136,6 @@ export class PresenceManager {
   /**
    * Строка state (2-я строка presence)
    */
-  private static buildState(callout: Callout, elapsedMin: number): string {
-    const parts: string[] = [];
-
-    if (callout.brief_description) parts.push(callout.brief_description);
-    if (callout.location) parts.push(`📍 ${callout.location}`);
-    parts.push(`⏱ ${elapsedMin} мин`);
-
-    return parts.join(' · ');
-  }
-
   /**
    * Принудительно обновить статус (вызывается при создании/закрытии каллаута)
    */
