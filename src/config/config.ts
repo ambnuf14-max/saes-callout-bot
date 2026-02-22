@@ -7,6 +7,7 @@ interface Config {
   discord: {
     token: string;
     clientId: string;
+    newsRoleId: string | null;
   };
 
   // VK
@@ -66,6 +67,7 @@ function getConfig(): Config {
     discord: {
       token: process.env.DISCORD_TOKEN!,
       clientId: process.env.DISCORD_CLIENT_ID!,
+      newsRoleId: process.env.NEWS_ROLE_ID || null,
     },
 
     vk: {

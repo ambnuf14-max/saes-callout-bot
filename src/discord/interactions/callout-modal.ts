@@ -196,11 +196,11 @@ export async function handleCalloutModalSubmit(
         ? error.message
         : `${EMOJI.ERROR} Не удалось создать каллаут. Попробуйте позже.`;
 
-    await interaction.editReply({
-      content: errorMessage,
-      embeds: [],
-      components: [],
-    });
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply({ content: errorMessage, embeds: [], components: [] }).catch(() => {});
+    } else {
+      await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
 
     // Очистить временное хранилище даже при ошибке
     clearSubdivisionSelection(interaction.guild.id, interaction.user.id);

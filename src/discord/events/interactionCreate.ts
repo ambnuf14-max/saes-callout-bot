@@ -21,6 +21,7 @@ import {
 } from '../interactions/admin-panel-button';
 import { handleAdminPanelModal, handleAuditLogModal } from '../interactions/admin-panel-modal';
 import { handleRoleManualButton, handleRoleManualModal } from '../interactions/role-manual-input';
+import { handleBrowsePrevNext, handleBrowseRequest, handleBrowseSelect } from '../interactions/subdivision-browse';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -80,6 +81,10 @@ export default async function interactionCreateHandler(
         await handleAuditLogButton(interaction);
       } else if (interaction.customId.startsWith('admin_') || interaction.customId.startsWith('template_')) {
         await handleAdminPanelButton(interaction);
+      } else if (interaction.customId.startsWith('subdivision_browse_prev_') || interaction.customId.startsWith('subdivision_browse_next_')) {
+        await handleBrowsePrevNext(interaction);
+      } else if (interaction.customId.startsWith('subdivision_browse_req_')) {
+        await handleBrowseRequest(interaction);
       } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_') || interaction.customId.startsWith('faction_')) {
         await handleFactionPanelButton(interaction);
       } else if (interaction.customId.startsWith('history_')) {
@@ -120,7 +125,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId === 'subdivision_list_preview' || interaction.customId === 'template_list_preview') {
+      if (interaction.customId === 'subdivision_browse_select') {
+        await handleBrowseSelect(interaction);
+      } else if (interaction.customId === 'subdivision_list_preview' || interaction.customId === 'template_list_preview') {
         await interaction.deferUpdate();
       } else if (interaction.customId === 'subdivision_select') {
         await handleSubdivisionSelect(interaction);

@@ -170,7 +170,7 @@ export function addResponsesToEmbed(
     const responderMention = r.vk_user_id.startsWith('discord_')
       ? ` (<@${r.vk_user_id.replace('discord_', '')}>)`
       : ` (${r.vk_user_name})`;
-    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки.${responderMention}`);
+    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки${responderMention}.`);
   }
 
   if (callout && callout.status !== CALLOUT_STATUS.ACTIVE && callout.closed_at) {

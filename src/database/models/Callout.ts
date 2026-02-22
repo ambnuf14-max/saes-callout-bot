@@ -327,6 +327,115 @@ export class CalloutModel {
   }
 
   /**
+   * Общая статистика за период (total/active/closed + avg duration)
+   */
+  static async getPeriodStats(
+    serverId: number,
+    sinceIso?: string
+  ): Promise<{ total: number; active: number; closed: number; avg_duration_min: number | null }> {
+    const where = sinceIso ? 'server_id = ? AND created_at >= ?' : 'server_id = ?';
+    const params = sinceIso ? [serverId, sinceIso] : [serverId];
+    const result = await database.get<{ total: number; active: number; closed: number; avg_duration_min: number | null }>(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
+        AVG(CASE WHEN closed_at IS NOT NULL
+          THEN (julianday(closed_at) - julianday(created_at)) * 24 * 60
+          ELSE NULL END) as avg_duration_min
+      FROM callouts WHERE ${where}`,
+      params
+    );
+    return {
+      total: result?.total || 0,
+      active: result?.active || 0,
+      closed: result?.closed || 0,
+      avg_duration_min: result?.avg_duration_min ?? null,
+    };
+  }
+
+  /**
+   * Топ авторов каллаутов за период
+   */
+  static async getTopAuthors(
+    serverId: number,
+    limit: number = 5,
+    sinceIso?: string
+  ): Promise<{ author_id: string; author_name: string; count: number }[]> {
+    const where = sinceIso ? 'server_id = ? AND created_at >= ?' : 'server_id = ?';
+    const params = sinceIso ? [serverId, sinceIso, limit] : [serverId, limit];
+    return await database.all(
+      `SELECT author_id, author_name, COUNT(*) as count
+       FROM callouts WHERE ${where}
+       GROUP BY author_id ORDER BY count DESC LIMIT ?`,
+      params
+    );
+  }
+
+  /**
+   * Самый загруженный час суток и день недели за период
+   */
+  static async getPeakTime(
+    serverId: number,
+    sinceIso?: string
+  ): Promise<{ peak_hour: number | null; peak_dow: number | null }> {
+    const where = sinceIso ? 'server_id = ? AND created_at >= ?' : 'server_id = ?';
+    const params = sinceIso ? [serverId, sinceIso] : [serverId];
+
+    const [hourRow, dowRow] = await Promise.all([
+      database.get<{ hour: string; count: number }>(
+        `SELECT strftime('%H', created_at) as hour, COUNT(*) as count
+         FROM callouts WHERE ${where}
+         GROUP BY hour ORDER BY count DESC LIMIT 1`,
+        params
+      ),
+      database.get<{ dow: string; count: number }>(
+        `SELECT strftime('%w', created_at) as dow, COUNT(*) as count
+         FROM callouts WHERE ${where}
+         GROUP BY dow ORDER BY count DESC LIMIT 1`,
+        params
+      ),
+    ]);
+
+    return {
+      peak_hour: hourRow ? parseInt(hourRow.hour, 10) : null,
+      peak_dow: dowRow ? parseInt(dowRow.dow, 10) : null,
+    };
+  }
+
+  /**
+   * Получить статистику по подразделениям (топ по количеству каллаутов)
+   * @param sinceIso — опциональная нижняя граница created_at в ISO формате
+   */
+  static async getSubdivisionStats(
+    serverId: number,
+    limit: number = 10,
+    sinceIso?: string
+  ): Promise<{ subdivision_id: number; total: number; active: number; closed: number; avg_duration_min: number | null }[]> {
+    const where = sinceIso
+      ? 'WHERE server_id = ? AND created_at >= ?'
+      : 'WHERE server_id = ?';
+    const params = sinceIso ? [serverId, sinceIso, limit] : [serverId, limit];
+
+    return await database.all(
+      `SELECT
+        subdivision_id,
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed,
+        AVG(CASE WHEN closed_at IS NOT NULL
+          THEN (julianday(closed_at) - julianday(created_at)) * 24 * 60
+          ELSE NULL END) as avg_duration_min
+      FROM callouts
+      ${where}
+      GROUP BY subdivision_id
+      ORDER BY total DESC
+      LIMIT ?`,
+      params
+    );
+  }
+
+  /**
    * Получить все активные каллауты (для всех серверов)
    */
   static async findActive(): Promise<Callout[]> {
@@ -340,12 +449,8 @@ export class CalloutModel {
    * Найти закрытые каллауты с каналом, закрытые раньше чем minAgeMs миллисекунд назад
    */
   static async findClosedWithChannelOlderThan(minAgeMs: number): Promise<Callout[]> {
-    // SQLite хранит CURRENT_TIMESTAMP как 'YYYY-MM-DD HH:MM:SS' (без T и Z),
-    // поэтому приводим cutoff к тому же формату для корректного строкового сравнения
-    const cutoff = new Date(Date.now() - minAgeMs)
-      .toISOString()
-      .replace('T', ' ')
-      .replace(/\.\d{3}Z$/, '');
+    // closed_at хранится в ISO-формате (new Date().toISOString()), поэтому cutoff тоже ISO
+    const cutoff = new Date(Date.now() - minAgeMs).toISOString();
     return await database.all<Callout>(
       `SELECT * FROM callouts
        WHERE status != ?

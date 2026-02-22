@@ -191,7 +191,10 @@ export class CalloutResponseModel {
 
     if (result.changes === 0) {
       const existing = await this.getLastSubdivisionResponse(data.callout_id, data.subdivision_id);
-      return { response: existing!, created: false };
+      if (!existing) {
+        throw new Error(`Duplicate response not found for callout ${data.callout_id}, subdivision ${data.subdivision_id}`);
+      }
+      return { response: existing, created: false };
     }
 
     logger.info('Callout response created (atomic)', {

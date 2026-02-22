@@ -11,6 +11,7 @@ import { SubdivisionService } from '../../services/subdivision.service';
 import { EMOJI, LIMITS, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { safeParseInt } from '../../utils/validators';
+import { Subdivision } from '../../types/database.types';
 
 /**
  * Временное хранилище выбранного подразделения (user_id → {subdivisionId, expiresAt})
@@ -30,6 +31,57 @@ setInterval(() => {
     }
   }
 }, 60_000);
+
+/**
+ * Создать модальное окно для запроса каллаута к подразделению
+ */
+export function createCalloutModal(subdivision: Subdivision): ModalBuilder {
+  const modalTitle = `Запрос к ${subdivision.name}`.slice(0, 45);
+  const modal = new ModalBuilder()
+    .setCustomId('callout_modal')
+    .setTitle(modalTitle);
+
+  const briefDescriptionInput = new TextInputBuilder()
+    .setCustomId('brief_description_input')
+    .setLabel('Краткое описание инцидента')
+    .setPlaceholder('Например: Пожар в многоэтажном здании')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(LIMITS.BRIEF_DESCRIPTION_MAX)
+    .setRequired(true);
+
+  const locationInput = new TextInputBuilder()
+    .setCustomId('location_input')
+    .setLabel('Место инцидента')
+    .setPlaceholder('Например: Jefferson, Carson Street')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(LIMITS.LOCATION_MAX)
+    .setRequired(true);
+
+  const descriptionInput = new TextInputBuilder()
+    .setCustomId('description_input')
+    .setLabel('Подробности инцидента')
+    .setPlaceholder('Опишите ситуацию подробно...')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(LIMITS.DESCRIPTION_MAX)
+    .setRequired(true);
+
+  const tacChannelInput = new TextInputBuilder()
+    .setCustomId('tac_channel_input')
+    .setLabel('TAC-канал (Опционально)')
+    .setPlaceholder('Например: C-TAC-1, C-TAC-2')
+    .setStyle(TextInputStyle.Short)
+    .setMaxLength(50)
+    .setRequired(false);
+
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(briefDescriptionInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(locationInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(tacChannelInput),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput),
+  );
+
+  return modal;
+}
 
 /**
  * Обработчик выбора подразделения из Select Menu
@@ -90,56 +142,7 @@ export async function handleSubdivisionSelect(
       expiresAt: Date.now() + SELECTION_TTL_MS,
     });
 
-    // Создать модальное окно с полями "Подробности" и "Место"
-    const modalTitle = `Запрос к ${subdivision.name}`.slice(0, 45);
-    const modal = new ModalBuilder()
-      .setCustomId('callout_modal')
-      .setTitle(modalTitle);
-
-    // Поле "Краткое описание" (brief_description) — используется в названии канала
-    const briefDescriptionInput = new TextInputBuilder()
-      .setCustomId('brief_description_input')
-      .setLabel('Краткое описание инцидента')
-      .setPlaceholder('Например: Пожар в многоэтажном здании')
-      .setStyle(TextInputStyle.Short)
-      .setMaxLength(LIMITS.BRIEF_DESCRIPTION_MAX)
-      .setRequired(true);
-
-    // Поле "Место" (location)
-    const locationInput = new TextInputBuilder()
-      .setCustomId('location_input')
-      .setLabel('Место инцидента')
-      .setPlaceholder('Например: Jefferson, Carson Street')
-      .setStyle(TextInputStyle.Short)
-      .setMaxLength(LIMITS.LOCATION_MAX)
-      .setRequired(true);
-
-    // Поле "Подробности" (description)
-    const descriptionInput = new TextInputBuilder()
-      .setCustomId('description_input')
-      .setLabel('Подробности инцидента')
-      .setPlaceholder('Опишите ситуацию подробно...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setMaxLength(LIMITS.DESCRIPTION_MAX)
-      .setRequired(true);
-
-    // Поле "TAC-канал" (опционально)
-    const tacChannelInput = new TextInputBuilder()
-      .setCustomId('tac_channel_input')
-      .setLabel('TAC-канал (Опционально)')
-      .setPlaceholder('Например: C-TAC-1, C-TAC-2')
-      .setStyle(TextInputStyle.Short)
-      .setMaxLength(50)
-      .setRequired(false);
-
-    const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(briefDescriptionInput);
-    const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(locationInput);
-    const row3 = new ActionRowBuilder<TextInputBuilder>().addComponents(tacChannelInput);
-    const row4 = new ActionRowBuilder<TextInputBuilder>().addComponents(descriptionInput);
-
-    modal.addComponents(row1, row2, row3, row4);
-
-    // Показать модальное окно
+    const modal = createCalloutModal(subdivision);
     await interaction.showModal(modal);
 
     logger.info('Callout modal shown after subdivision selection', {

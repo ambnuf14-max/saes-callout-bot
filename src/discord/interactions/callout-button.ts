@@ -1,16 +1,12 @@
 import {
   ButtonInteraction,
-  StringSelectMenuBuilder,
-  ActionRowBuilder,
   MessageFlags,
 } from 'discord.js';
 import logger from '../../utils/logger';
 import { ServerModel } from '../../database/models';
-import SubdivisionService from '../../services/subdivision.service';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
-import { buildSubdivisionEmbeds } from '../utils/subdivision-embed-builder';
-import { parseDiscordEmoji } from '../utils/subdivision-settings-helper';
+import { getSortedSubdivisions, buildBrowseMessage } from './subdivision-browse';
 
 /**
  * Обработчик нажатия кнопки "Создать каллаут"
@@ -37,17 +33,7 @@ export async function handleCreateCalloutButton(
       );
     }
 
-    // Получить активные подразделения, принимающие каллауты
-    const allSubdivisions = await SubdivisionService.getSubdivisionsByServerId(server.id, true);
-    const acceptingSubdivisions = allSubdivisions.filter(sub => sub.is_accepting_callouts && sub.discord_role_id);
-
-    // Если у фракции есть не-дефолтные подразделения — дефолтное не показываем
-    const factionsWithRealSubdivisions = new Set(
-      acceptingSubdivisions.filter(sub => !sub.is_default).map(sub => sub.faction_id)
-    );
-    const subdivisions = acceptingSubdivisions.filter(
-      sub => !sub.is_default || !factionsWithRealSubdivisions.has(sub.faction_id)
-    );
+    const subdivisions = await getSortedSubdivisions(server.id);
 
     if (subdivisions.length === 0) {
       throw new CalloutError(
@@ -57,49 +43,16 @@ export async function handleCreateCalloutButton(
       );
     }
 
-    // Показать меню выбора подразделения
-    logger.info('Creating subdivision select menu', {
+    logger.info('Opening subdivision browse', {
       userId: interaction.user.id,
       guildId: interaction.guild.id,
       subdivisionsCount: subdivisions.length,
     });
 
-    // Создать массив embeds для каждого подразделения (максимум 10)
-    const embeds = buildSubdivisionEmbeds(subdivisions);
+    const message = buildBrowseMessage(subdivisions, subdivisions[0].id);
+    await interaction.reply({ ...message, flags: MessageFlags.Ephemeral });
 
-    // Создать Select Menu с подразделениями
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('subdivision_select')
-      .setPlaceholder('Выберите подразделение...')
-      .addOptions(
-        subdivisions.map((subdivision: any) => {
-          const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
-          const emoji = subdivision.is_accepting_callouts
-            ? (parsed
-                ? (parsed.id ? { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false } : parsed.name)
-                : '🏢')
-            : undefined;
-          return {
-            label: (subdivision.is_accepting_callouts ? '' : '⏸️ ') + subdivision.name,
-            description: subdivision.short_description || subdivision.description || 'Нет описания',
-            value: subdivision.id.toString(),
-            emoji,
-          };
-        })
-      );
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      selectMenu
-    );
-
-    // Отправить ephemeral сообщение с несколькими embeds
-    await interaction.reply({
-      embeds: embeds,
-      components: [row],
-      flags: MessageFlags.Ephemeral,
-    });
-
-    logger.info('Subdivision select menu shown', {
+    logger.info('Subdivision browse shown', {
       userId: interaction.user.id,
       subdivisionsCount: subdivisions.length,
     });
@@ -109,13 +62,15 @@ export async function handleCreateCalloutButton(
       userId: interaction.user.id,
     });
 
-    await interaction.reply({
-      content:
-        error instanceof CalloutError
-          ? error.message
-          : `${EMOJI.ERROR} Не удалось открыть меню выбора подразделения`,
-      flags: MessageFlags.Ephemeral,
-    });
+    const errorContent = error instanceof CalloutError
+      ? error.message
+      : `${EMOJI.ERROR} Не удалось открыть меню выбора подразделения`;
+
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: errorContent, flags: MessageFlags.Ephemeral }).catch(() => {});
+    } else {
+      await interaction.editReply({ content: errorContent, embeds: [], components: [] }).catch(() => {});
+    }
   }
 }
 

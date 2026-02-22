@@ -14,6 +14,8 @@ import { Command } from './types';
 import settingsCommand from './commands/settings';
 import factionCommand from './commands/faction';
 import historyCommand from './commands/history';
+import newsCommand from './commands/news';
+import statsCommand from './commands/stats';
 
 // Импорт обработчиков событий
 import readyHandler from './events/ready';
@@ -48,6 +50,8 @@ class DiscordBot {
     this.commands.set(settingsCommand.data.name, settingsCommand);
     this.commands.set(factionCommand.data.name, factionCommand);
     this.commands.set(historyCommand.data.name, historyCommand);
+    this.commands.set(newsCommand.data.name, newsCommand);
+    this.commands.set(statsCommand.data.name, statsCommand);
 
     logger.info('Commands registered', {
       count: this.commands.size,

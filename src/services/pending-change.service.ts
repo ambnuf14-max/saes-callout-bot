@@ -25,6 +25,7 @@ import {
   ChangeApprovedData,
   ChangeRejectedData,
   ChangeCancelledData,
+  SubdivisionEventData,
   resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import { getChangeTypeLabel } from '../discord/utils/change-formatter';
@@ -384,6 +385,51 @@ export class PendingChangeService {
       reviewedBy,
     });
 
+    // Логировать событие SUBDIVISION_ADDED/UPDATED/REMOVED
+    if (changeWithDetails && faction) {
+      const subdivisionEventTypes: Record<string, AuditEventType> = {
+        create_subdivision: AuditEventType.SUBDIVISION_ADDED,
+        update_subdivision: AuditEventType.SUBDIVISION_UPDATED,
+        delete_subdivision: AuditEventType.SUBDIVISION_REMOVED,
+      };
+      const subdivisionEventType = subdivisionEventTypes[change.change_type];
+      if (subdivisionEventType) {
+        try {
+          const requester = await guild.members.fetch(change.requested_by).catch(() => null);
+          const subdivisionName =
+            changeWithDetails.subdivision_name ||
+            (changeWithDetails.parsed_data as any).name ||
+            (changeWithDetails.parsed_data as any).subdivision_name ||
+            'Unknown';
+          const FIELD_LABELS: Record<string, string> = {
+            name: 'Название',
+            description: 'Описание',
+            short_description: 'Краткое описание',
+            logo_url: 'Логотип',
+            discord_role_id: 'Discord роль',
+          };
+          const parsedData = changeWithDetails.parsed_data as Record<string, unknown>;
+          const changes = change.change_type === 'update_subdivision'
+            ? Object.keys(parsedData).map(k => FIELD_LABELS[k] || k)
+            : undefined;
+          const subAuditData: SubdivisionEventData = {
+            userId: change.requested_by,
+            userName: requester?.user.tag || change.requested_by,
+            subdivisionName,
+            factionName: faction.name,
+            changes,
+          };
+          await logAuditEvent(guild, subdivisionEventType, subAuditData);
+        } catch (error) {
+          logger.warn('Failed to log subdivision event audit', {
+            changeId,
+            changeType: change.change_type,
+            error: error instanceof Error ? error.message : error,
+          });
+        }
+      }
+    }
+
     // Редактировать исходное сообщение в audit log (убрать кнопки, показать итог)
     if (changeWithDetails) {
       try {
@@ -399,15 +445,15 @@ export class PendingChangeService {
     // Отправить audit log уведомление
     if (faction) {
       try {
-        const reviewer = await guild.members.fetch(reviewedBy);
-        const requester = await guild.members.fetch(change.requested_by);
+        const reviewer = await guild.members.fetch(reviewedBy).catch(() => null);
+        const requester = await guild.members.fetch(change.requested_by).catch(() => null);
         const auditData: ChangeApprovedData = {
           userId: change.requested_by,
-          userName: requester.user.tag,
+          userName: requester?.user.tag ?? change.requested_by,
           changeType: changeTypeLabel,
           factionName: faction.name,
           details,
-          reviewerName: reviewer.user.tag,
+          reviewerName: reviewer?.user.tag ?? reviewedBy,
           reviewerId: reviewedBy,
           thumbnailUrl: resolveLogoThumbnailUrl(faction.logo_url),
         };
@@ -481,17 +527,17 @@ export class PendingChangeService {
       try {
         const faction = await FactionModel.findById(change.faction_id);
         if (faction) {
-          const reviewer = await guild.members.fetch(reviewedBy);
-          const requester = await guild.members.fetch(change.requested_by);
+          const reviewer = await guild.members.fetch(reviewedBy).catch(() => null);
+          const requester = await guild.members.fetch(change.requested_by).catch(() => null);
           const changeTypeLabel = getChangeTypeLabel(change.change_type);
           const details = await this.getChangeDetails(change);
           const auditData: ChangeRejectedData = {
             userId: change.requested_by,
-            userName: requester.user.tag,
+            userName: requester?.user.tag ?? change.requested_by,
             changeType: changeTypeLabel,
             factionName: faction.name,
             details,
-            reviewerName: reviewer.user.tag,
+            reviewerName: reviewer?.user.tag ?? reviewedBy,
             reviewerId: reviewedBy,
             reason: reason || 'Не указана',
             thumbnailUrl: resolveLogoThumbnailUrl(faction.logo_url),
