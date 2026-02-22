@@ -494,11 +494,10 @@ export class PendingChangeService {
       throw new CalloutError('Запрос не найден', 'CHANGE_NOT_FOUND', 404);
     }
 
-    if (change.status !== 'pending') {
+    const claimed = await PendingChangeModel.reject(changeId, reviewedBy, reason);
+    if (!claimed) {
       throw new CalloutError('Запрос уже обработан', 'CHANGE_ALREADY_PROCESSED', 400);
     }
-
-    await PendingChangeModel.reject(changeId, reviewedBy, reason);
 
     logger.info('Pending change rejected', {
       changeId,
@@ -577,10 +576,6 @@ export class PendingChangeService {
       throw new CalloutError('Запрос не найден', 'CHANGE_NOT_FOUND', 404);
     }
 
-    if (change.status !== 'pending') {
-      throw new CalloutError('Запрос уже обработан', 'CHANGE_ALREADY_PROCESSED', 400);
-    }
-
     // Проверить, что отменяет автор запроса
     if (change.requested_by !== requesterId) {
       throw new CalloutError(
@@ -590,7 +585,10 @@ export class PendingChangeService {
       );
     }
 
-    await PendingChangeModel.cancel(changeId);
+    const claimed = await PendingChangeModel.cancel(changeId);
+    if (!claimed) {
+      throw new CalloutError('Запрос уже обработан', 'CHANGE_ALREADY_PROCESSED', 400);
+    }
 
     logger.info('Pending change cancelled', {
       changeId,
