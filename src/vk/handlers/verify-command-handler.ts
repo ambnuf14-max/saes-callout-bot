@@ -33,17 +33,7 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
     // Получить peer_id беседы
     const peerId = context.peerId.toString();
 
-    // Верифицировать токен и привязать VK беседу
-    const result = await VerificationService.verifyToken(token, peerId);
-
-    logger.info('VK chat linked successfully', {
-      subdivisionId: result.subdivision.id,
-      subdivisionName: result.subdivision.name,
-      peerId,
-      token,
-    });
-
-    // Получить информацию о беседе
+    // Получить информацию о беседе заранее, чтобы сохранить в БД при привязке
     let chatTitle = 'VK беседа';
     try {
       const conversation = await vkBot.getApi().api.messages.getConversationsById({
@@ -56,6 +46,16 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
     } catch (error) {
       logger.warn('Failed to get conversation title', { error });
     }
+
+    // Верифицировать токен и привязать VK беседу (с сохранением названия)
+    const result = await VerificationService.verifyToken(token, peerId, 'vk', chatTitle);
+
+    logger.info('VK chat linked successfully', {
+      subdivisionId: result.subdivision.id,
+      subdivisionName: result.subdivision.name,
+      peerId,
+      token,
+    });
 
     // Отправить подтверждение в VK беседу
     await context.send(MESSAGES.VERIFICATION.SUCCESS_VK(result.subdivision.name));

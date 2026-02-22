@@ -76,6 +76,7 @@ export async function handleCloseCalloutButton(interaction: ButtonInteraction) {
         calloutId: callout.id,
         action: 'close',
         subdivisionName: subdivision?.name || 'Unknown',
+        thumbnailUrl: interaction.user.displayAvatarURL(),
       };
       await logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData);
       return;

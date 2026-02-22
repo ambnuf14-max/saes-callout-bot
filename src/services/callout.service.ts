@@ -15,6 +15,8 @@ import {
   AuditEventType,
   CalloutCreatedData,
   CalloutClosedData,
+  CalloutAutoClosedData,
+  NotificationFailedData,
   resolveLogoThumbnailUrl,
 } from '../discord/utils/audit-logger';
 import PresenceManager from '../discord/utils/presence-manager';
@@ -202,6 +204,16 @@ export class CalloutService {
             calloutId: callout.id,
           });
           vkStatus = `❌ Ошибка: ${vkErrMsg.substring(0, 200)}`;
+          const vkFailData: NotificationFailedData = {
+            userId: 'system',
+            userName: 'Система',
+            calloutId: callout.id,
+            subdivisionName: subdivision.name,
+            errorMessage: vkErrMsg,
+            chatId: subdivision.vk_chat_id || undefined,
+            chatTitle: subdivision.vk_chat_title || undefined,
+          };
+          logAuditEvent(guild, AuditEventType.VK_NOTIFICATION_FAILED, vkFailData).catch(() => {});
         }
       }
 
@@ -219,6 +231,16 @@ export class CalloutService {
             calloutId: callout.id,
           });
           telegramStatus = `❌ Ошибка: ${tgErrMsg.substring(0, 200)}`;
+          const tgFailData: NotificationFailedData = {
+            userId: 'system',
+            userName: 'Система',
+            calloutId: callout.id,
+            subdivisionName: subdivision.name,
+            errorMessage: tgErrMsg,
+            chatId: subdivision.telegram_chat_id || undefined,
+            chatTitle: subdivision.telegram_chat_title || undefined,
+          };
+          logAuditEvent(guild, AuditEventType.TELEGRAM_NOTIFICATION_FAILED, tgFailData).catch(() => {});
         }
       }
 
@@ -409,18 +431,31 @@ export class CalloutService {
       // Логировать событие в audit log
       if (subdivision) {
         const duration = formatDuration(callout.created_at, closedCallout.closed_at);
-        const auditData: CalloutClosedData = {
-          userId: closedBy,
-          userName: closedBy === 'system' ? 'Система' : closedBy,
-          calloutId,
-          subdivisionName: subdivision.name,
-          reason: reason,
-          channelId: callout.discord_channel_id || undefined,
-          closedByDiscordId: closedBy !== 'system' ? closedBy : undefined,
-          duration,
-          thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
-        };
-        await logAuditEvent(guild, AuditEventType.CALLOUT_CLOSED, auditData);
+        if (closedBy === 'system') {
+          const autoAuditData: CalloutAutoClosedData = {
+            userId: 'system',
+            userName: 'Система',
+            calloutId,
+            subdivisionName: subdivision.name,
+            channelId: callout.discord_channel_id || undefined,
+            duration,
+            thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
+          };
+          await logAuditEvent(guild, AuditEventType.CALLOUT_AUTO_CLOSED, autoAuditData);
+        } else {
+          const auditData: CalloutClosedData = {
+            userId: closedBy,
+            userName: closedBy,
+            calloutId,
+            subdivisionName: subdivision.name,
+            reason: reason,
+            channelId: callout.discord_channel_id || undefined,
+            closedByDiscordId: closedBy,
+            duration,
+            thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
+          };
+          await logAuditEvent(guild, AuditEventType.CALLOUT_CLOSED, auditData);
+        }
       }
 
       // 5. Опционально: удалить канал через delay

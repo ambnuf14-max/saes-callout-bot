@@ -5,6 +5,7 @@ import { handleTelegramError } from '../utils/error-handler';
 import handleCallbackQuery from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
 import { trackTelegramMember } from './utils/member-tracker';
+import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
 /**
  * Класс Telegram бота
@@ -42,6 +43,12 @@ class TelegramBotClient {
         error: error instanceof Error ? error.message : error,
       });
       handleTelegramError(error as Error, { source: 'polling' });
+
+      const failedData: BotStatusData = {
+        userId: 'system', userName: 'Система', platform: 'Telegram',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+      logAuditEventToAllGuilds(AuditEventType.BOT_CONNECTION_FAILED, failedData).catch(() => {});
     });
 
     // Обработка ошибок webhook (на случай будущего переключения)
@@ -206,15 +213,27 @@ class TelegramBotClient {
         });
       }
 
+      const mode = this.useWebhook ? 'Webhook' : 'Long Poll';
       logger.info('Telegram bot started successfully', {
-        mode: this.useWebhook ? 'Webhook' : 'Long Poll',
+        mode,
         botUsername: me.username,
       });
+
+      const connectedData: BotStatusData = {
+        userId: 'system', userName: 'Система', platform: 'Telegram', mode,
+      };
+      logAuditEventToAllGuilds(AuditEventType.BOT_CONNECTED, connectedData).catch(() => {});
     } catch (error) {
       logger.error('Failed to start Telegram bot', {
         error: error instanceof Error ? error.message : error,
         stack: error instanceof Error ? error.stack : undefined,
       });
+
+      const failedData: BotStatusData = {
+        userId: 'system', userName: 'Система', platform: 'Telegram',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+      logAuditEventToAllGuilds(AuditEventType.BOT_CONNECTION_FAILED, failedData).catch(() => {});
 
       // Telegram бот не критичен для работы системы, логируем но не останавливаем приложение
       logger.warn('Telegram bot failed to start, but application will continue');

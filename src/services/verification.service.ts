@@ -99,7 +99,8 @@ export class VerificationService {
   static async verifyToken(
     tokenString: string,
     chatId: string,
-    platform: Platform = 'vk'
+    platform: Platform = 'vk',
+    chatTitle?: string
   ): Promise<{ subdivision: Subdivision; token: VerificationToken }> {
     // Найти токен
     const token = await VerificationTokenModel.findByToken(tokenString);
@@ -142,9 +143,9 @@ export class VerificationService {
 
     // Привязать чат к подразделению в зависимости от платформы
     if (platform === 'vk') {
-      await SubdivisionModel.linkVkChat(token.subdivision_id, chatId);
+      await SubdivisionModel.linkVkChat(token.subdivision_id, chatId, chatTitle);
     } else if (platform === 'telegram') {
-      await SubdivisionModel.linkTelegramChat(token.subdivision_id, chatId);
+      await SubdivisionModel.linkTelegramChat(token.subdivision_id, chatId, chatTitle);
     }
 
     // Сохранить interaction token до markAsUsed, т.к. markAsUsed зануляет их в БД

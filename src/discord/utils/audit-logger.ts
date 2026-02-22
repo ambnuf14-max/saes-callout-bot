@@ -11,6 +11,7 @@ export enum AuditEventType {
   // Каллауты
   CALLOUT_CREATED = 'callout_created',
   CALLOUT_CLOSED = 'callout_closed',
+  CALLOUT_AUTO_CLOSED = 'callout_auto_closed',
 
   // Типы фракций
   FACTION_TYPE_CREATED = 'faction_type_created',
@@ -77,6 +78,10 @@ export enum AuditEventType {
 
   // Верификация
   VERIFICATION_TOKEN_CREATED = 'verification_token_created',
+
+  // Статус внешних ботов
+  BOT_CONNECTED = 'bot_connected',
+  BOT_CONNECTION_FAILED = 'bot_connection_failed',
 }
 
 /**
@@ -134,6 +139,16 @@ export interface CalloutClosedData extends BaseAuditEventData {
   channelId?: string;
   closedByDiscordId?: string;
   duration?: string;
+}
+
+/**
+ * Данные для события автоматического закрытия каллаута по таймауту
+ */
+export interface CalloutAutoClosedData extends BaseAuditEventData {
+  calloutId: number;
+  subdivisionName: string;
+  duration?: string;
+  channelId?: string;
 }
 
 /**
@@ -196,6 +211,8 @@ export interface VkResponseReceivedData extends BaseAuditEventData {
   factionName: string;
   vkUserId: string;
   vkUserName: string;
+  chatId?: string;
+  chatTitle?: string;
 }
 
 /**
@@ -216,6 +233,8 @@ export interface TelegramResponseReceivedData extends BaseAuditEventData {
   factionName: string;
   telegramUserId: string;
   telegramUserName: string;
+  chatId?: string;
+  chatTitle?: string;
 }
 
 /**
@@ -330,18 +349,22 @@ export interface ChatUnlinkedData extends BaseAuditEventData {
   subdivisionName: string;
   factionName: string;
   chatId: string;
+  chatTitle?: string;
 }
 
 export interface NotificationFailedData extends BaseAuditEventData {
   calloutId: number;
   subdivisionName: string;
   errorMessage: string;
+  chatId?: string;
+  chatTitle?: string;
 }
 
 export interface UnauthorizedAccessData extends BaseAuditEventData {
-  calloutId: number;
   action: string;
-  subdivisionName: string;
+  calloutId?: number;
+  subdivisionName?: string;
+  reason?: string;
 }
 
 export interface HistoryViewedData extends BaseAuditEventData {
@@ -354,12 +377,19 @@ export interface VerificationTokenCreatedData extends BaseAuditEventData {
   platform: string;
 }
 
+export interface BotStatusData extends BaseAuditEventData {
+  platform: 'VK' | 'Telegram';
+  mode?: string;
+  errorMessage?: string;
+}
+
 /**
  * Объединенный тип данных события
  */
 export type AuditEventData =
   | CalloutCreatedData
   | CalloutClosedData
+  | CalloutAutoClosedData
   | FactionAddedData
   | FactionUpdatedData
   | FactionRemovedData
@@ -389,7 +419,8 @@ export type AuditEventData =
   | NotificationFailedData
   | UnauthorizedAccessData
   | HistoryViewedData
-  | VerificationTokenCreatedData;
+  | VerificationTokenCreatedData
+  | BotStatusData;
 
 /**
  * Главная функция для логирования события в audit log канал
@@ -443,9 +474,10 @@ export async function logAuditEvent(
  */
 export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): EmbedBuilder {
   const timestamp = data.timestamp || new Date();
-  const embed = new EmbedBuilder().setTimestamp(timestamp).setFooter({
-    text: `Пользователь: ${data.userName} (${data.userId})`,
-  });
+  const footerText = data.userId === 'system'
+    ? `Пользователь: ${data.userName}`
+    : `Пользователь: ${data.userName} (${data.userId})`;
+  const embed = new EmbedBuilder().setTimestamp(timestamp).setFooter({ text: footerText });
 
   if (data.thumbnailUrl) {
     embed.setThumbnail(data.thumbnailUrl);
@@ -457,6 +489,9 @@ export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData)
 
     case AuditEventType.CALLOUT_CLOSED:
       return buildCalloutClosedEmbed(embed, data as CalloutClosedData);
+
+    case AuditEventType.CALLOUT_AUTO_CLOSED:
+      return buildCalloutAutoClosedEmbed(embed, data as CalloutAutoClosedData);
 
     case AuditEventType.FACTION_CREATED:
       return buildFactionAddedEmbed(embed, data as FactionAddedData);
@@ -559,6 +594,12 @@ export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData)
     case AuditEventType.VERIFICATION_TOKEN_CREATED:
       return buildVerificationTokenCreatedEmbed(embed, data as VerificationTokenCreatedData);
 
+    case AuditEventType.BOT_CONNECTED:
+      return buildBotConnectedEmbed(embed, data as BotStatusData);
+
+    case AuditEventType.BOT_CONNECTION_FAILED:
+      return buildBotConnectionFailedEmbed(embed, data as BotStatusData);
+
     default:
       return embed.setTitle('❓ Неизвестное событие').setColor(COLORS.INFO);
   }
@@ -630,6 +671,33 @@ function buildCalloutClosedEmbed(
 
   if (data.reason) {
     embed.addFields({ name: 'Причина', value: data.reason, inline: false });
+  }
+
+  return embed;
+}
+
+/**
+ * Embed для автоматического закрытия каллаута по таймауту
+ */
+function buildCalloutAutoClosedEmbed(
+  embed: EmbedBuilder,
+  data: CalloutAutoClosedData
+): EmbedBuilder {
+  embed
+    .setTitle('⏰ Каллаут закрыт по таймауту')
+    .setColor(COLORS.CLOSED)
+    .addFields([
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Закрыл', value: 'Система (автотаймаут)', inline: true },
+    ]);
+
+  if (data.channelId) {
+    embed.addFields({ name: 'Канал', value: `<#${data.channelId}>`, inline: true });
+  }
+
+  if (data.duration) {
+    embed.addFields({ name: 'Длительность', value: data.duration, inline: true });
   }
 
   return embed;
@@ -740,14 +808,22 @@ function buildVkResponseReceivedEmbed(
   embed: EmbedBuilder,
   data: VkResponseReceivedData
 ): EmbedBuilder {
-  return embed
+  embed
     .setTitle(`${EMOJI.SUCCESS} Получен ответ из VK`)
     .setColor(COLORS.INFO)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.factionName, inline: true },
-      { name: 'Пользователь VK', value: `${data.vkUserName} (${data.vkUserId})`, inline: false },
     ]);
+
+  if (data.chatId) {
+    const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.chatId})` : data.chatId;
+    embed.addFields({ name: 'VK Беседа', value: chatLabel, inline: true });
+  }
+
+  embed.addFields({ name: 'Пользователь VK', value: `${data.vkUserName} (${data.vkUserId})`, inline: false });
+
+  return embed;
 }
 
 /**
@@ -757,14 +833,22 @@ function buildTelegramResponseReceivedEmbed(
   embed: EmbedBuilder,
   data: TelegramResponseReceivedData
 ): EmbedBuilder {
-  return embed
+  embed
     .setTitle(`${EMOJI.SUCCESS} Получен ответ из Telegram`)
     .setColor(COLORS.INFO)
     .addFields([
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.factionName, inline: true },
-      { name: 'Пользователь Telegram', value: `${data.telegramUserName} (${data.telegramUserId})`, inline: false },
     ]);
+
+  if (data.chatId) {
+    const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.chatId})` : data.chatId;
+    embed.addFields({ name: 'Telegram Группа', value: chatLabel, inline: true });
+  }
+
+  embed.addFields({ name: 'Пользователь Telegram', value: `${data.telegramUserName} (${data.telegramUserId})`, inline: false });
+
+  return embed;
 }
 
 /**
@@ -791,12 +875,13 @@ function buildVkChatLinkedEmbed(
   embed: EmbedBuilder,
   data: VkChatLinkedData
 ): EmbedBuilder {
+  embed.setThumbnail(PLATFORM_THUMBNAIL['VK']);
+  const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.vkChatId})` : data.vkChatId;
   const fields = [
     { name: 'Фракция', value: data.factionName, inline: true },
     { name: 'Подразделение', value: data.subdivisionName, inline: true },
-    { name: 'VK Chat ID', value: data.vkChatId, inline: true },
+    { name: 'VK Беседа', value: chatLabel, inline: true },
   ];
-  if (data.chatTitle) fields.push({ name: 'Название беседы', value: data.chatTitle, inline: false });
   return embed
     .setTitle(`${EMOJI.SUCCESS} VK беседа привязана`)
     .setColor(COLORS.ACTIVE)
@@ -810,12 +895,13 @@ function buildTelegramChatLinkedEmbed(
   embed: EmbedBuilder,
   data: TelegramChatLinkedData
 ): EmbedBuilder {
+  embed.setThumbnail(PLATFORM_THUMBNAIL['Telegram']);
+  const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.telegramChatId})` : data.telegramChatId;
   const fields = [
     { name: 'Фракция', value: data.factionName, inline: true },
     { name: 'Подразделение', value: data.subdivisionName, inline: true },
-    { name: 'Telegram Chat ID', value: data.telegramChatId, inline: true },
+    { name: 'Telegram Группа', value: chatLabel, inline: true },
   ];
-  if (data.chatTitle) fields.push({ name: 'Название группы', value: data.chatTitle, inline: false });
   return embed
     .setTitle(`${EMOJI.SUCCESS} Telegram группа привязана`)
     .setColor(COLORS.ACTIVE)
@@ -1028,39 +1114,84 @@ function buildPresenceAssetSetEmbed(embed: EmbedBuilder, data: PresenceAssetSetD
 }
 
 function buildChatUnlinkedEmbed(embed: EmbedBuilder, data: ChatUnlinkedData, platform: string): EmbedBuilder {
+  const thumbnail = PLATFORM_THUMBNAIL[platform];
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.chatId})` : data.chatId;
   return embed
     .setTitle(`${EMOJI.WARNING} ${platform} беседа отвязана`)
     .setColor(COLORS.WARNING)
     .addFields(
       { name: 'Подразделение', value: data.subdivisionName, inline: true },
       { name: 'Фракция', value: data.factionName, inline: true },
-      { name: `${platform} Chat ID`, value: data.chatId, inline: true },
+      { name: `${platform} Чат`, value: chatLabel, inline: true },
       { name: 'Отвязал', value: `<@${data.userId}>`, inline: true },
     );
 }
 
+const PLATFORM_EMOJI: Record<string, string> = {
+  VK:       '<:vk:899963354993532960>',
+  Telegram: '<:telegram:1232769336754704444>',
+};
+
+const PLATFORM_THUMBNAIL: Record<string, string> = {
+  VK:       'https://cdn.discordapp.com/emojis/899963354993532960.png',
+  Telegram: 'https://cdn.discordapp.com/emojis/1232769336754704444.png',
+};
+
 function buildNotificationFailedEmbed(embed: EmbedBuilder, data: NotificationFailedData, platform: string): EmbedBuilder {
-  return embed
-    .setTitle(`${EMOJI.ERROR} Ошибка уведомления ${platform}`)
+  const thumbnail = PLATFORM_THUMBNAIL[platform];
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  embed
+    .setTitle(`${EMOJI.ERROR} Ошибка отправки уведомления ${platform}`)
     .setColor(COLORS.ERROR)
     .addFields(
       { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Подразделение', value: data.subdivisionName, inline: true },
-      { name: 'Ошибка', value: data.errorMessage.substring(0, 512), inline: false },
     );
+
+  if (data.chatId) {
+    const chatLabel = data.chatTitle ? `${data.chatTitle} (${data.chatId})` : data.chatId;
+    embed.addFields({ name: `${platform} Чат`, value: chatLabel, inline: true });
+  }
+
+  embed.addFields({ name: 'Ошибка', value: data.errorMessage.substring(0, 512), inline: false });
+
+  return embed;
 }
 
+const UNAUTHORIZED_ACTION_LABELS: Record<string, string> = {
+  respond:          'Отреагировать на инцидент',
+  close:            'Закрыть инцидент',
+  create_callout:   'Создать каллаут',
+  open_faction:     '/faction — лидерская панель',
+  open_settings:    '/settings — панель администратора',
+  open_admin_panel: 'Кнопки admin-панели',
+  open_history:     '/history — история каллаутов',
+};
+
 function buildUnauthorizedAccessEmbed(embed: EmbedBuilder, data: UnauthorizedAccessData): EmbedBuilder {
-  const actionLabel = data.action === 'respond' ? 'Отреагировать на инцидент' : 'Закрыть инцидент';
-  return embed
-    .setTitle(`🚫 Попытка несанкционированного доступа`)
+  const actionLabel = UNAUTHORIZED_ACTION_LABELS[data.action] ?? data.action;
+
+  const title = data.calloutId !== undefined
+    ? `🚫 Несанкционированный доступ к каллауту #${data.calloutId}`
+    : `🚫 Попытка несанкционированного доступа`;
+
+  embed
+    .setTitle(title)
     .setColor(COLORS.ERROR)
     .addFields(
-      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
       { name: 'Действие', value: actionLabel, inline: true },
-      { name: 'Подразделение', value: data.subdivisionName, inline: true },
       { name: 'Пользователь', value: `<@${data.userId}>`, inline: true },
     );
+
+  if (data.subdivisionName) {
+    embed.addFields({ name: 'Подразделение', value: data.subdivisionName, inline: true });
+  }
+  if (data.reason) {
+    embed.addFields({ name: 'Причина', value: data.reason.substring(0, 512), inline: false });
+  }
+
+  return embed;
 }
 
 function buildHistoryViewedEmbed(embed: EmbedBuilder, data: HistoryViewedData): EmbedBuilder {
@@ -1083,6 +1214,61 @@ function buildVerificationTokenCreatedEmbed(embed: EmbedBuilder, data: Verificat
       { name: 'Платформа', value: data.platform, inline: true },
       { name: 'Создал', value: `<@${data.userId}>`, inline: true },
     );
+}
+
+function buildBotConnectedEmbed(embed: EmbedBuilder, data: BotStatusData): EmbedBuilder {
+  const thumbnail = PLATFORM_THUMBNAIL[data.platform];
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  embed
+    .setTitle(`${EMOJI.SUCCESS} ${data.platform} бот подключён`)
+    .setColor(COLORS.ACTIVE)
+    .addFields({ name: 'Платформа', value: data.platform, inline: true });
+  if (data.mode) {
+    embed.addFields({ name: 'Режим', value: data.mode, inline: true });
+  }
+  return embed;
+}
+
+function buildBotConnectionFailedEmbed(embed: EmbedBuilder, data: BotStatusData): EmbedBuilder {
+  const thumbnail = PLATFORM_THUMBNAIL[data.platform];
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  embed
+    .setTitle(`${EMOJI.ERROR} ${data.platform} бот: ошибка подключения`)
+    .setColor(COLORS.ERROR)
+    .addFields({ name: 'Платформа', value: data.platform, inline: true });
+  if (data.errorMessage) {
+    embed.addFields({ name: 'Ошибка', value: data.errorMessage.substring(0, 512), inline: false });
+  }
+  return embed;
+}
+
+/**
+ * Отправить audit событие во все guilds, у которых настроен audit log канал.
+ * Используется для системных событий без привязки к конкретному серверу (старт ботов и т.п.)
+ */
+export async function logAuditEventToAllGuilds(
+  eventType: AuditEventType,
+  data: AuditEventData
+): Promise<void> {
+  try {
+    const servers = await ServerModel.findAll();
+    const serversWithAuditLog = servers.filter(s => s.audit_log_channel_id);
+    if (serversWithAuditLog.length === 0) return;
+
+    // Lazy import чтобы избежать циклических зависимостей
+    const { default: discordBot } = await import('../bot');
+
+    for (const server of serversWithAuditLog) {
+      const guild = discordBot.client.guilds.cache.get(server.guild_id);
+      if (!guild) continue;
+      logAuditEvent(guild, eventType, data).catch(() => {});
+    }
+  } catch (error) {
+    logger.error('Failed to broadcast audit event to all guilds', {
+      error: error instanceof Error ? error.message : error,
+      eventType,
+    });
+  }
 }
 
 /**

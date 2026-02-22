@@ -303,6 +303,8 @@ export class SyncService {
           telegramUserId: response.vk_user_id,
           telegramUserName: response.vk_user_name,
           thumbnailUrl: responseThumbnail,
+          chatId: subdivision.telegram_chat_id || undefined,
+          chatTitle: subdivision.telegram_chat_title || undefined,
         };
         await logAuditEvent(channel.guild, AuditEventType.TELEGRAM_RESPONSE_RECEIVED, tgAuditData);
       } else if (platform === 'discord') {
@@ -325,6 +327,8 @@ export class SyncService {
           vkUserId: response.vk_user_id,
           vkUserName: response.vk_user_name,
           thumbnailUrl: responseThumbnail,
+          chatId: subdivision.vk_chat_id || undefined,
+          chatTitle: subdivision.vk_chat_title || undefined,
         };
         await logAuditEvent(channel.guild, AuditEventType.VK_RESPONSE_RECEIVED, auditData);
       }

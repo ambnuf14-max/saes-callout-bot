@@ -37,7 +37,11 @@
       "Bash(DOCKER_BUILDKIT=0 docker build:*)",
       "mcp__ide__getDiagnostics",
       "Bash(ls:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npm test 2>&1)",
+      "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npm run preview:audit -- 1472976157015277698 2>&1)",
+      "Bash(cd /c/Users/sexorcist/Desktop/saes-callout-bot && npx ts-node scripts/_preview-security.ts 2>&1)",
+      "Bash(cd:*)"
     ]
   }
 }

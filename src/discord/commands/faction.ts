@@ -7,6 +7,7 @@ import { getLeaderFaction } from '../utils/faction-permission-checker';
 import { buildMainPanel, buildStandaloneMainPanel, buildStandaloneSetupRequiredPanel } from '../utils/faction-panel-builder';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
 
 const factionCommand: Command = {
   data: new SlashCommandBuilder()
@@ -55,6 +56,13 @@ const factionCommand: Command = {
         await interaction.editReply({
           content: MESSAGES.FACTION.NO_FACTION,
         });
+        const auditData: UnauthorizedAccessData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          action: 'open_faction',
+          thumbnailUrl: interaction.user.displayAvatarURL(),
+        };
+        logAuditEvent(interaction.guild!, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData).catch(() => {});
         return;
       }
 

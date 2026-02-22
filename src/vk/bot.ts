@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import { handleVkError } from '../utils/error-handler';
 import handleCallbackEvent from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
+import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
 /**
  * Класс VK бота
@@ -143,11 +144,22 @@ class VkBot {
       logger.info('VK bot started successfully', {
         mode: 'Long Poll',
       });
+
+      const connectedData: BotStatusData = {
+        userId: 'system', userName: 'Система', platform: 'VK', mode: 'Long Poll',
+      };
+      logAuditEventToAllGuilds(AuditEventType.BOT_CONNECTED, connectedData).catch(() => {});
     } catch (error) {
       logger.error('Failed to start VK bot', {
         error: error instanceof Error ? error.message : error,
         stack: error instanceof Error ? error.stack : undefined,
       });
+
+      const failedData: BotStatusData = {
+        userId: 'system', userName: 'Система', platform: 'VK',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+      logAuditEventToAllGuilds(AuditEventType.BOT_CONNECTION_FAILED, failedData).catch(() => {});
 
       // VK бот не критичен для работы системы, логируем но не останавливаем приложение
       logger.warn('VK bot failed to start, but application will continue');

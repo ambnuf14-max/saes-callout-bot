@@ -17,6 +17,7 @@ import {
   getSubdivisionSelection,
   clearSubdivisionSelection,
 } from './subdivision-select';
+import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
 
 /**
  * Обработчик submit модального окна создания каллаута
@@ -114,6 +115,15 @@ export async function handleCalloutModalSubmit(
       await interaction.editReply({
         content: permissionCheck.reason || `${EMOJI.ERROR} Недостаточно прав`,
       });
+      const auditData: UnauthorizedAccessData = {
+        userId: interaction.user.id,
+        userName: interaction.user.username,
+        action: 'create_callout',
+        subdivisionName: subdivision.name,
+        reason: permissionCheck.reason,
+        thumbnailUrl: interaction.user.displayAvatarURL(),
+      };
+      logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData).catch(() => {});
       return;
     }
 

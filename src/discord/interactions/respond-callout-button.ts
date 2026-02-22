@@ -61,6 +61,7 @@ export async function handleRespondCalloutButton(interaction: ButtonInteraction)
           calloutId: callout.id,
           action: 'respond',
           subdivisionName: subdivision.name,
+          thumbnailUrl: interaction.user.displayAvatarURL(),
         };
         await logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData);
       }

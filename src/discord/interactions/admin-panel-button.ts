@@ -63,6 +63,7 @@ import {
   PresenceAssetSetData,
   ChatUnlinkedData,
   VerificationTokenCreatedData,
+  UnauthorizedAccessData,
 } from '../utils/audit-logger';
 
 // Состояние для добавления фракции (3-4 шага)
@@ -100,6 +101,13 @@ async function getAdminContext(interaction: ButtonInteraction | StringSelectMenu
       content: `${EMOJI.ERROR} Только администраторы имеют доступ к этой панели`,
       flags: MessageFlags.Ephemeral,
     });
+    const auditData: UnauthorizedAccessData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      action: 'open_admin_panel',
+      thumbnailUrl: interaction.user.displayAvatarURL(),
+    };
+    logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData).catch(() => {});
     return null;
   }
 
@@ -1655,6 +1663,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
           subdivisionName: subdivision.name,
           factionName: faction?.name || 'Unknown',
           chatId: String(vkChatId),
+          chatTitle: subdivision.vk_chat_title || undefined,
         };
         await logAuditEvent(interaction.guild, AuditEventType.VK_CHAT_UNLINKED, auditData);
       }
@@ -1706,6 +1715,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
           subdivisionName: subdivision.name,
           factionName: faction?.name || 'Unknown',
           chatId: String(telegramChatId),
+          chatTitle: subdivision.telegram_chat_title || undefined,
         };
         await logAuditEvent(interaction.guild, AuditEventType.TELEGRAM_CHAT_UNLINKED, auditData);
       }

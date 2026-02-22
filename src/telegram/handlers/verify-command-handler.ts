@@ -51,7 +51,7 @@ export async function handleVerifyCommand(
     const chatId = msg.chat.id.toString();
 
     // Верифицировать токен и привязать Telegram группу
-    const result = await VerificationService.verifyToken(token, chatId, 'telegram');
+    const result = await VerificationService.verifyToken(token, chatId, 'telegram', msg.chat.title);
 
     logger.info('Telegram chat linked successfully', {
       subdivisionId: result.subdivision.id,

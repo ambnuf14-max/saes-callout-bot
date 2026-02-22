@@ -159,7 +159,9 @@ export interface Subdivision {
   logo_url: string | null;
   discord_role_id: string | null;
   vk_chat_id: string | null;
+  vk_chat_title: string | null;
   telegram_chat_id: string | null;
+  telegram_chat_title: string | null;
   is_accepting_callouts: boolean;
   is_active: boolean;
   is_default: boolean;
@@ -195,7 +197,9 @@ export interface UpdateSubdivisionDTO {
   logo_url?: string | null;
   discord_role_id?: string | null;
   vk_chat_id?: string | null;
+  vk_chat_title?: string | null;
   telegram_chat_id?: string | null;
+  telegram_chat_title?: string | null;
   is_accepting_callouts?: boolean;
   is_active?: boolean;
   // Embed настройки

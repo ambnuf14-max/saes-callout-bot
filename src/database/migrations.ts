@@ -21,6 +21,7 @@ import runPendingChangeAuditMessageMigration from './migrations/020_pending_chan
 import runFactionTypeEmbedMigration from './migrations/021_faction_type_embed';
 import runPresenceAssetNameMigration from './migrations/022_presence_asset_name';
 import runCalloutMessagesMigration from './migrations/023_callout_messages';
+import runChatTitlesMigration from './migrations/024_chat_titles';
 
 /**
  * SQL схема для всех таблиц
@@ -190,6 +191,7 @@ export async function runMigrations(): Promise<void> {
     await runFactionTypeEmbedMigration();
     await runPresenceAssetNameMigration();
     await runCalloutMessagesMigration();
+    await runChatTitlesMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

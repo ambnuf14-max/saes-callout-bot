@@ -165,9 +165,17 @@ export class SubdivisionModel {
       updates.push('vk_chat_id = ?');
       params.push(data.vk_chat_id);
     }
+    if (data.vk_chat_title !== undefined) {
+      updates.push('vk_chat_title = ?');
+      params.push(data.vk_chat_title);
+    }
     if (data.telegram_chat_id !== undefined) {
       updates.push('telegram_chat_id = ?');
       params.push(data.telegram_chat_id);
+    }
+    if (data.telegram_chat_title !== undefined) {
+      updates.push('telegram_chat_title = ?');
+      params.push(data.telegram_chat_title);
     }
     if (data.is_accepting_callouts !== undefined) {
       updates.push('is_accepting_callouts = ?');
@@ -245,29 +253,29 @@ export class SubdivisionModel {
   /**
    * Привязать VK беседу к подразделению
    */
-  static async linkVkChat(id: number, vkChatId: string): Promise<Subdivision | undefined> {
-    return await this.update(id, { vk_chat_id: vkChatId });
+  static async linkVkChat(id: number, vkChatId: string, chatTitle?: string): Promise<Subdivision | undefined> {
+    return await this.update(id, { vk_chat_id: vkChatId, vk_chat_title: chatTitle ?? null });
   }
 
   /**
    * Отвязать VK беседу от подразделения
    */
   static async unlinkVkChat(id: number): Promise<Subdivision | undefined> {
-    return await this.update(id, { vk_chat_id: null });
+    return await this.update(id, { vk_chat_id: null, vk_chat_title: null });
   }
 
   /**
    * Привязать Telegram группу к подразделению
    */
-  static async linkTelegramChat(id: number, telegramChatId: string): Promise<Subdivision | undefined> {
-    return await this.update(id, { telegram_chat_id: telegramChatId });
+  static async linkTelegramChat(id: number, telegramChatId: string, chatTitle?: string): Promise<Subdivision | undefined> {
+    return await this.update(id, { telegram_chat_id: telegramChatId, telegram_chat_title: chatTitle ?? null });
   }
 
   /**
    * Отвязать Telegram группу от подразделения
    */
   static async unlinkTelegramChat(id: number): Promise<Subdivision | undefined> {
-    return await this.update(id, { telegram_chat_id: null });
+    return await this.update(id, { telegram_chat_id: null, telegram_chat_title: null });
   }
 
   /**

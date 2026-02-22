@@ -10,6 +10,7 @@ import { ServerModel } from '../../database/models';
 import { isAdministrator } from '../utils/permission-checker';
 import { EMOJI } from '../../config/constants';
 import { buildAdminMainPanel } from '../utils/admin-panel-builder';
+import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
 
 const settingsCommand: Command = {
   data: new SlashCommandBuilder()
@@ -36,6 +37,13 @@ const settingsCommand: Command = {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Только администраторы могут использовать эту команду`,
         });
+        const auditData: UnauthorizedAccessData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          action: 'open_settings',
+          thumbnailUrl: interaction.user.displayAvatarURL(),
+        };
+        logAuditEvent(interaction.guild!, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData).catch(() => {});
         return;
       }
 

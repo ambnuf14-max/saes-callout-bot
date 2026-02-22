@@ -16,6 +16,7 @@ import { Callout } from '../../types/database.types';
 import { buildCalloutEmbed, addResponsesToEmbed } from '../utils/embed-builder';
 import { parseDiscordEmoji, getEmojiCdnUrl } from '../utils/subdivision-settings-helper';
 import { stripUrls } from '../../utils/validators';
+import { logAuditEvent, AuditEventType, HistoryViewedData } from '../utils/audit-logger';
 
 const PAGE_SIZE = 5;
 const MSG_EMBEDS_PER_PAGE = 5;
@@ -91,6 +92,12 @@ const historyCommand: Command = {
           await interaction.editReply({
             content: `${EMOJI.ERROR} У вас нет доступа к истории каллаутов.`,
           });
+          logAuditEvent(interaction.guild!, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, {
+            userId: interaction.user.id,
+            userName: interaction.user.username,
+            action: 'open_history',
+            thumbnailUrl: interaction.user.displayAvatarURL(),
+          }).catch(() => {});
           return;
         }
       }
@@ -113,6 +120,18 @@ const historyCommand: Command = {
         embeds,
         components,
       });
+
+      // Логируем просмотр истории в audit log
+      const filterParts: string[] = [];
+      if (filters.subdivisionId) filterParts.push(`подразделение: ${filters.subdivisionId}`);
+      if (filters.authorId) filterParts.push(`автор: <@${filters.authorId}>`);
+      if (filters.status !== 'all') filterParts.push(`статус: ${filters.status}`);
+      const auditData: HistoryViewedData = {
+        userId: interaction.user.id,
+        userName: interaction.user.username,
+        filters: filterParts.length > 0 ? filterParts.join(', ') : 'Без фильтров',
+      };
+      logAuditEvent(interaction.guild!, AuditEventType.HISTORY_VIEWED, auditData).catch(() => {});
     } catch (error) {
       logger.error('Error executing /history command', {
         error: error instanceof Error ? error.message : error,
