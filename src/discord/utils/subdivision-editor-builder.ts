@@ -432,6 +432,7 @@ export interface SubdivisionSettingsPanelData {
   short_description?: string | null;
   logo_url?: string | null;
   description?: string | null;
+  presence_asset_name?: string | null;
 }
 
 export interface SubdivisionSettingsPanelConfig {
@@ -454,6 +455,11 @@ export interface SubdivisionSettingsPanelConfig {
   roleClearButtonId: string;
   /** Custom ID кнопки «Привязки» */
   linksButtonId: string;
+  /**
+   * Custom ID кнопки «Presence Asset» (только админ).
+   * null/undefined → кнопка не отображается.
+   */
+  presenceAssetButtonId?: string | null;
   /**
    * Custom ID кнопки «Удалить».
    * null/undefined → кнопка не отображается.
@@ -501,6 +507,12 @@ export function buildSubdivisionSettingsPanelCore(
     { name: '📋 Краткое описание', value: subdivision.short_description || 'Не задано', inline: true },
     { name: '🏷️ Эмодзи', value: subdivision.logo_url || 'Не задан', inline: true },
   );
+
+  if (config.presenceAssetButtonId) {
+    embed.addFields(
+      { name: '🎮 Presence Asset', value: subdivision.presence_asset_name || 'Не задан', inline: true },
+    );
+  }
 
   if (config.pendingChanges && config.pendingChanges.length > 0) {
     const pendingTexts = config.pendingChanges.map(change => {
@@ -582,6 +594,16 @@ export function buildSubdivisionSettingsPanelCore(
       .setEmoji('⌨️')
       .setStyle(ButtonStyle.Secondary),
   ];
+
+  if (config.presenceAssetButtonId) {
+    navButtons.push(
+      new ButtonBuilder()
+        .setCustomId(config.presenceAssetButtonId)
+        .setLabel('Presence Asset')
+        .setEmoji('🎮')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
 
   if (config.deleteButtonId) {
     navButtons.push(

@@ -175,6 +175,7 @@ export interface Subdivision {
   embed_thumbnail_url: string | null;
   embed_footer_text: string | null;
   embed_footer_icon_url: string | null;
+  presence_asset_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -209,6 +210,30 @@ export interface UpdateSubdivisionDTO {
   embed_thumbnail_url?: string | null;
   embed_footer_text?: string | null;
   embed_footer_icon_url?: string | null;
+  presence_asset_name?: string | null;
+}
+
+// ============ CALLOUT MESSAGES ============
+
+export interface CalloutMessage {
+  id: number;
+  callout_id: number;
+  message_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
+  is_bot: boolean;
+  created_at: string;
+}
+
+export interface CreateCalloutMessageDTO {
+  callout_id: number;
+  message_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
+  is_bot: boolean;
+  created_at: string;
 }
 
 // ============ VERIFICATION TOKENS ============

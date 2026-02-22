@@ -19,6 +19,8 @@ import runAddMissingIndexesMigration from './migrations/018_add_missing_indexes'
 import runCalloutAuthorFactionMigration from './migrations/019_callout_author_faction';
 import runPendingChangeAuditMessageMigration from './migrations/020_pending_change_audit_message';
 import runFactionTypeEmbedMigration from './migrations/021_faction_type_embed';
+import runPresenceAssetNameMigration from './migrations/022_presence_asset_name';
+import runCalloutMessagesMigration from './migrations/023_callout_messages';
 
 /**
  * SQL схема для всех таблиц
@@ -186,6 +188,8 @@ export async function runMigrations(): Promise<void> {
     await runCalloutAuthorFactionMigration();
     await runPendingChangeAuditMessageMigration();
     await runFactionTypeEmbedMigration();
+    await runPresenceAssetNameMigration();
+    await runCalloutMessagesMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

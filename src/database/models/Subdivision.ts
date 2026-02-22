@@ -223,6 +223,10 @@ export class SubdivisionModel {
       updates.push('embed_footer_icon_url = ?');
       params.push(data.embed_footer_icon_url);
     }
+    if (data.presence_asset_name !== undefined) {
+      updates.push('presence_asset_name = ?');
+      params.push(data.presence_asset_name);
+    }
 
     if (updates.length === 0) {
       return await this.findById(id);

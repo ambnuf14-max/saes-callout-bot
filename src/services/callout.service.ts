@@ -1,5 +1,5 @@
 import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable } from 'discord.js';
-import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel } from '../database/models';
+import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel, CalloutMessageModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
 import validators from '../utils/validators';
@@ -145,7 +145,7 @@ export class CalloutService {
       const respondButton = new ButtonBuilder()
         .setCustomId(`respond_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
-        .setStyle(ButtonStyle.Danger);
+        .setStyle(ButtonStyle.Secondary);
 
       const closeButton = new ButtonBuilder()
         .setCustomId(`close_callout_${callout.id}`)
@@ -433,6 +433,9 @@ export class CalloutService {
           clearTimeout(existingTimer);
         }
 
+        // Считать и сохранить историю сообщений сразу при закрытии (до таймера удаления)
+        await CalloutService.archiveChannelMessages(guild, callout.discord_channel_id!, callout.id);
+
         logger.info('Scheduling channel deletion', {
           calloutId,
           channelId: callout.discord_channel_id,
@@ -442,6 +445,9 @@ export class CalloutService {
         const timer = setTimeout(async () => {
           CalloutService.pendingDeletions.delete(calloutId);
           try {
+            // Повторная архивация перед удалением — перезапишет если были новые сообщения
+            await CalloutService.archiveChannelMessages(guild, callout.discord_channel_id!, callout.id);
+
             await deleteIncidentChannel(guild, callout.discord_channel_id!);
             await CalloutModel.update(callout.id, { discord_channel_id: null });
             logger.info('Channel deleted after delay', {
@@ -517,6 +523,59 @@ export class CalloutService {
    */
   static async getActiveCalloutsCount(): Promise<number> {
     return await CalloutModel.countActive();
+  }
+
+  /**
+   * Считать все сообщения из канала инцидента и сохранить в БД
+   */
+  static async archiveChannelMessages(guild: Guild, channelId: string, calloutId: number): Promise<void> {
+    try {
+      const channel = await guild.channels.fetch(channelId) as TextChannel;
+      if (!channel || !channel.isTextBased()) return;
+
+      // Считываем сообщения порциями по 100 (лимит Discord API)
+      const allMessages: { id: string; author: { id: string; username: string; bot: boolean }; content: string; createdAt: Date }[] = [];
+      let lastId: string | undefined;
+
+      while (true) {
+        const batch = await channel.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
+        if (batch.size === 0) break;
+        allMessages.push(...Array.from(batch.values()).map(m => ({
+          id: m.id,
+          author: { id: m.author.id, username: m.member?.displayName || m.author.displayName || m.author.username, bot: m.author.bot },
+          content: m.content || (m.embeds.length > 0 ? '[Embed]' : '[Вложение]'),
+          createdAt: m.createdAt,
+        })));
+        lastId = batch.last()?.id;
+        if (batch.size < 100) break;
+      }
+
+      // Сортируем по времени (от старого к новому)
+      allMessages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+      // Фильтруем пустые сообщения
+      const toSave = allMessages.filter(m => m.content.trim().length > 0);
+
+      await CalloutMessageModel.bulkCreate(
+        toSave.map(m => ({
+          callout_id: calloutId,
+          message_id: m.id,
+          author_id: m.author.id,
+          author_name: m.author.username,
+          content: m.content,
+          is_bot: m.author.bot,
+          created_at: m.createdAt.toISOString(),
+        }))
+      );
+
+      logger.info('Channel messages archived', { calloutId, channelId, count: toSave.length });
+    } catch (error) {
+      logger.error('Failed to archive channel messages', {
+        error: error instanceof Error ? error.message : error,
+        calloutId,
+        channelId,
+      });
+    }
   }
 }
 

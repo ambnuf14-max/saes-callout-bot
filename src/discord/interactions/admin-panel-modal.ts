@@ -29,6 +29,7 @@ import {
 } from '../utils/subdivision-settings-helper';
 import { EMOJI, COLORS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { logAuditEvent, AuditEventType, PresenceAssetSetData } from '../utils/audit-logger';
 import { getAddFactionState, clearAddFactionState } from './admin-panel-button';
 import { SubdivisionTemplate, Subdivision, FactionType } from '../../types/database.types';
 
@@ -242,6 +243,11 @@ export async function handleAdminPanelModal(interaction: ModalSubmitInteraction)
     else if (customId.startsWith('admin_modal_reject_change_')) {
       const changeId = safeParseInt(customId.replace('admin_modal_reject_change_', ''));
       await handleRejectChange(interaction, changeId, server.id);
+    }
+    // Редактирование Presence Asset подразделения администратором
+    else if (customId.startsWith('admin_modal_sub_presence_asset_')) {
+      const subdivisionId = safeParseInt(customId.replace('admin_modal_sub_presence_asset_', ''));
+      await handleAdminEditPresenceAsset(interaction, subdivisionId);
     }
     // Прямое редактирование настроек подразделения администратором (без pending)
     else if (customId.startsWith('admin_modal_sub_settings_')) {
@@ -574,6 +580,52 @@ async function handleAdminEditSubdivisionSettings(
 
   await interaction.followUp({
     content: `${EMOJI.SUCCESS} Настройки подразделения **${subdivision.name}** обновлены`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+/**
+ * Редактирование Presence Asset подразделения администратором (прямое сохранение)
+ */
+async function handleAdminEditPresenceAsset(
+  interaction: ModalSubmitInteraction,
+  subdivisionId: number
+) {
+  await interaction.deferUpdate();
+
+  const subdivision = await getVerifiedSubdivision(subdivisionId);
+  const assetName = interaction.fields.getTextInputValue('presence_asset_name').trim() || null;
+
+  await SubdivisionService.updateSubdivision(subdivisionId, {
+    presence_asset_name: assetName,
+  });
+
+  logger.info('Subdivision presence asset updated by admin', {
+    subdivisionId,
+    userId: interaction.user.id,
+    presenceAssetName: assetName,
+  });
+
+  const updatedSubdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+  if (updatedSubdivision) {
+    const panel = buildAdminSubdivisionSettingsPanel(updatedSubdivision, updatedSubdivision.faction_id);
+    await interaction.editReply(panel);
+  }
+
+  if (interaction.guild) {
+    const faction = await FactionService.getFactionById(subdivision.faction_id);
+    const auditData: PresenceAssetSetData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      subdivisionName: subdivision.name,
+      factionName: faction?.name || 'Unknown',
+      assetName,
+    };
+    await logAuditEvent(interaction.guild, AuditEventType.PRESENCE_ASSET_SET, auditData);
+  }
+
+  await interaction.followUp({
+    content: `${EMOJI.SUCCESS} Presence Asset для **${subdivision.name}** ${assetName ? `установлен: \`${assetName}\`` : 'очищен'}`,
     flags: MessageFlags.Ephemeral,
   });
 }

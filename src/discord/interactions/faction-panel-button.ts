@@ -1,5 +1,7 @@
 import { ButtonInteraction, RoleSelectMenuInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from 'discord.js';
 import logger from '../../utils/logger';
+import { logAuditEvent, AuditEventType, SubdivisionToggleData } from '../utils/audit-logger';
+import { FactionService } from '../../services/faction.service';
 import { SubdivisionService } from '../../services/subdivision.service';
 import { VerificationService } from '../../services/verification.service';
 import { PendingChangeService } from '../../services/pending-change.service';
@@ -670,6 +672,17 @@ async function handleToggleCallouts(interaction: ButtonInteraction, subdivisionI
     newStatus,
     userId: interaction.user.id,
   });
+
+  if (interaction.guild) {
+    const faction = await FactionService.getFactionById(updatedSubdivision.faction_id);
+    const auditData: SubdivisionToggleData = {
+      userId: interaction.user.id,
+      userName: interaction.user.username,
+      subdivisionName: updatedSubdivision.name,
+      factionName: faction?.name || 'Unknown',
+    };
+    await logAuditEvent(interaction.guild, newStatus ? AuditEventType.SUBDIVISION_UNPAUSED : AuditEventType.SUBDIVISION_PAUSED, auditData);
+  }
 }
 
 /**

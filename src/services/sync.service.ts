@@ -1,4 +1,4 @@
-import { TextChannel } from 'discord.js';
+import { TextChannel, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import discordBot from '../discord/bot';
 import logger from '../utils/logger';
 import {
@@ -343,9 +343,22 @@ export class SyncService {
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
+            // Убрать кнопку "Отреагировать на инцидент" — подразделение уже ответило
+            const updatedComponents = originalMessage.components
+              .map((row: any) => {
+                const buttons = row.components.filter(
+                  (c: any) => !c.customId?.startsWith('respond_callout_')
+                );
+                if (buttons.length === 0) return null;
+                return ActionRowBuilder.from(row).setComponents(
+                  buttons.map((b: any) => ButtonBuilder.from(b))
+                );
+              })
+              .filter(Boolean) as ActionRowBuilder<ButtonBuilder>[];
+
             await originalMessage.edit({
               embeds: [updatedEmbed],
-              components: originalMessage.components,
+              components: updatedComponents,
             });
           }
         } catch (embedError) {
@@ -424,7 +437,10 @@ export class SyncService {
       }
     }
 
-    return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент.`;
+    const responderMention = response.vk_user_id.startsWith('discord_')
+      ? `(<@${response.vk_user_id.replace('discord_', '')}>)`
+      : `(${response.vk_user_name})`;
+    return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент. ${responderMention}`;
   }
 
   /**

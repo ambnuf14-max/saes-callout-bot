@@ -53,6 +53,30 @@ export enum AuditEventType {
   CHANGE_APPROVED = 'change_approved',
   CHANGE_REJECTED = 'change_rejected',
   CHANGE_CANCELLED = 'change_cancelled',
+
+  // Управление приёмом каллаутов
+  SUBDIVISION_PAUSED = 'subdivision_paused',
+  SUBDIVISION_UNPAUSED = 'subdivision_unpaused',
+
+  // Настройки подразделения
+  PRESENCE_ASSET_SET = 'presence_asset_set',
+
+  // Интеграции — отвязка
+  VK_CHAT_UNLINKED = 'vk_chat_unlinked',
+  TELEGRAM_CHAT_UNLINKED = 'telegram_chat_unlinked',
+
+  // Ошибки уведомлений
+  VK_NOTIFICATION_FAILED = 'vk_notification_failed',
+  TELEGRAM_NOTIFICATION_FAILED = 'telegram_notification_failed',
+
+  // Безопасность
+  UNAUTHORIZED_ACCESS_ATTEMPT = 'unauthorized_access_attempt',
+
+  // История
+  HISTORY_VIEWED = 'history_viewed',
+
+  // Верификация
+  VERIFICATION_TOKEN_CREATED = 'verification_token_created',
 }
 
 /**
@@ -291,6 +315,45 @@ export interface CalloutRoleData extends BaseAuditEventData {
   roleId: string;
 }
 
+export interface SubdivisionToggleData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+}
+
+export interface PresenceAssetSetData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+  assetName: string | null;
+}
+
+export interface ChatUnlinkedData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+  chatId: string;
+}
+
+export interface NotificationFailedData extends BaseAuditEventData {
+  calloutId: number;
+  subdivisionName: string;
+  errorMessage: string;
+}
+
+export interface UnauthorizedAccessData extends BaseAuditEventData {
+  calloutId: number;
+  action: string;
+  subdivisionName: string;
+}
+
+export interface HistoryViewedData extends BaseAuditEventData {
+  filters: string;
+}
+
+export interface VerificationTokenCreatedData extends BaseAuditEventData {
+  subdivisionName: string;
+  factionName: string;
+  platform: string;
+}
+
 /**
  * Объединенный тип данных события
  */
@@ -319,7 +382,14 @@ export type AuditEventData =
   | ChangeApprovedData
   | ChangeRejectedData
   | ChangeCancelledData
-  | CalloutRoleData;
+  | CalloutRoleData
+  | SubdivisionToggleData
+  | PresenceAssetSetData
+  | ChatUnlinkedData
+  | NotificationFailedData
+  | UnauthorizedAccessData
+  | HistoryViewedData
+  | VerificationTokenCreatedData;
 
 /**
  * Главная функция для логирования события в audit log канал
@@ -369,9 +439,9 @@ export async function logAuditEvent(
 }
 
 /**
- * Создать embed для audit события
+ * Создать embed для audit события (экспортируется для тестов)
  */
-function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): EmbedBuilder {
+export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): EmbedBuilder {
   const timestamp = data.timestamp || new Date();
   const embed = new EmbedBuilder().setTimestamp(timestamp).setFooter({
     text: `Пользователь: ${data.userName} (${data.userId})`,
@@ -458,6 +528,36 @@ function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData): Embed
 
     case AuditEventType.CHANGE_CANCELLED:
       return buildChangeCancelledEmbed(embed, data as ChangeCancelledData);
+
+    case AuditEventType.SUBDIVISION_PAUSED:
+      return buildSubdivisionPausedEmbed(embed, data as SubdivisionToggleData);
+
+    case AuditEventType.SUBDIVISION_UNPAUSED:
+      return buildSubdivisionUnpausedEmbed(embed, data as SubdivisionToggleData);
+
+    case AuditEventType.PRESENCE_ASSET_SET:
+      return buildPresenceAssetSetEmbed(embed, data as PresenceAssetSetData);
+
+    case AuditEventType.VK_CHAT_UNLINKED:
+      return buildChatUnlinkedEmbed(embed, data as ChatUnlinkedData, 'VK');
+
+    case AuditEventType.TELEGRAM_CHAT_UNLINKED:
+      return buildChatUnlinkedEmbed(embed, data as ChatUnlinkedData, 'Telegram');
+
+    case AuditEventType.VK_NOTIFICATION_FAILED:
+      return buildNotificationFailedEmbed(embed, data as NotificationFailedData, 'VK');
+
+    case AuditEventType.TELEGRAM_NOTIFICATION_FAILED:
+      return buildNotificationFailedEmbed(embed, data as NotificationFailedData, 'Telegram');
+
+    case AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT:
+      return buildUnauthorizedAccessEmbed(embed, data as UnauthorizedAccessData);
+
+    case AuditEventType.HISTORY_VIEWED:
+      return buildHistoryViewedEmbed(embed, data as HistoryViewedData);
+
+    case AuditEventType.VERIFICATION_TOKEN_CREATED:
+      return buildVerificationTokenCreatedEmbed(embed, data as VerificationTokenCreatedData);
 
     default:
       return embed.setTitle('❓ Неизвестное событие').setColor(COLORS.INFO);
@@ -891,6 +991,98 @@ function buildChangeCancelledEmbed(
       { name: 'Фракция', value: data.factionName, inline: true },
       { name: 'Детали', value: data.details, inline: false },
     ]);
+}
+
+function buildSubdivisionPausedEmbed(embed: EmbedBuilder, data: SubdivisionToggleData): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.WARNING} Приём каллаутов отключён`)
+    .setColor(COLORS.WARNING)
+    .addFields(
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildSubdivisionUnpausedEmbed(embed: EmbedBuilder, data: SubdivisionToggleData): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.SUCCESS} Приём каллаутов включён`)
+    .setColor(COLORS.ACTIVE)
+    .addFields(
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildPresenceAssetSetEmbed(embed: EmbedBuilder, data: PresenceAssetSetData): EmbedBuilder {
+  return embed
+    .setTitle(`🎮 Presence Asset установлен`)
+    .setColor(COLORS.INFO)
+    .addFields(
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Asset Name', value: data.assetName ?? '(удалён)', inline: true },
+      { name: 'Изменил', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildChatUnlinkedEmbed(embed: EmbedBuilder, data: ChatUnlinkedData, platform: string): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.WARNING} ${platform} беседа отвязана`)
+    .setColor(COLORS.WARNING)
+    .addFields(
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: `${platform} Chat ID`, value: data.chatId, inline: true },
+      { name: 'Отвязал', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildNotificationFailedEmbed(embed: EmbedBuilder, data: NotificationFailedData, platform: string): EmbedBuilder {
+  return embed
+    .setTitle(`${EMOJI.ERROR} Ошибка уведомления ${platform}`)
+    .setColor(COLORS.ERROR)
+    .addFields(
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Ошибка', value: data.errorMessage.substring(0, 512), inline: false },
+    );
+}
+
+function buildUnauthorizedAccessEmbed(embed: EmbedBuilder, data: UnauthorizedAccessData): EmbedBuilder {
+  const actionLabel = data.action === 'respond' ? 'Отреагировать на инцидент' : 'Закрыть инцидент';
+  return embed
+    .setTitle(`🚫 Попытка несанкционированного доступа`)
+    .setColor(COLORS.ERROR)
+    .addFields(
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Действие', value: actionLabel, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Пользователь', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildHistoryViewedEmbed(embed: EmbedBuilder, data: HistoryViewedData): EmbedBuilder {
+  return embed
+    .setTitle(`📋 История каллаутов просмотрена`)
+    .setColor(COLORS.INFO)
+    .addFields(
+      { name: 'Просмотрел', value: `<@${data.userId}>`, inline: true },
+      { name: 'Фильтры', value: data.filters || 'Без фильтров', inline: true },
+    );
+}
+
+function buildVerificationTokenCreatedEmbed(embed: EmbedBuilder, data: VerificationTokenCreatedData): EmbedBuilder {
+  return embed
+    .setTitle(`🔑 Токен верификации создан`)
+    .setColor(COLORS.INFO)
+    .addFields(
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Платформа', value: data.platform, inline: true },
+      { name: 'Создал', value: `<@${data.userId}>`, inline: true },
+    );
 }
 
 /**

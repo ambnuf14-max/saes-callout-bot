@@ -59,6 +59,10 @@ import {
   LeaderRoleRemovedData,
   AuditLogChannelSetData,
   CalloutRoleData,
+  SubdivisionToggleData,
+  PresenceAssetSetData,
+  ChatUnlinkedData,
+  VerificationTokenCreatedData,
 } from '../utils/audit-logger';
 
 // Состояние для добавления фракции (3-4 шага)
@@ -166,7 +170,8 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
   ];
   const isModalButton = modalButtons.some(prefix => customId === prefix || customId.startsWith(prefix)) ||
     customId.startsWith('admin_edit_faction_') ||
-    customId.startsWith('admin_sub_other_settings_');
+    customId.startsWith('admin_sub_other_settings_') ||
+    customId.startsWith('admin_sub_presence_asset_');
 
   // Немедленно подтвердить взаимодействие (только если это НЕ модальная кнопка)
   if (!isModalButton) {
@@ -441,6 +446,31 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const modal = buildSubdivisionSettingsModal(subdivision, `admin_modal_sub_settings_${subdivisionId}`);
+      await interaction.showModal(modal);
+    }
+
+    // Кнопка "Presence Asset" — открывает модал для ввода имени asset'а
+    else if (customId.startsWith('admin_sub_presence_asset_')) {
+      const subdivisionId = safeParseInt(customId.replace('admin_sub_presence_asset_', ''));
+      const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
+      if (!subdivision) {
+        throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      }
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = await import('discord.js');
+      const modal = new ModalBuilder()
+        .setCustomId(`admin_modal_sub_presence_asset_${subdivisionId}`)
+        .setTitle('Presence Asset');
+      const assetInput = new TextInputBuilder()
+        .setCustomId('presence_asset_name')
+        .setLabel('Имя asset\'а (из Developer Portal)')
+        .setPlaceholder('Например: swat_logo')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(100)
+        .setValue(subdivision.presence_asset_name ?? '');
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(assetInput),
+      );
       await interaction.showModal(modal);
     }
 
@@ -1568,6 +1598,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       await SubdivisionService.toggleCallouts(subdivisionId, newStatus);
       const updated = await SubdivisionService.getSubdivisionById(subdivisionId);
       if (updated) await interaction.editReply(buildAdminSubdivisionSettingsPanel(updated, updated.faction_id));
+      if (interaction.guild) {
+        const faction = await FactionService.getFactionById(subdivision.faction_id);
+        const auditData: SubdivisionToggleData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: subdivision.name,
+          factionName: faction?.name || 'Unknown',
+        };
+        await logAuditEvent(interaction.guild, newStatus ? AuditEventType.SUBDIVISION_UNPAUSED : AuditEventType.SUBDIVISION_PAUSED, auditData);
+      }
     }
 
     // Кнопка "Привязать VK" — генерирует токен верификации и показывает инструкции
@@ -1585,6 +1625,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const message = await interaction.editReply(panel);
       const { VerificationTokenModel } = await import('../../database/models');
       await VerificationTokenModel.updateDiscordMessage(token.id, interaction.channelId, message.id, interaction.token, interaction.client.application.id);
+      if (interaction.guild) {
+        const faction = await FactionService.getFactionById(subdivision.faction_id);
+        const auditData: VerificationTokenCreatedData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: subdivision.name,
+          factionName: faction?.name || 'Unknown',
+          platform: 'VK',
+        };
+        await logAuditEvent(interaction.guild, AuditEventType.VERIFICATION_TOKEN_CREATED, auditData);
+      }
     }
 
     // Кнопка "Отвязать VK"
@@ -1593,8 +1644,20 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
       if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       if (!subdivision.vk_chat_id) throw new CalloutError('VK беседа не привязана', 'VK_NOT_LINKED', 400);
+      const vkChatId = subdivision.vk_chat_id;
       const updated = await SubdivisionService.sendVkGoodbyeAndUnlink(subdivisionId);
       if (updated) await interaction.editReply(buildAdminLinksPanel(updated));
+      if (interaction.guild) {
+        const faction = await FactionService.getFactionById(subdivision.faction_id);
+        const auditData: ChatUnlinkedData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: subdivision.name,
+          factionName: faction?.name || 'Unknown',
+          chatId: String(vkChatId),
+        };
+        await logAuditEvent(interaction.guild, AuditEventType.VK_CHAT_UNLINKED, auditData);
+      }
     }
 
     // Кнопка "Привязать Telegram" — генерирует токен верификации
@@ -1613,6 +1676,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const message = await interaction.editReply(panel);
       const { VerificationTokenModel } = await import('../../database/models');
       await VerificationTokenModel.updateDiscordMessage(token.id, interaction.channelId, message.id, interaction.token, interaction.client.application.id);
+      if (interaction.guild) {
+        const faction = await FactionService.getFactionById(subdivision.faction_id);
+        const auditData: VerificationTokenCreatedData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: subdivision.name,
+          factionName: faction?.name || 'Unknown',
+          platform: 'Telegram',
+        };
+        await logAuditEvent(interaction.guild, AuditEventType.VERIFICATION_TOKEN_CREATED, auditData);
+      }
     }
 
     // Кнопка "Отвязать Telegram"
@@ -1621,8 +1695,20 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
       if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       if (!subdivision.telegram_chat_id) throw new CalloutError('Telegram группа не привязана', 'TELEGRAM_NOT_LINKED', 400);
+      const telegramChatId = subdivision.telegram_chat_id;
       const updated = await SubdivisionService.sendTelegramGoodbyeAndUnlink(subdivisionId);
       if (updated) await interaction.editReply(buildAdminLinksPanel(updated));
+      if (interaction.guild) {
+        const faction = await FactionService.getFactionById(subdivision.faction_id);
+        const auditData: ChatUnlinkedData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          subdivisionName: subdivision.name,
+          factionName: faction?.name || 'Unknown',
+          chatId: String(telegramChatId),
+        };
+        await logAuditEvent(interaction.guild, AuditEventType.TELEGRAM_CHAT_UNLINKED, auditData);
+      }
     }
 
     // Кнопка "Удалить подразделение" — показывает подтверждение

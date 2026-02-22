@@ -167,7 +167,10 @@ export function addResponsesToEmbed(
     const time = formatMoscowTime(new Date(r.created_at));
     const emoji = subdiv ? formatSubdivisionEmoji(subdiv) : '';
     const name = subdiv?.name || 'Unknown';
-    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки.`);
+    const responderMention = r.vk_user_id.startsWith('discord_')
+      ? ` (<@${r.vk_user_id.replace('discord_', '')}>)`
+      : ` (${r.vk_user_name})`;
+    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки.${responderMention}`);
   }
 
   if (callout && callout.status !== CALLOUT_STATUS.ACTIVE && callout.closed_at) {

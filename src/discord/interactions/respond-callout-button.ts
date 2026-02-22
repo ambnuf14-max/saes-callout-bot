@@ -6,9 +6,9 @@ import logger from '../../utils/logger';
 import { safeParseInt } from '../../utils/validators';
 import { CalloutModel, SubdivisionModel } from '../../database/models';
 import SyncService from '../../services/sync.service';
-import { isLeader } from '../utils/permission-checker';
 import { EMOJI, MESSAGES, CALLOUT_STATUS } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
+import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
 
 /**
  * Обработчик нажатия кнопки "Отреагировать" на каллаут из Discord.
@@ -46,15 +46,24 @@ export async function handleRespondCalloutButton(interaction: ButtonInteraction)
       return;
     }
 
-    // Проверка прав: роль подразделения ИЛИ лидер/менеджмент
+    // Проверка прав: только роль подразделения
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const hasSubdivisionRole = subdivision.discord_role_id
       ? member.roles.cache.has(subdivision.discord_role_id)
       : false;
-    const hasLeaderAccess = await isLeader(member);
 
-    if (!hasSubdivisionRole && !hasLeaderAccess) {
+    if (!hasSubdivisionRole) {
       await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_NO_RESPOND_PERMISSION });
+      if (interaction.guild) {
+        const auditData: UnauthorizedAccessData = {
+          userId: interaction.user.id,
+          userName: interaction.user.username,
+          calloutId: callout.id,
+          action: 'respond',
+          subdivisionName: subdivision.name,
+        };
+        await logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData);
+      }
       return;
     }
 

@@ -14,6 +14,8 @@ import { getUserRoleIds } from '../utils/permission-checker';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import config from '../../config/config';
 import { CalloutError } from '../../utils/error-handler';
+import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
+import { SubdivisionModel } from '../../database/models';
 
 /**
  * Обработчик нажатия кнопки "Закрыть инцидент"
@@ -67,6 +69,15 @@ export async function handleCloseCalloutButton(interaction: ButtonInteraction) {
         content: MESSAGES.CALLOUT.ERROR_NO_PERMISSION,
         flags: MessageFlags.Ephemeral,
       });
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
+      const auditData: UnauthorizedAccessData = {
+        userId: interaction.user.id,
+        userName: interaction.user.username,
+        calloutId: callout.id,
+        action: 'close',
+        subdivisionName: subdivision?.name || 'Unknown',
+      };
+      await logAuditEvent(interaction.guild, AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT, auditData);
       return;
     }
 

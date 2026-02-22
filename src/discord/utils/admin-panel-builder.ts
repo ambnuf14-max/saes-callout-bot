@@ -1164,6 +1164,7 @@ export function buildAdminSubdivisionSettingsPanel(subdivision: Subdivision, fac
     toggleCalloutsButtonId: `admin_toggle_callouts_${subdivision.id}`,
     roleClearButtonId: `admin_sub_role_clear_${subdivision.id}`,
     linksButtonId: `admin_sub_links_${subdivision.id}`,
+    presenceAssetButtonId: `admin_sub_presence_asset_${subdivision.id}`,
     deleteButtonId: !subdivision.is_default ? `admin_delete_sub_${subdivision.id}` : null,
     backButtonId: `admin_faction_subdivisions_${factionId}`,
   });
