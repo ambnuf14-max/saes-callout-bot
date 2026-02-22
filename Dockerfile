@@ -14,8 +14,9 @@ RUN npm install
 # Копируем исходный код
 COPY . .
 
-# Собираем TypeScript
-RUN npm run build
+# Собираем TypeScript (incremental — кэш сохраняется между сборками)
+RUN --mount=type=cache,target=/tmp/ts-build-cache \
+    npm run build
 
 # Создаём директории для данных и логов с правильными правами
 RUN mkdir -p /app/data /app/logs && \
