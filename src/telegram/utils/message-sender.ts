@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
 import { EMOJI } from '../../config/constants';
-import { buildDetailedCalloutKeyboard } from './keyboard-builder';
+import { buildDetailedCalloutKeyboard, buildDeclinedCalloutKeyboard } from './keyboard-builder';
 import logger from '../../utils/logger';
 import { parseDiscordEmoji } from '../../discord/utils/subdivision-settings-helper';
 import { TelegramMemberModel, TelegramMember } from '../../database/models/TelegramMember';
@@ -281,8 +281,55 @@ export async function editMessage(
   }
 }
 
+/**
+ * Форматировать сообщение об отклонённом каллауте для Telegram
+ */
+export function formatCalloutDeclinedMessage(callout: Callout, subdivision: Subdivision): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+  const declinedBy = callout.declined_by_name || 'Неизвестно';
+
+  const parts = [
+    `🚨 <b>INCOMING CALLOUT #${callout.id}</b>`,
+    '',
+    `<b>Кратко об инциденте</b>`,
+    callout.brief_description || 'Не указано',
+    '',
+    `<b>Локация инцидента</b>`,
+    callout.location || 'Не указано',
+    '',
+    `<b>Полное описание инцидента</b>`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    parts.push('', '<b>TAC-канал</b>', callout.tac_channel);
+  }
+
+  parts.push(
+    '',
+    `<b>Запрошенные подразделения</b>`,
+    subdivision.name,
+    '',
+    `<b>Статус:</b> 🟡 Отклонён`,
+    `<b>Отклонил:</b> ${declinedBy}`,
+  );
+
+  if (callout.decline_reason) {
+    parts.push(`<b>Причина:</b> ${callout.decline_reason}`);
+  }
+
+  parts.push(
+    '',
+    `⚠️ Каллаут будет закрыт через 5 минут`,
+    `🕐 ${time}`,
+  );
+
+  return parts.join('\n');
+}
+
 export default {
   sendCalloutNotification,
   formatCalloutClosedMessage,
+  formatCalloutDeclinedMessage,
   editMessage,
 };

@@ -134,6 +134,22 @@ export class CalloutModel {
       updates.push('closed_at = ?');
       params.push(data.closed_at);
     }
+    if (data.declined_at !== undefined) {
+      updates.push('declined_at = ?');
+      params.push(data.declined_at);
+    }
+    if (data.declined_by !== undefined) {
+      updates.push('declined_by = ?');
+      params.push(data.declined_by);
+    }
+    if (data.declined_by_name !== undefined) {
+      updates.push('declined_by_name = ?');
+      params.push(data.declined_by_name);
+    }
+    if (data.decline_reason !== undefined) {
+      updates.push('decline_reason = ?');
+      params.push(data.decline_reason);
+    }
 
     if (updates.length === 0) {
       return await this.findById(id);
@@ -164,6 +180,35 @@ export class CalloutModel {
       closed_by: closedBy,
       closed_reason: reason,
       closed_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Отклонить каллаут (decline)
+   */
+  static async decline(
+    id: number,
+    declinedBy: string,
+    declinedByName: string,
+    reason: string
+  ): Promise<Callout | undefined> {
+    return await this.update(id, {
+      declined_at: new Date().toISOString(),
+      declined_by: declinedBy,
+      declined_by_name: declinedByName,
+      decline_reason: reason,
+    });
+  }
+
+  /**
+   * Отменить отклонение каллаута
+   */
+  static async cancelDecline(id: number): Promise<Callout | undefined> {
+    return await this.update(id, {
+      declined_at: null,
+      declined_by: null,
+      declined_by_name: null,
+      decline_reason: null,
     });
   }
 

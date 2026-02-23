@@ -318,6 +318,88 @@ export class PendingChangeModel {
   }
 
   /**
+   * Получить все pending запросы фракции с деталями (один запрос вместо N+1)
+   */
+  static async findPendingWithDetailsByFactionId(
+    factionId: number
+  ): Promise<PendingChangeWithDetails[]> {
+    const results = await database.all<any>(
+      `SELECT
+        pc.*,
+        f.name as faction_name,
+        s.name as subdivision_name
+      FROM pending_changes pc
+      JOIN factions f ON pc.faction_id = f.id
+      LEFT JOIN subdivisions s ON pc.subdivision_id = s.id
+      WHERE pc.faction_id = ? AND pc.status = 'pending'
+      ORDER BY pc.requested_at DESC`,
+      [factionId]
+    );
+
+    return results.map((result) => {
+      const change: PendingChange = {
+        id: result.id,
+        server_id: result.server_id,
+        faction_id: result.faction_id,
+        subdivision_id: result.subdivision_id,
+        change_type: result.change_type,
+        requested_by: result.requested_by,
+        requested_at: result.requested_at,
+        status: result.status,
+        reviewed_by: result.reviewed_by,
+        reviewed_at: result.reviewed_at,
+        rejection_reason: result.rejection_reason,
+        change_data: result.change_data,
+        audit_log_message_id: result.audit_log_message_id ?? null,
+        created_at: result.created_at,
+        updated_at: result.updated_at,
+      };
+      return { ...change, faction_name: result.faction_name, subdivision_name: result.subdivision_name, parsed_data: this.parseChangeData(change) };
+    });
+  }
+
+  /**
+   * Получить все pending запросы пользователя с деталями (один запрос вместо N+1)
+   */
+  static async findPendingWithDetailsByRequesterId(
+    requesterId: string
+  ): Promise<PendingChangeWithDetails[]> {
+    const results = await database.all<any>(
+      `SELECT
+        pc.*,
+        f.name as faction_name,
+        s.name as subdivision_name
+      FROM pending_changes pc
+      JOIN factions f ON pc.faction_id = f.id
+      LEFT JOIN subdivisions s ON pc.subdivision_id = s.id
+      WHERE pc.requested_by = ? AND pc.status = 'pending'
+      ORDER BY pc.requested_at DESC`,
+      [requesterId]
+    );
+
+    return results.map((result) => {
+      const change: PendingChange = {
+        id: result.id,
+        server_id: result.server_id,
+        faction_id: result.faction_id,
+        subdivision_id: result.subdivision_id,
+        change_type: result.change_type,
+        requested_by: result.requested_by,
+        requested_at: result.requested_at,
+        status: result.status,
+        reviewed_by: result.reviewed_by,
+        reviewed_at: result.reviewed_at,
+        rejection_reason: result.rejection_reason,
+        change_data: result.change_data,
+        audit_log_message_id: result.audit_log_message_id ?? null,
+        created_at: result.created_at,
+        updated_at: result.updated_at,
+      };
+      return { ...change, faction_name: result.faction_name, subdivision_name: result.subdivision_name, parsed_data: this.parseChangeData(change) };
+    });
+  }
+
+  /**
    * Получить все pending запросы сервера с деталями
    */
   static async findPendingWithDetailsByServerId(

@@ -1,4 +1,5 @@
-import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable } from 'discord.js';
+import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable, ButtonInteraction } from 'discord.js';
+import discordBot from '../discord/bot';
 import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel, CalloutMessageModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
 import logger from '../utils/logger';
@@ -6,7 +7,7 @@ import validators from '../utils/validators';
 import { CalloutError } from '../utils/error-handler';
 import { createIncidentChannel, deleteIncidentChannel } from '../discord/utils/channel-manager';
 import { buildCalloutEmbed, buildClosedCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
-import { EMOJI, CALLOUT_STATUS, MESSAGES } from '../config/constants';
+import { EMOJI, CALLOUT_STATUS, MESSAGES, DECLINE_TIMERS } from '../config/constants';
 import { parseDiscordEmoji } from '../discord/utils/subdivision-settings-helper';
 import NotificationService from './notification.service';
 import config from '../config/config';
@@ -46,6 +47,11 @@ export class CalloutService {
    * Хранение предотвращает дублирование таймеров и позволяет их отменить.
    */
   private static pendingDeletions = new Map<number, NodeJS.Timeout>();
+
+  /**
+   * Таймеры отложенного закрытия после отклонения (decline), ключ — calloutId.
+   */
+  private static pendingDeclineClose = new Map<number, NodeJS.Timeout>();
 
   /**
    * Создать новый каллаут
@@ -149,6 +155,11 @@ export class CalloutService {
         .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
         .setStyle(ButtonStyle.Secondary);
 
+      const declineButton = new ButtonBuilder()
+        .setCustomId(`decline_callout_${callout.id}`)
+        .setLabel(MESSAGES.CALLOUT.BUTTON_DECLINE_DISCORD)
+        .setStyle(ButtonStyle.Primary);
+
       const closeButton = new ButtonBuilder()
         .setCustomId(`close_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
@@ -166,7 +177,7 @@ export class CalloutService {
         respondButton.setEmoji(emoji);
       }
 
-      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, closeButton);
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, declineButton, closeButton);
 
       // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({
@@ -322,7 +333,8 @@ export class CalloutService {
     guild: Guild,
     calloutId: number,
     closedBy: string,
-    reason?: string
+    reason?: string,
+    customChannelDeleteDelay?: number
   ): Promise<Callout | undefined> {
     const callout = await CalloutModel.findById(calloutId);
 
@@ -458,9 +470,16 @@ export class CalloutService {
         }
       }
 
+      // Отменить таймер decline-закрытия если есть
+      const declineTimer = CalloutService.pendingDeclineClose.get(calloutId);
+      if (declineTimer) {
+        clearTimeout(declineTimer);
+        CalloutService.pendingDeclineClose.delete(calloutId);
+      }
+
       // 5. Опционально: удалить канал через delay
       if (config.features.autoDeleteChannels && callout.discord_channel_id) {
-        const delay = config.features.channelDeleteDelay;
+        const delay = customChannelDeleteDelay ?? config.features.channelDeleteDelay;
 
         // Отменить предыдущий таймер для этого каллаута если он есть
         const existingTimer = CalloutService.pendingDeletions.get(calloutId);
@@ -558,6 +577,304 @@ export class CalloutService {
    */
   static async getActiveCalloutsCount(): Promise<number> {
     return await CalloutModel.countActive();
+  }
+
+  /**
+   * Получить Guild для каллаута (нужен, когда вызов из VK/TG без guild объекта)
+   */
+  private static async getGuildForCallout(callout: Callout): Promise<Guild | null> {
+    const server = await ServerModel.findById(callout.server_id);
+    if (!server) return null;
+    return discordBot.client.guilds.cache.get(server.guild_id) || null;
+  }
+
+  /**
+   * Отклонить запрос поддержки
+   */
+  static async declineCallout(
+    guildOrNull: Guild | null,
+    calloutId: number,
+    declinedBy: string,
+    declinedByName: string,
+    reason: string
+  ): Promise<Callout | undefined> {
+    const callout = await CalloutModel.findById(calloutId);
+
+    if (!callout) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут не найден`, 'CALLOUT_NOT_FOUND', 404);
+    }
+
+    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут уже закрыт`, 'CALLOUT_ALREADY_CLOSED', 400);
+    }
+
+    if (callout.declined_at) {
+      throw new CalloutError(`${EMOJI.ERROR} Запрос поддержки уже отклонён`, 'CALLOUT_ALREADY_DECLINED', 400);
+    }
+
+    // 1. Сохранить decline в БД
+    const declinedCallout = await CalloutModel.decline(calloutId, declinedBy, declinedByName, reason);
+    if (!declinedCallout) {
+      throw new Error('Failed to decline callout in database');
+    }
+
+    logger.info('Callout declined', { calloutId, declinedBy, reason });
+
+    const guild = guildOrNull || (await this.getGuildForCallout(declinedCallout));
+
+    const subdivision = await SubdivisionModel.findById(declinedCallout.subdivision_id);
+
+    // 2. Обновить Discord embed + заменить кнопки
+    if (guild && declinedCallout.discord_channel_id && declinedCallout.discord_message_id && subdivision) {
+      try {
+        const channel = (await guild.channels.fetch(declinedCallout.discord_channel_id)) as TextChannel;
+        if (channel && channel.isTextBased()) {
+          const message = await channel.messages.fetch(declinedCallout.discord_message_id);
+          if (message) {
+            const { buildCalloutEmbed, addResponsesToEmbed } = await import('../discord/utils/embed-builder');
+            const { CalloutResponseModel: CRM } = await import('../database/models');
+            const allResponses = await CRM.findByCalloutId(calloutId);
+            const responseSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+            const subdivisionsMap = await SubdivisionModel.findByIds(responseSubIds);
+
+            const updatedEmbed = buildCalloutEmbed(declinedCallout, subdivision);
+            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, declinedCallout);
+
+            // Кнопка "Возобновить реагирование" + "Закрыть"
+            const reviveButton = new ButtonBuilder()
+              .setCustomId(`revive_callout_${calloutId}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_REVIVE_DISCORD)
+              .setStyle(ButtonStyle.Secondary);
+
+            const closeButton = new ButtonBuilder()
+              .setCustomId(`close_callout_${calloutId}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
+              .setStyle(ButtonStyle.Danger);
+
+            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(reviveButton, closeButton);
+            await message.edit({ embeds: [updatedEmbed], components: [actionRow] });
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to update Discord embed on decline', {
+          error: error instanceof Error ? error.message : error,
+          calloutId,
+        });
+      }
+    }
+
+    // 3. Уведомить VK и TG
+    try {
+      await NotificationService.notifyVkAboutCalloutDeclined(declinedCallout);
+    } catch (error) {
+      logger.error('Failed to notify VK about declined callout', {
+        error: error instanceof Error ? error.message : error, calloutId,
+      });
+    }
+
+    try {
+      await NotificationService.notifyTelegramAboutCalloutDeclined(declinedCallout);
+    } catch (error) {
+      logger.error('Failed to notify Telegram about declined callout', {
+        error: error instanceof Error ? error.message : error, calloutId,
+      });
+    }
+
+    // 4. Запустить 5-минутный таймер → закрыть каллаут
+    const existingTimer = CalloutService.pendingDeclineClose.get(calloutId);
+    if (existingTimer) clearTimeout(existingTimer);
+
+    const timer = setTimeout(async () => {
+      CalloutService.pendingDeclineClose.delete(calloutId);
+      try {
+        const freshCallout = await CalloutModel.findById(calloutId);
+        if (!freshCallout || freshCallout.status !== CALLOUT_STATUS.ACTIVE) return;
+
+        const g = guild || (await CalloutService.getGuildForCallout(freshCallout));
+        if (!g) {
+          logger.warn('Cannot auto-close declined callout: guild not found', { calloutId });
+          return;
+        }
+
+        const declineReason = freshCallout.decline_reason
+          ? `Отклонено: ${freshCallout.decline_reason}`
+          : 'Запрос поддержки отклонён подразделением';
+
+        await CalloutService.closeCallout(
+          g,
+          calloutId,
+          'system',
+          declineReason,
+          DECLINE_TIMERS.CHANNEL_DELETE_DELAY
+        );
+      } catch (error) {
+        logger.error('Failed to auto-close declined callout', {
+          error: error instanceof Error ? error.message : error, calloutId,
+        });
+      }
+    }, DECLINE_TIMERS.CLOSE_DELAY);
+
+    CalloutService.pendingDeclineClose.set(calloutId, timer);
+
+    return declinedCallout;
+  }
+
+  /**
+   * Возобновить реагирование (отменить отклонение)
+   */
+  static async cancelDecline(
+    guildOrNull: Guild | null,
+    calloutId: number
+  ): Promise<Callout | undefined> {
+    const callout = await CalloutModel.findById(calloutId);
+
+    if (!callout) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут не найден`, 'CALLOUT_NOT_FOUND', 404);
+    }
+
+    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут уже закрыт`, 'CALLOUT_ALREADY_CLOSED', 400);
+    }
+
+    if (!callout.declined_at) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут не был отклонён`, 'CALLOUT_NOT_DECLINED', 400);
+    }
+
+    // 1. Отменить таймер закрытия
+    const existingTimer = CalloutService.pendingDeclineClose.get(calloutId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      CalloutService.pendingDeclineClose.delete(calloutId);
+    }
+
+    // 2. Сбросить decline в БД
+    const revivedCallout = await CalloutModel.cancelDecline(calloutId);
+    if (!revivedCallout) throw new Error('Failed to cancel decline in database');
+
+    logger.info('Callout decline cancelled', { calloutId });
+
+    const guild = guildOrNull || (await this.getGuildForCallout(revivedCallout));
+    const subdivision = await SubdivisionModel.findById(revivedCallout.subdivision_id);
+
+    // 3. Обновить Discord embed + вернуть кнопки
+    if (guild && revivedCallout.discord_channel_id && revivedCallout.discord_message_id && subdivision) {
+      try {
+        const channel = (await guild.channels.fetch(revivedCallout.discord_channel_id)) as TextChannel;
+        if (channel && channel.isTextBased()) {
+          const message = await channel.messages.fetch(revivedCallout.discord_message_id);
+          if (message) {
+            const { buildCalloutEmbed, addResponsesToEmbed } = await import('../discord/utils/embed-builder');
+            const { CalloutResponseModel: CRM } = await import('../database/models');
+            const allResponses = await CRM.findByCalloutId(calloutId);
+            const responseSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+            const subdivisionsMap = await SubdivisionModel.findByIds(responseSubIds);
+
+            const updatedEmbed = buildCalloutEmbed(revivedCallout, subdivision);
+            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, revivedCallout);
+
+            // Возвращаем кнопки "Отреагировать" + "Закрыть"
+            const respondButton = new ButtonBuilder()
+              .setCustomId(`respond_callout_${calloutId}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
+              .setStyle(ButtonStyle.Secondary);
+
+            const closeButton = new ButtonBuilder()
+              .setCustomId(`close_callout_${calloutId}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
+              .setStyle(ButtonStyle.Danger);
+
+            const parsedEmoji = parseDiscordEmoji(subdivision.logo_url);
+            if (parsedEmoji) {
+              let emoji: ComponentEmojiResolvable;
+              if (parsedEmoji.id) {
+                emoji = { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false };
+              } else {
+                emoji = parsedEmoji.name;
+              }
+              respondButton.setEmoji(emoji);
+            }
+
+            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, closeButton);
+            await message.edit({ embeds: [updatedEmbed], components: [actionRow] });
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to update Discord embed on revive', {
+          error: error instanceof Error ? error.message : error,
+          calloutId,
+        });
+      }
+    }
+
+    // 4. Уведомить VK и TG
+    try {
+      await NotificationService.notifyVkAboutCalloutRevived(revivedCallout);
+    } catch (error) {
+      logger.error('Failed to notify VK about revived callout', {
+        error: error instanceof Error ? error.message : error, calloutId,
+      });
+    }
+
+    try {
+      await NotificationService.notifyTelegramAboutCalloutRevived(revivedCallout);
+    } catch (error) {
+      logger.error('Failed to notify Telegram about revived callout', {
+        error: error instanceof Error ? error.message : error, calloutId,
+      });
+    }
+
+    return revivedCallout;
+  }
+
+  /**
+   * Восстановить таймеры decline-закрытия после рестарта бота.
+   * Для каждого активного declined-каллаута пересчитывает оставшееся время
+   * и запускает таймер (или закрывает сразу, если 5 мин уже истекли).
+   */
+  static async restoreDeclineTimers(): Promise<void> {
+    try {
+      const activeCallouts = await CalloutModel.findActive();
+      const declined = activeCallouts.filter(c => c.declined_at);
+      if (declined.length === 0) return;
+
+      for (const callout of declined) {
+        if (CalloutService.pendingDeclineClose.has(callout.id)) continue;
+
+        const declinedAt = new Date(callout.declined_at!).getTime();
+        const elapsed = Date.now() - declinedAt;
+        const remaining = Math.max(0, DECLINE_TIMERS.CLOSE_DELAY - elapsed);
+
+        const guild = await CalloutService.getGuildForCallout(callout);
+        if (!guild) continue;
+
+        const timer = setTimeout(async () => {
+          CalloutService.pendingDeclineClose.delete(callout.id);
+          try {
+            const fresh = await CalloutModel.findById(callout.id);
+            if (!fresh || fresh.status !== CALLOUT_STATUS.ACTIVE) return;
+            const reason = fresh.decline_reason
+              ? `Отклонено: ${fresh.decline_reason}`
+              : 'Запрос поддержки отклонён подразделением';
+            await CalloutService.closeCallout(guild, callout.id, 'system', reason, DECLINE_TIMERS.CHANNEL_DELETE_DELAY);
+          } catch (err) {
+            logger.error('Failed to auto-close declined callout after restart', {
+              error: err instanceof Error ? err.message : err,
+              calloutId: callout.id,
+            });
+          }
+        }, remaining);
+
+        CalloutService.pendingDeclineClose.set(callout.id, timer);
+      }
+
+      if (declined.length > 0) {
+        logger.info('Restored decline timers after restart', { count: declined.length });
+      }
+    } catch (error) {
+      logger.error('Failed to restore decline timers', {
+        error: error instanceof Error ? error.message : error,
+      });
+    }
   }
 
   /**

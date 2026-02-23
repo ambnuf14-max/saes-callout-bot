@@ -1,7 +1,7 @@
 import { VK } from 'vk-io';
 import logger from '../../utils/logger';
 import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
-import { buildDetailedCalloutKeyboard } from './keyboard-builder';
+import { buildDetailedCalloutKeyboard, buildDeclinedCalloutKeyboard } from './keyboard-builder';
 import { EMOJI } from '../../config/constants';
 import { parseDiscordEmoji } from '../../discord/utils/subdivision-settings-helper';
 
@@ -29,6 +29,9 @@ export async function sendCalloutNotification(
     // Отправить сообщение.
     // Используем peer_ids (множественное) — VK возвращает объект с conversation_message_id.
     const peerIdInt = parseInt(chatId);
+    if (isNaN(peerIdInt)) {
+      throw new Error(`Invalid VK chat ID: "${chatId}"`);
+    }
     const sendResponse = await (vk.api.messages.send as any)({
       peer_ids: [peerIdInt],
       message: message,
@@ -71,9 +74,15 @@ export async function updateCalloutMessage(
   newText: string
 ): Promise<void> {
   try {
+    const peerIdInt = parseInt(chatId);
+    const messageIdInt = parseInt(messageId);
+    if (isNaN(peerIdInt) || isNaN(messageIdInt)) {
+      logger.warn('updateCalloutMessage: invalid chat or message ID', { chatId, messageId });
+      return;
+    }
     await vk.api.messages.edit({
-      peer_id: parseInt(chatId),
-      message_id: parseInt(messageId),
+      peer_id: peerIdInt,
+      message_id: messageIdInt,
       message: newText,
     });
 
@@ -304,9 +313,59 @@ function formatSubdivisionEmojiVk(subdivision: Subdivision): string {
   return `${parsed.name} `;
 }
 
+/**
+ * Форматировать сообщение об отклонённом каллауте для VK
+ */
+export function formatCalloutDeclinedMessage(callout: Callout, subdivision: Subdivision): string {
+  const time = new Date(callout.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+  const declinedBy = callout.declined_by_name || 'Неизвестно';
+
+  const lines = [
+    '@all',
+    '',
+    `🚨 INCOMING CALLOUT #${callout.id}`,
+    '',
+    `Кратко об инциденте`,
+    callout.brief_description || 'Не указано',
+    '',
+    `Локация инцидента`,
+    callout.location || 'Не указано',
+    '',
+    `Полное описание инцидента`,
+    callout.description,
+  ];
+
+  if (callout.tac_channel) {
+    lines.push('', 'TAC-канал', callout.tac_channel);
+  }
+
+  lines.push(
+    '',
+    `Запрошенные подразделения`,
+    subdivision.name,
+    '',
+    `Статус: 🟡 Отклонён`,
+    `Отклонил: ${declinedBy}`,
+  );
+
+  if (callout.decline_reason) {
+    lines.push(`Причина: ${callout.decline_reason}`);
+  }
+
+  lines.push(
+    '',
+    `⚠️ Каллаут будет закрыт через 5 минут`,
+    '',
+    time,
+  );
+
+  return lines.join('\n');
+}
+
 export default {
   sendCalloutNotification,
   updateCalloutMessage,
   sendConfirmation,
   formatCalloutClosedMessage,
+  formatCalloutDeclinedMessage,
 };

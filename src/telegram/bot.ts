@@ -4,6 +4,10 @@ import logger from '../utils/logger';
 import { handleTelegramError } from '../utils/error-handler';
 import handleCallbackQuery from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
+import { pendingDeclineReasonState } from '../services/decline-reason.state';
+import { activeCaptureState } from '../services/chat-monitor.state';
+import { PlatformChatMessageModel, SubdivisionModel } from '../database/models';
+import CalloutService from '../services/callout.service';
 import { trackTelegramMember } from './utils/member-tracker';
 import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
@@ -121,12 +125,107 @@ class TelegramBotClient {
       }
     });
 
-    // Трекинг участников по любым сообщениям в групповых чатах
+    // Трекинг участников по любым сообщениям + перехват причины отклонения
     this.bot.on('message', async (msg) => {
       if (msg.from && msg.from.id && !msg.from.is_bot) {
         const chatType = msg.chat.type;
         if (chatType === 'group' || chatType === 'supergroup') {
           await trackTelegramMember(msg.chat.id, msg.from);
+
+          // Проверяем, ждём ли причину отклонения от этого пользователя
+          const stateKey = `telegram:${msg.from.id}`;
+          const pending = pendingDeclineReasonState.get(stateKey);
+          const text = msg.text?.trim();
+          if (pending && text && !text.startsWith('/') && msg.chat.id.toString() === pending.chatId) {
+            pendingDeclineReasonState.delete(stateKey);
+            clearTimeout(pending.timeout);
+
+            try {
+              const userName = msg.from.username
+                ? `@${msg.from.username}`
+                : `${msg.from.first_name}${msg.from.last_name ? ' ' + msg.from.last_name : ''}`;
+
+              await CalloutService.declineCallout(
+                null,
+                pending.calloutId,
+                `telegram_${msg.from.id}`,
+                userName,
+                text.substring(0, 300)
+              );
+
+              logger.info('TG decline reason received and processed', {
+                userId: msg.from.id,
+                calloutId: pending.calloutId,
+              });
+            } catch (error) {
+              logger.error('Failed to process TG decline reason', {
+                error: error instanceof Error ? error.message : error,
+                userId: msg.from.id,
+                calloutId: pending.calloutId,
+              });
+            }
+            return;
+          }
+
+          // Захват сообщений для мониторинга / каллаут-capture
+          if (text) {
+            const chatId = msg.chat.id.toString();
+            const captureKey = `telegram:${chatId}`;
+            const userName = msg.from.username
+              ? `@${msg.from.username}`
+              : `${msg.from.first_name}${msg.from.last_name ? ' ' + msg.from.last_name : ''}`;
+
+            // Режим захвата после каллаута
+            let capturedAsCallout = false;
+            const queue = activeCaptureState.get(captureKey);
+            const captureEntry = queue?.[0];
+            if (captureEntry && captureEntry.remaining > 0) {
+              try {
+                await PlatformChatMessageModel.create({
+                  subdivision_id: captureEntry.subdivisionId,
+                  platform: 'telegram',
+                  chat_id: chatId,
+                  message_id: String(msg.message_id),
+                  user_id: String(msg.from.id),
+                  user_name: userName,
+                  content: text.substring(0, 500),
+                  capture_type: 'callout',
+                  callout_id: captureEntry.calloutId,
+                  captured_at: new Date().toISOString(),
+                });
+                capturedAsCallout = true;
+              } catch { /* не критично */ }
+
+              captureEntry.remaining -= 1;
+              if (captureEntry.remaining <= 0) {
+                queue!.shift();
+                if (queue!.length === 0) {
+                  activeCaptureState.delete(captureKey);
+                }
+              }
+            }
+
+            // Режим полного мониторинга (только если не захвачено как callout)
+            if (!capturedAsCallout) {
+              try {
+                const subdivision = await SubdivisionModel.findByTelegramChatId(chatId);
+                if (subdivision?.monitoring_enabled) {
+                  await PlatformChatMessageModel.createWithRollingBuffer({
+                    subdivision_id: subdivision.id,
+                    platform: 'telegram',
+                    chat_id: chatId,
+                    message_id: String(msg.message_id),
+                    user_id: String(msg.from.id),
+                    user_name: userName,
+                    content: text.substring(0, 500),
+                    capture_type: 'monitoring',
+                    callout_id: null,
+                    captured_at: new Date().toISOString(),
+                  });
+                }
+              } catch { /* не критично */ }
+            }
+          }
         }
       }
     });

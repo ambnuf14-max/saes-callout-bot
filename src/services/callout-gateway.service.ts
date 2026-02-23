@@ -136,8 +136,11 @@ export class CalloutGatewayService {
         userId,
         serverId,
       });
-      // В случае ошибки разрешаем создание
-      return { allowed: true };
+      // При ошибке БД запрещаем — fail-safe
+      return {
+        allowed: false,
+        reason: `${EMOJI.ERROR} Не удалось проверить ограничения. Попробуйте позже.`,
+      };
     }
   }
 

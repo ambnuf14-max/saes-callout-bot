@@ -30,6 +30,15 @@ import {
 } from '../discord/utils/audit-logger';
 import { getChangeTypeLabel } from '../discord/utils/change-formatter';
 
+/** Человекочитаемые названия полей подразделения для audit log */
+const SUBDIVISION_FIELD_LABELS: Record<string, string> = {
+  name: 'Название',
+  description: 'Описание',
+  short_description: 'Краткое описание',
+  logo_url: 'Логотип',
+  discord_role_id: 'Discord роль',
+};
+
 /**
  * Сервис для работы с системой одобрения изменений
  */
@@ -401,16 +410,9 @@ export class PendingChangeService {
             (changeWithDetails.parsed_data as any).name ||
             (changeWithDetails.parsed_data as any).subdivision_name ||
             'Unknown';
-          const FIELD_LABELS: Record<string, string> = {
-            name: 'Название',
-            description: 'Описание',
-            short_description: 'Краткое описание',
-            logo_url: 'Логотип',
-            discord_role_id: 'Discord роль',
-          };
           const parsedData = changeWithDetails.parsed_data as Record<string, unknown>;
           const changes = change.change_type === 'update_subdivision'
-            ? Object.keys(parsedData).map(k => FIELD_LABELS[k] || k)
+            ? Object.keys(parsedData).map(k => SUBDIVISION_FIELD_LABELS[k] || k)
             : undefined;
           const subAuditData: SubdivisionEventData = {
             userId: change.requested_by,
@@ -651,18 +653,7 @@ export class PendingChangeService {
   static async getPendingChangesForFaction(
     factionId: number
   ): Promise<PendingChangeWithDetails[]> {
-    const changes = await PendingChangeModel.findByFactionId(factionId, 'pending');
-
-    // Преобразовать в PendingChangeWithDetails
-    const withDetails: PendingChangeWithDetails[] = [];
-    for (const change of changes) {
-      const detailed = await PendingChangeModel.findWithDetails(change.id);
-      if (detailed) {
-        withDetails.push(detailed);
-      }
-    }
-
-    return withDetails;
+    return await PendingChangeModel.findPendingWithDetailsByFactionId(factionId);
   }
 
   /**
@@ -678,17 +669,7 @@ export class PendingChangeService {
   static async getPendingChangesForLeader(
     requesterId: string
   ): Promise<PendingChangeWithDetails[]> {
-    const changes = await PendingChangeModel.findByRequesterId(requesterId, 'pending');
-
-    const withDetails: PendingChangeWithDetails[] = [];
-    for (const change of changes) {
-      const detailed = await PendingChangeModel.findWithDetails(change.id);
-      if (detailed) {
-        withDetails.push(detailed);
-      }
-    }
-
-    return withDetails;
+    return await PendingChangeModel.findPendingWithDetailsByRequesterId(requesterId);
   }
 
   /**

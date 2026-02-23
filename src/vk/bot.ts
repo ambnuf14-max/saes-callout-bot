@@ -4,6 +4,11 @@ import logger from '../utils/logger';
 import { handleVkError } from '../utils/error-handler';
 import handleCallbackEvent from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
+import { pendingDeclineReasonState } from '../services/decline-reason.state';
+import { activeCaptureState } from '../services/chat-monitor.state';
+import { PlatformChatMessageModel } from '../database/models';
+import { SubdivisionModel } from '../database/models';
+import CalloutService from '../services/callout.service';
 import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
 /**
@@ -50,6 +55,109 @@ class VkBot {
 
     // Обработка текстовых сообщений и приглашения бота в беседу
     this.vk.updates.on('message_new', async (context) => {
+      const text = context.text?.trim();
+
+      // Проверяем, ожидаем ли причину отклонения от этого пользователя
+      const stateKey = `vk:${context.userId}`;
+      const pending = pendingDeclineReasonState.get(stateKey);
+      if (pending && text && !text.startsWith('/') && context.peerId.toString() === pending.chatId) {
+        pendingDeclineReasonState.delete(stateKey);
+        clearTimeout(pending.timeout);
+
+        try {
+          // Получить имя пользователя
+          let userName = `VK User ${context.userId}`;
+          try {
+            const [user] = await this.vk.api.users.get({ user_ids: [context.userId] });
+            userName = `${user.first_name} ${user.last_name}`;
+          } catch { /* не критично */ }
+
+          await CalloutService.declineCallout(
+            null,
+            pending.calloutId,
+            context.userId.toString(),
+            userName,
+            text.substring(0, 300)
+          );
+
+          logger.info('VK decline reason received and processed', {
+            userId: context.userId,
+            calloutId: pending.calloutId,
+          });
+        } catch (error) {
+          logger.error('Failed to process VK decline reason', {
+            error: error instanceof Error ? error.message : error,
+            userId: context.userId,
+            calloutId: pending.calloutId,
+          });
+        }
+        return;
+      }
+
+      // Захват сообщений для мониторинга / каллаут-capture
+      if (text && context.peerId > 2_000_000_000) {
+        const chatId = context.peerId.toString();
+        const captureKey = `vk:${chatId}`;
+
+        // Получить имя пользователя VK (с fallback)
+        let vkUserName = `VK User ${context.userId}`;
+        try {
+          const [vkUser] = await this.vk.api.users.get({ user_ids: [context.userId] });
+          if (vkUser) vkUserName = `${vkUser.first_name} ${vkUser.last_name}`;
+        } catch { /* не критично */ }
+
+        // Режим захвата после каллаута
+        let capturedAsCallout = false;
+        const queue = activeCaptureState.get(captureKey);
+        const captureEntry = queue?.[0];
+        if (captureEntry && captureEntry.remaining > 0) {
+          try {
+            await PlatformChatMessageModel.create({
+              subdivision_id: captureEntry.subdivisionId,
+              platform: 'vk',
+              chat_id: chatId,
+              message_id: String((context as any).id || Date.now()),
+              user_id: String(context.userId),
+              user_name: vkUserName,
+              content: text.substring(0, 500),
+              capture_type: 'callout',
+              callout_id: captureEntry.calloutId,
+              captured_at: new Date().toISOString(),
+            });
+            capturedAsCallout = true;
+          } catch { /* не критично */ }
+
+          captureEntry.remaining -= 1;
+          if (captureEntry.remaining <= 0) {
+            queue!.shift();
+            if (queue!.length === 0) {
+              activeCaptureState.delete(captureKey);
+            }
+          }
+        }
+
+        // Режим полного мониторинга (только если не захвачено как callout)
+        if (!capturedAsCallout) {
+          try {
+            const subdivision = await SubdivisionModel.findByVkChatId(chatId);
+            if (subdivision?.monitoring_enabled) {
+              await PlatformChatMessageModel.createWithRollingBuffer({
+                subdivision_id: subdivision.id,
+                platform: 'vk',
+                chat_id: chatId,
+                message_id: String((context as any).id || Date.now()),
+                user_id: String(context.userId),
+                user_name: vkUserName,
+                content: text.substring(0, 500),
+                capture_type: 'monitoring',
+                callout_id: null,
+                captured_at: new Date().toISOString(),
+              });
+            }
+          } catch { /* не критично */ }
+        }
+      }
+
       const msgAction = (context as any).action;
       if (msgAction && msgAction.type === 'chat_invite_user') {
         // Проверяем, что пригласили именно нашего бота (group id с минусом)
@@ -77,7 +185,6 @@ class VkBot {
         }
       }
 
-      const text = context.text?.trim();
       // Проверяем, начинается ли сообщение с /verify
       if (text && text.startsWith('/verify')) {
         await handleVerifyCommand(context);

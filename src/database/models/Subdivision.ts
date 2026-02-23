@@ -286,6 +286,17 @@ export class SubdivisionModel {
   }
 
   /**
+   * Переключить режим мониторинга чата
+   */
+  static async toggleMonitoring(id: number, enabled: boolean): Promise<Subdivision | undefined> {
+    await database.run(
+      `UPDATE subdivisions SET monitoring_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [enabled ? 1 : 0, id]
+    );
+    return await this.findById(id);
+  }
+
+  /**
    * Удалить подразделение
    */
   static async delete(id: number): Promise<void> {

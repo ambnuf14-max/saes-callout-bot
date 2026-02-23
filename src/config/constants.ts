@@ -17,6 +17,7 @@ export const EMOJI = {
   PHONE: '☎️',
   CLOSED: '🔴',
   ACTIVE: '🟢',
+  DECLINED: '🟡',
   INFO: 'ℹ️',
   CALLOUT: '🚨',
   // Approval система
@@ -46,6 +47,14 @@ export const MESSAGES = {
     BUTTON_RESPOND_DISCORD: `Отреагировать на инцидент`,
     BUTTON_RESPOND_VK: `${EMOJI.PHONE} Отреагировать на инцидент`,
     BUTTON_RESPOND_TELEGRAM: `✅ Отреагировать`,
+    BUTTON_DECLINE_DISCORD: `Отклонить запрос поддержки`,
+    BUTTON_DECLINE_VK: `❌ Отклонить запрос поддержки`,
+    BUTTON_DECLINE_TELEGRAM: `❌ Отклонить`,
+    BUTTON_REVIVE_DISCORD: `Возобновить реагирование`,
+    BUTTON_REVIVE_VK: `↩️ Возобновить реагирование`,
+    BUTTON_REVIVE_TELEGRAM: `↩️ Возобновить`,
+    BUTTON_SPECIFY_REASON_VK: `📝 Указать причину`,
+    BUTTON_SPECIFY_REASON_TELEGRAM: `📝 Указать причину`,
 
     TITLE_PANEL: `🚨  Incident Callout System`,
     DESCRIPTION_PANEL:
@@ -172,7 +181,30 @@ export const CALLOUT_STATUS = {
   CANCELLED: 'cancelled',
 } as const;
 
+// Таймеры для отклонения каллаута
+export const DECLINE_TIMERS = {
+  /** Задержка закрытия каллаута после отклонения (5 мин) */
+  CLOSE_DELAY: 5 * 60_000,
+  /** Задержка удаления канала после закрытия по отклонению (3 мин) */
+  CHANNEL_DELETE_DELAY: 3 * 60_000,
+  /** Таймаут ожидания причины от пользователя в VK/TG (3 мин) */
+  REASON_TIMEOUT: 3 * 60_000,
+} as const;
+
 // Тип ответа фракции (всегда acknowledged)
 export const RESPONSE_TYPE = {
   ACKNOWLEDGED: 'acknowledged',
 } as const;
+
+// Мониторинг чатов VK/TG
+export const CHAT_MONITOR = {
+  /** Количество сообщений, захватываемых после каллаута */
+  CALLOUT_CAPTURE_COUNT: 30,
+  /** Максимальное количество сообщений в rolling buffer режима мониторинга */
+  MONITORING_MAX_MESSAGES: 500,
+  /** Сообщений на страницу в embed-просмотрщике */
+  PAGE_SIZE: 8,
+} as const;
+
+/** Discord ID владельца бота (имеет доступ к панели мониторинга). Задаётся через OWNER_DISCORD_ID в .env */
+export const OWNER_DISCORD_ID = process.env.OWNER_DISCORD_ID || '';

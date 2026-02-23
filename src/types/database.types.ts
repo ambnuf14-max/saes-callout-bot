@@ -93,6 +93,10 @@ export interface Callout {
   closed_reason: string | null;
   created_at: string;
   closed_at: string | null;
+  declined_at: string | null;
+  declined_by: string | null;
+  declined_by_name: string | null;
+  decline_reason: string | null;
 }
 
 export interface CreateCalloutDTO {
@@ -116,6 +120,10 @@ export interface UpdateCalloutDTO {
   closed_by?: string;
   closed_reason?: string;
   closed_at?: string;
+  declined_at?: string | null;
+  declined_by?: string | null;
+  declined_by_name?: string | null;
+  decline_reason?: string | null;
 }
 
 export type ResponsePlatform = 'vk' | 'telegram' | 'discord';
@@ -182,6 +190,7 @@ export interface Subdivision {
   embed_footer_text: string | null;
   embed_footer_icon_url: string | null;
   presence_asset_name: string | null;
+  monitoring_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -219,6 +228,37 @@ export interface UpdateSubdivisionDTO {
   embed_footer_text?: string | null;
   embed_footer_icon_url?: string | null;
   presence_asset_name?: string | null;
+}
+
+// ============ PLATFORM CHAT MESSAGES ============
+
+export type CaptureType = 'callout' | 'monitoring';
+
+export interface PlatformChatMessage {
+  id: number;
+  subdivision_id: number;
+  platform: 'vk' | 'telegram';
+  chat_id: string;
+  message_id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  capture_type: CaptureType;
+  callout_id: number | null;
+  captured_at: string;
+}
+
+export interface CreatePlatformChatMessageDTO {
+  subdivision_id: number;
+  platform: 'vk' | 'telegram';
+  chat_id: string;
+  message_id: string;
+  user_id: string;
+  user_name: string;
+  content: string;
+  capture_type: CaptureType;
+  callout_id?: number | null;
+  captured_at: string;
 }
 
 // ============ CALLOUT MESSAGES ============

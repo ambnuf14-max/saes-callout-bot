@@ -14,7 +14,7 @@ import { ServerModel } from '../../database/models';
 import { FactionService } from '../../services/faction.service';
 import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
-import { COLORS, EMOJI } from '../../config/constants';
+import { COLORS, EMOJI, OWNER_DISCORD_ID } from '../../config/constants';
 import CalloutService from '../../services/callout.service';
 import { getChangeTypeLabel, formatChangeDetails, formatBeforeAfter, formatDate } from './change-formatter';
 import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
@@ -24,7 +24,7 @@ import { buildSubdivisionsListPanel } from './subdivision-list-builder';
 /**
  * Построить главный экран админ-панели
  */
-export async function buildAdminMainPanel(server: Server) {
+export async function buildAdminMainPanel(server: Server, requestingUserId?: string) {
   const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
   const calloutRoleIds = ServerModel.getCalloutAllowedRoleIds(server);
   const factions = await FactionService.getFactions(server.id);
@@ -82,7 +82,7 @@ export async function buildAdminMainPanel(server: Server) {
     )
     .setFooter({ text: 'SAES Callout System — Admin Panel' });
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const mainButtons = [
     new ButtonBuilder()
       .setCustomId('admin_factions')
       .setLabel('Фракции')
@@ -93,7 +93,19 @@ export async function buildAdminMainPanel(server: Server) {
       .setLabel('Настройки')
       .setEmoji('⚙️')
       .setStyle(ButtonStyle.Secondary),
-  );
+  ];
+
+  if (OWNER_DISCORD_ID && requestingUserId === OWNER_DISCORD_ID) {
+    mainButtons.push(
+      new ButtonBuilder()
+        .setCustomId('chat_monitor_main')
+        .setLabel('Мониторинг чатов')
+        .setEmoji('📊')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(...mainButtons);
 
   return { embeds: [embed], components: [row] };
 }

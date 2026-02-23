@@ -1,11 +1,13 @@
 import { MessageEventContext } from 'vk-io';
 import logger from '../../utils/logger';
 import SyncService from '../../services/sync.service';
-import { CalloutResponsePayload } from '../utils/keyboard-builder';
+import { CalloutResponsePayload, buildSpecifyReasonKeyboard } from '../utils/keyboard-builder';
 import { handleVkError } from '../../utils/error-handler';
-import { EMOJI } from '../../config/constants';
+import { EMOJI, DECLINE_TIMERS } from '../../config/constants';
 import vkBot from '../bot';
 import { CalloutModel, SubdivisionModel } from '../../database/models';
+import { pendingDeclineReasonState } from '../../services/decline-reason.state';
+import CalloutService from '../../services/callout.service';
 
 /**
  * Обработчик callback событий от кнопок VK
@@ -26,7 +28,7 @@ export async function handleCallbackEvent(
       ? JSON.parse(rawPayload)
       : rawPayload as CalloutResponsePayload;
 
-    if (!payload || payload.action !== 'respond') {
+    if (!payload || !['respond', 'decline', 'revive', 'specify_decline_reason'].includes(payload.action)) {
       logger.warn('Invalid callback payload', { payload });
       await context.answer({
         type: 'show_snackbar',
@@ -36,7 +38,10 @@ export async function handleCallbackEvent(
     }
 
     // Валидация числовых полей payload
-    if (!Number.isFinite(payload.callout_id) || !Number.isFinite(payload.subdivision_id)) {
+    if (
+      !Number.isFinite(payload.callout_id) || payload.callout_id <= 0 ||
+      !Number.isFinite(payload.subdivision_id) || payload.subdivision_id <= 0
+    ) {
       logger.warn('Invalid numeric fields in callback payload', { payload });
       await context.answer({
         type: 'show_snackbar',
@@ -87,23 +92,75 @@ export async function handleCallbackEvent(
       }
     }
 
-    // Обработать ответ через SyncService
-    const response = await SyncService.handleVkResponse(
-      payload,
-      context.userId.toString(),
-      userName
-    );
+    if (payload.action === 'respond') {
+      // Обработать ответ через SyncService
+      const response = await SyncService.handleVkResponse(
+        payload,
+        context.userId.toString(),
+        userName
+      );
 
-    logger.info('VK response processed successfully', {
-      responseId: response.id,
-      calloutId: payload.callout_id,
-    });
+      logger.info('VK response processed successfully', {
+        responseId: response.id,
+        calloutId: payload.callout_id,
+      });
 
-    // Отправить подтверждение пользователю
-    await context.answer({
-      type: 'show_snackbar',
-      text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`,
-    });
+      await context.answer({ type: 'show_snackbar', text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!` });
+      return;
+    }
+
+    if (payload.action === 'decline') {
+      // Проверить, не ждём ли уже причину от этого пользователя
+      const stateKey = `vk:${context.userId}`;
+      if (pendingDeclineReasonState.has(stateKey)) {
+        await context.answer({ type: 'show_snackbar', text: `${EMOJI.WARNING} Введите причину в чат (осталось время)` });
+        return;
+      }
+
+      // Зарегистрировать состояние ожидания причины
+      const timeout = setTimeout(() => {
+        pendingDeclineReasonState.delete(stateKey);
+        logger.info('VK decline reason timeout expired', { userId: context.userId, calloutId: payload.callout_id });
+      }, DECLINE_TIMERS.REASON_TIMEOUT);
+
+      pendingDeclineReasonState.set(stateKey, {
+        calloutId: payload.callout_id,
+        subdivisionId: payload.subdivision_id,
+        platform: 'vk',
+        chatId: context.peerId.toString(),
+        timeout,
+      });
+
+      // Отправить follow-up сообщение
+      try {
+        const reasonKeyboard = buildSpecifyReasonKeyboard(payload.callout_id, payload.subdivision_id);
+        await (vkBot.getApi().api.messages.send as any)({
+          peer_ids: [context.peerId],
+          message: `📝 ${userName} отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат. У вас 3 минуты.\nСледующее текстовое сообщение от вас будет принято как причина.`,
+          keyboard: reasonKeyboard,
+          random_id: Date.now() + Math.floor(Math.random() * 100000),
+        });
+      } catch (sendError) {
+        logger.error('Failed to send VK decline reason request', { error: sendError });
+      }
+
+      await context.answer({ type: 'show_snackbar', text: `📝 Введите причину отклонения в чат (3 мин.)` });
+      return;
+    }
+
+    if (payload.action === 'specify_decline_reason') {
+      await context.answer({ type: 'show_snackbar', text: `📝 Напишите причину текстом в чат` });
+      return;
+    }
+
+    if (payload.action === 'revive') {
+      await CalloutService.cancelDecline(null, payload.callout_id);
+
+      logger.info('VK revive callout processed', { calloutId: payload.callout_id, userId: context.userId });
+      await context.answer({ type: 'show_snackbar', text: `${EMOJI.SUCCESS} Реагирование возобновлено!` });
+      return;
+    }
+
   } catch (error) {
     logger.error('Error handling VK callback', {
       error: error instanceof Error ? error.message : error,

@@ -57,7 +57,7 @@ const settingsCommand: Command = {
       }
 
       // Показать главную админ-панель
-      const panel = await buildAdminMainPanel(server);
+      const panel = await buildAdminMainPanel(server, interaction.user.id);
 
       await interaction.editReply(panel);
 

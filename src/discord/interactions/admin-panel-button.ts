@@ -225,7 +225,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
 
   try {
     if (customId === 'admin_back') {
-      const panel = await buildAdminMainPanel(server);
+      const panel = await buildAdminMainPanel(server, interaction.user.id);
       await interaction.editReply(panel);
     }
 

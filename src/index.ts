@@ -34,6 +34,13 @@ async function main() {
     const telegramBot = (await import('./telegram/bot')).default;
     await Promise.all([vkBot.start(), telegramBot.start()]);
 
+    // Восстановить in-memory состояние после рестарта
+    const { default: NotificationService } = await import('./services/notification.service');
+    await NotificationService.restoreActiveCaptureStates();
+
+    const { CalloutService } = await import('./services/callout.service');
+    await CalloutService.restoreDeclineTimers();
+
     // Запустить периодическую проверку истёкших токенов (каждые 30 секунд)
     setInterval(() => notifyExpiredTokens(discordBot), 30 * 1000);
 

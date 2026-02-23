@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { Callout, Subdivision, CalloutResponse } from '../../types/database.types';
-import { COLORS, EMOJI, CALLOUT_STATUS } from '../../config/constants';
+import { COLORS, EMOJI, CALLOUT_STATUS, MESSAGES } from '../../config/constants';
 import { parseDiscordEmoji, getEmojiCdnUrl } from './subdivision-settings-helper';
 import { stripUrls } from '../../utils/validators';
 
@@ -13,8 +13,11 @@ import { stripUrls } from '../../utils/validators';
  */
 export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): EmbedBuilder {
   const isActive = callout.status === CALLOUT_STATUS.ACTIVE;
-  const color = isActive ? COLORS.ACTIVE : COLORS.CLOSED;
-  const statusText = isActive ? `${EMOJI.ACTIVE} Активен` : `${EMOJI.CLOSED} Закрыт`;
+  const isDeclined = isActive && callout.declined_at != null;
+  const color = isDeclined ? COLORS.WARNING : (isActive ? COLORS.ACTIVE : COLORS.CLOSED);
+  const statusText = isDeclined
+    ? `${EMOJI.DECLINED} Отклонён`
+    : (isActive ? `${EMOJI.ACTIVE} Активен` : `${EMOJI.CLOSED} Закрыт`);
 
   const createdAtUnix = Math.floor(new Date(callout.created_at).getTime() / 1000);
   const thumbnailUrl = getEmojiCdnUrl(parseDiscordEmoji(subdivision.logo_url));
@@ -71,6 +74,33 @@ export function buildCalloutEmbed(callout: Callout, subdivision: Subdivision): E
     ])
     .setFooter({ text: `SAES Callout System • Incident #${callout.id}` })
     .setTimestamp(new Date(callout.created_at));
+
+  // Информация об отклонении
+  if (isDeclined && callout.declined_at) {
+    const declinedAtUnix = Math.floor(new Date(callout.declined_at).getTime() / 1000);
+    const declinedByValue = callout.declined_by_name
+      ? callout.declined_by_name
+      : (callout.declined_by ? `<@${callout.declined_by}>` : 'Неизвестно');
+
+    embed.addFields([
+      { name: '🚫 Отклонил', value: declinedByValue, inline: true },
+      { name: '🕐 Время отклонения', value: `<t:${declinedAtUnix}:R>`, inline: true },
+    ]);
+
+    if (callout.decline_reason) {
+      embed.addFields([{
+        name: '📝 Причина отклонения',
+        value: stripUrls(callout.decline_reason),
+        inline: false,
+      }]);
+    }
+
+    embed.addFields([{
+      name: '⚠️ Автозакрытие',
+      value: 'Каллаут будет закрыт через **5 минут** если не нажать «Возобновить реагирование»',
+      inline: false,
+    }]);
+  }
 
   // Информация о закрытии
   if (!isActive && callout.closed_by) {
@@ -171,6 +201,13 @@ export function addResponsesToEmbed(
       ? ` (<@${r.vk_user_id.replace('discord_', '')}>)`
       : ` (${r.vk_user_name})`;
     logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки${responderMention}.`);
+  }
+
+  if (callout && callout.declined_at) {
+    const time = formatMoscowTime(new Date(callout.declined_at));
+    const reason = callout.decline_reason ? ` (${callout.decline_reason})` : '';
+    const by = callout.declined_by_name || (callout.declined_by ? callout.declined_by : 'Неизвестно');
+    logEntries.push(`\`${time}\` - 🚫 ${by} отклонил запрос поддержки${reason}.`);
   }
 
   if (callout && callout.status !== CALLOUT_STATUS.ACTIVE && callout.closed_at) {

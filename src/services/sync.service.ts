@@ -30,6 +30,25 @@ import { formatActiveCalloutWithLog as formatVkActiveWithLog } from '../vk/utils
  */
 export class SyncService {
   /**
+   * Очередь обновлений embed/сообщений на каллаут (per calloutId).
+   * Гарантирует последовательность при параллельных ответах подразделений.
+   */
+  private static readonly updateQueues = new Map<number, Promise<void>>();
+
+  private static enqueueUpdate(calloutId: number, fn: () => Promise<void>): Promise<void> {
+    const prev = SyncService.updateQueues.get(calloutId) ?? Promise.resolve();
+    const next = prev.then(fn).catch((err) => {
+      logger.error('Callout update queue error', { calloutId, error: err instanceof Error ? err.message : err });
+    });
+    SyncService.updateQueues.set(calloutId, next);
+    next.then(() => {
+      if (SyncService.updateQueues.get(calloutId) === next) {
+        SyncService.updateQueues.delete(calloutId);
+      }
+    });
+    return next;
+  }
+  /**
    * Обработать ответ из VK на каллаут
    */
   static async handleVkResponse(
@@ -97,15 +116,15 @@ export class SyncService {
       vkUserId,
     });
 
-    // 5. Отправить уведомление в Discord
-    try {
+    // 5. Отправить уведомление в Discord (через очередь — защита от race condition)
+    await SyncService.enqueueUpdate(callout.id, async () => {
       await this.notifyDiscordAboutResponse(response, callout, subdivision);
-    } catch (error) {
+    }).catch((error) => {
       logger.error('Failed to notify Discord about VK response', {
         error: error instanceof Error ? error.message : error,
         responseId: response.id,
       });
-    }
+    });
 
     return response;
   }
@@ -178,15 +197,15 @@ export class SyncService {
       telegramUserId,
     });
 
-    // 5. Отправить уведомление в Discord
-    try {
+    // 5. Отправить уведомление в Discord (через очередь — защита от race condition)
+    await SyncService.enqueueUpdate(callout.id, async () => {
       await this.notifyDiscordAboutResponse(response, callout, subdivision, 'telegram');
-    } catch (error) {
+    }).catch((error) => {
       logger.error('Failed to notify Discord about Telegram response', {
         error: error instanceof Error ? error.message : error,
         responseId: response.id,
       });
-    }
+    });
 
     return response;
   }
@@ -240,15 +259,15 @@ export class SyncService {
       discordUserId,
     });
 
-    // 3. Обновить embed, уведомить VK/TG
-    try {
+    // 3. Обновить embed, уведомить VK/TG (через очередь — защита от race condition)
+    await SyncService.enqueueUpdate(callout.id, async () => {
       await this.notifyDiscordAboutResponse(response, callout, subdivision, 'discord');
-    } catch (error) {
+    }).catch((error) => {
       logger.error('Failed to notify about Discord response', {
         error: error instanceof Error ? error.message : error,
         responseId: response.id,
       });
-    }
+    });
 
     return { response, changed: true };
   }

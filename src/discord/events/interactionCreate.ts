@@ -11,6 +11,8 @@ import handleFactionSelect from '../interactions/faction-select';
 import { handleSetupModeSelect } from '../interactions/setup-mode-select';
 import { handleCloseCalloutButton, handleCloseCalloutModal } from '../interactions/close-callout-button';
 import { handleRespondCalloutButton } from '../interactions/respond-callout-button';
+import { handleDeclineCalloutButton, handleDeclineCalloutModal } from '../interactions/decline-callout-button';
+import { handleReviveCalloutButton } from '../interactions/revive-callout-button';
 import handleHistoryButton from '../interactions/history-button';
 import {
   handleAdminPanelButton,
@@ -22,6 +24,7 @@ import {
 import { handleAdminPanelModal, handleAuditLogModal } from '../interactions/admin-panel-modal';
 import { handleRoleManualButton, handleRoleManualModal } from '../interactions/role-manual-input';
 import { handleBrowsePrevNext, handleBrowseRequest, handleBrowseSelect } from '../interactions/subdivision-browse';
+import { handleChatMonitorButton } from '../interactions/chat-monitor-button';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -73,6 +76,12 @@ export default async function interactionCreateHandler(
         interaction.customId === 'setup_reconfigure'
       ) {
         await handleSetupModeSelect(interaction);
+      } else if (interaction.customId.startsWith('chat_monitor_')) {
+        await handleChatMonitorButton(interaction);
+      } else if (interaction.customId.startsWith('decline_callout_')) {
+        await handleDeclineCalloutButton(interaction);
+      } else if (interaction.customId.startsWith('revive_callout_')) {
+        await handleReviveCalloutButton(interaction);
       } else if (interaction.customId.startsWith('close_callout_')) {
         await handleCloseCalloutButton(interaction);
       } else if (interaction.customId.startsWith('respond_callout_')) {
@@ -105,6 +114,8 @@ export default async function interactionCreateHandler(
         await handleRoleManualModal(interaction);
       } else if (interaction.customId === 'callout_modal') {
         await handleCalloutModalSubmit(interaction);
+      } else if (interaction.customId.startsWith('decline_callout_modal_')) {
+        await handleDeclineCalloutModal(interaction);
       } else if (interaction.customId.startsWith('close_callout_modal_')) {
         await handleCloseCalloutModal(interaction);
       } else if (interaction.customId.startsWith('audit_modal_')) {
