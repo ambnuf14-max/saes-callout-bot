@@ -135,7 +135,7 @@ export class PlatformChatMessageModel {
   static async countByCalloutAndPlatform(calloutId: number, platform: 'vk' | 'telegram'): Promise<number> {
     const result = await database.get<{ count: number }>(
       `SELECT COUNT(*) as count FROM platform_chat_messages
-       WHERE callout_id = ? AND platform = ? AND capture_type = 'callout'`,
+       WHERE callout_id = ? AND platform = ? AND capture_type = 'callout' AND user_id != 'bot'`,
       [calloutId, platform]
     );
     return result?.count || 0;

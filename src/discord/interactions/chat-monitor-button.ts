@@ -118,7 +118,8 @@ async function buildMessagesPanel(
     const platEmoji = m.platform === 'vk' ? '🅰️' : '✈️';
     const tag = m.capture_type === 'callout' ? `[#${m.callout_id}]` : '[мониторинг]';
     const content = m.content.length > 120 ? m.content.substring(0, 117) + '...' : m.content;
-    return `${platEmoji} ${tag} \`${time}\`\n**${m.user_name}:** ${content}`;
+    const namePrefix = m.user_id === 'bot' ? '🤖 ' : '';
+    return `${platEmoji} ${tag} \`${time}\`\n**${namePrefix}${m.user_name}:** ${content}`;
   });
 
   const embed = new EmbedBuilder()

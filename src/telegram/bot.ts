@@ -12,6 +12,23 @@ import { trackTelegramMember } from './utils/member-tracker';
 import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
 /**
+ * Извлечь текстовое содержимое или описание медиа из Telegram сообщения.
+ * Возвращает null если сообщение не содержит распознанного контента.
+ */
+function extractTelegramContent(msg: TelegramBot.Message): string | null {
+  if (msg.text) return msg.text.trim() || null;
+  if (msg.photo)      return '[фото]';
+  if (msg.voice)      return `[голосовое ${msg.voice.duration} сек]`;
+  if (msg.video)      return '[видео]';
+  if (msg.video_note) return '[видеосообщение]';
+  if (msg.sticker)    return msg.sticker.emoji ? `[стикер ${msg.sticker.emoji}]` : '[стикер]';
+  if (msg.document)   return msg.document.file_name ? `[файл: ${msg.document.file_name}]` : '[файл]';
+  if (msg.audio)      return '[аудио]';
+  if (msg.animation)  return '[GIF]';
+  return null;
+}
+
+/**
  * Класс Telegram бота
  */
 class TelegramBotClient {
@@ -136,6 +153,7 @@ class TelegramBotClient {
           const stateKey = `telegram:${msg.from.id}`;
           const pending = pendingDeclineReasonState.get(stateKey);
           const text = msg.text?.trim();
+          const content = extractTelegramContent(msg);
           if (pending && text && !text.startsWith('/') && msg.chat.id.toString() === pending.chatId) {
             pendingDeclineReasonState.delete(stateKey);
             clearTimeout(pending.timeout);
@@ -168,7 +186,7 @@ class TelegramBotClient {
           }
 
           // Захват сообщений для мониторинга / каллаут-capture
-          if (text) {
+          if (content !== null) {
             const chatId = msg.chat.id.toString();
             const captureKey = `telegram:${chatId}`;
             const userName = msg.from.username
@@ -188,7 +206,7 @@ class TelegramBotClient {
                   message_id: String(msg.message_id),
                   user_id: String(msg.from.id),
                   user_name: userName,
-                  content: text.substring(0, 500),
+                  content: content.substring(0, 500),
                   capture_type: 'callout',
                   callout_id: captureEntry.calloutId,
                   captured_at: new Date().toISOString(),
@@ -217,7 +235,7 @@ class TelegramBotClient {
                     message_id: String(msg.message_id),
                     user_id: String(msg.from.id),
                     user_name: userName,
-                    content: text.substring(0, 500),
+                    content: content.substring(0, 500),
                     capture_type: 'monitoring',
                     callout_id: null,
                     captured_at: new Date().toISOString(),

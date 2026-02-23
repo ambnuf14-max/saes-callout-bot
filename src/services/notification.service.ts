@@ -14,6 +14,17 @@ import { buildDetailedCalloutKeyboard as buildTgKeyboard, buildDeclinedCalloutKe
 import { EMOJI } from '../config/constants';
 
 const TELEGRAM_MAX_RETRIES = 3;
+
+/**
+ * Формировать краткое содержимое сообщения о каллауте для записи в лог чата
+ */
+function buildCalloutBotContent(callout: Callout): string {
+  const parts: string[] = [`🚨 Каллаут #${callout.id}`];
+  if (callout.location) parts.push(callout.location);
+  const desc = callout.brief_description || callout.description;
+  if (desc) parts.push(desc);
+  return parts.join(' | ').substring(0, 500);
+}
 const TELEGRAM_RETRY_BASE_DELAY_MS = 1500;
 
 function sleep(ms: number): Promise<void> {
@@ -142,6 +153,22 @@ export class NotificationService {
       } else {
         activeCaptureState.set(captureKey, [entry]);
       }
+
+      // Зафиксировать само сообщение о каллауте как первую запись в логе
+      try {
+        await PlatformChatMessageModel.create({
+          subdivision_id: subdivision.id,
+          platform: 'vk',
+          chat_id: subdivision.vk_chat_id!,
+          message_id: messageId.toString(),
+          user_id: 'bot',
+          user_name: 'SAES Callout Bot',
+          content: buildCalloutBotContent(callout),
+          capture_type: 'callout',
+          callout_id: callout.id,
+          captured_at: new Date().toISOString(),
+        });
+      } catch { /* не критично */ }
 
       logger.info('VK notification sent successfully', {
         calloutId: callout.id,
@@ -311,6 +338,22 @@ export class NotificationService {
       } else {
         activeCaptureState.set(captureKey, [entry]);
       }
+
+      // Зафиксировать само сообщение о каллауте как первую запись в логе
+      try {
+        await PlatformChatMessageModel.create({
+          subdivision_id: subdivision.id,
+          platform: 'telegram',
+          chat_id: subdivision.telegram_chat_id!,
+          message_id: messageId.toString(),
+          user_id: 'bot',
+          user_name: 'SAES Callout Bot',
+          content: buildCalloutBotContent(callout),
+          capture_type: 'callout',
+          callout_id: callout.id,
+          captured_at: new Date().toISOString(),
+        });
+      } catch { /* не критично */ }
 
       logger.info('Telegram notification sent successfully', {
         calloutId: callout.id,

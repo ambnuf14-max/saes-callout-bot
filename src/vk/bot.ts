@@ -12,6 +12,34 @@ import CalloutService from '../services/callout.service';
 import { logAuditEventToAllGuilds, AuditEventType, BotStatusData } from '../discord/utils/audit-logger';
 
 /**
+ * Извлечь текстовое содержимое или описание медиа из VK сообщения.
+ * Возвращает null если сообщение не содержит ни текста ни вложений.
+ */
+function extractVkContent(context: { text?: string; attachments?: any[] }): string | null {
+  const text = context.text?.trim();
+  if (text) return text;
+
+  const attachments: any[] = (context as any).attachments ?? [];
+  if (attachments.length === 0) return null;
+
+  const parts = attachments.map((att: any) => {
+    switch (att.type) {
+      case 'photo':        return '[фото]';
+      case 'audio_message': return att.duration != null ? `[голосовое ${att.duration} сек]` : '[голосовое]';
+      case 'video':        return '[видео]';
+      case 'doc':          return att.title ? `[файл: ${att.title}]` : '[файл]';
+      case 'sticker':      return '[стикер]';
+      case 'audio':        return '[аудио]';
+      case 'wall':         return '[запись со стены]';
+      case 'graffiti':     return '[граффити]';
+      default:             return att.type ? `[${att.type}]` : null;
+    }
+  }).filter((p): p is string => p !== null);
+
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/**
  * Класс VK бота
  */
 class VkBot {
@@ -56,6 +84,7 @@ class VkBot {
     // Обработка текстовых сообщений и приглашения бота в беседу
     this.vk.updates.on('message_new', async (context) => {
       const text = context.text?.trim();
+      const content = extractVkContent(context as any);
 
       // Проверяем, ожидаем ли причину отклонения от этого пользователя
       const stateKey = `vk:${context.userId}`;
@@ -95,7 +124,7 @@ class VkBot {
       }
 
       // Захват сообщений для мониторинга / каллаут-capture
-      if (text && context.peerId > 2_000_000_000) {
+      if (content !== null && context.peerId > 2_000_000_000) {
         const chatId = context.peerId.toString();
         const captureKey = `vk:${chatId}`;
 
@@ -119,7 +148,7 @@ class VkBot {
               message_id: String((context as any).id || Date.now()),
               user_id: String(context.userId),
               user_name: vkUserName,
-              content: text.substring(0, 500),
+              content: content.substring(0, 500),
               capture_type: 'callout',
               callout_id: captureEntry.calloutId,
               captured_at: new Date().toISOString(),
@@ -148,7 +177,7 @@ class VkBot {
                 message_id: String((context as any).id || Date.now()),
                 user_id: String(context.userId),
                 user_name: vkUserName,
-                content: text.substring(0, 500),
+                content: content.substring(0, 500),
                 capture_type: 'monitoring',
                 callout_id: null,
                 captured_at: new Date().toISOString(),
