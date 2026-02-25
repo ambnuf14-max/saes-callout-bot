@@ -1,4 +1,4 @@
-import { TextChannel, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable } from 'discord.js';
 import discordBot from '../discord/bot';
 import logger from '../utils/logger';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../database/models';
 import { Callout, CalloutResponse, Subdivision } from '../types/database.types';
 import { CalloutResponsePayload } from '../vk/utils/keyboard-builder';
-import { EMOJI, CALLOUT_STATUS } from '../config/constants';
+import { EMOJI, CALLOUT_STATUS, MESSAGES } from '../config/constants';
 import { CalloutError } from '../utils/error-handler';
 import {
   logAuditEvent,
@@ -369,7 +369,12 @@ export class SyncService {
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
-            // Убрать кнопку "Отреагировать на инцидент" — подразделение уже ответило
+            // Убрать кнопку "Отреагировать" и добавить "Отменить реагирование"
+            const cancelResponseButton = new ButtonBuilder()
+              .setCustomId(`cancel_response_${callout.id}`)
+              .setLabel('Отменить реагирование')
+              .setStyle(ButtonStyle.Secondary);
+
             const updatedComponents = originalMessage.components
               .map((row: any) => {
                 const buttons = row.components.filter(
@@ -381,6 +386,10 @@ export class SyncService {
                 );
               })
               .filter(Boolean) as ActionRowBuilder<ButtonBuilder>[];
+
+            updatedComponents.push(
+              new ActionRowBuilder<ButtonBuilder>().addComponents(cancelResponseButton)
+            );
 
             await originalMessage.edit({
               embeds: [updatedEmbed],
@@ -395,16 +404,17 @@ export class SyncService {
         }
       }
 
-      // Обновить сообщение в VK с логом инцидента (убрать кнопку — подразделение ответило)
+      // Обновить сообщение в VK — заменить клавиатуру на "Отменить реагирование"
       if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive() && calloutSubdivision?.vk_chat_id) {
         try {
+          const { buildCancelResponseKeyboard: buildVkCancelKeyboard } = await import('../vk/utils/keyboard-builder');
           const vkMessage = formatVkActiveWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
-          const emptyKeyboard = JSON.stringify({ buttons: [], inline: true });
+          const cancelKeyboard = buildVkCancelKeyboard(callout.id, callout.subdivision_id);
           await (vkBot.getApi().api.messages.edit as any)({
             peer_id: parseInt(calloutSubdivision.vk_chat_id),
             cmid: parseInt(callout.vk_message_id),
             message: vkMessage,
-            keyboard: emptyKeyboard,
+            keyboard: cancelKeyboard,
           });
         } catch (vkError) {
           logger.error('Failed to update VK message with log', {
@@ -414,16 +424,18 @@ export class SyncService {
         }
       }
 
-      // Обновить сообщение в Telegram с логом инцидента (убрать кнопку — подразделение ответило)
+      // Обновить сообщение в Telegram — заменить клавиатуру на "Отменить реагирование"
       if (callout.telegram_message_id && telegramBot.isActive() && calloutSubdivision?.telegram_chat_id) {
         try {
+          const { buildCancelResponseKeyboard: buildTgCancelKeyboard } = await import('../telegram/utils/keyboard-builder');
           const tgMessage = formatActiveCalloutWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
           await editTelegramMessage(
             telegramBot.getApi(),
             calloutSubdivision.telegram_chat_id,
             parseInt(callout.telegram_message_id),
             tgMessage,
-            true // убрать клавиатуру
+            false,
+            buildTgCancelKeyboard(callout.id, callout.subdivision_id)
           );
         } catch (tgError) {
           logger.error('Failed to update Telegram message with log', {
@@ -467,6 +479,164 @@ export class SyncService {
       ? `(<@${response.vk_user_id.replace('discord_', '')}>)`
       : `(${response.vk_user_name})`;
     return `${authorMention}, ${emojiStr}${subdivision.name} отреагировало на инцидент ${responderMention}.`;
+  }
+
+  /**
+   * Отменить реагирование подразделения
+   */
+  static async handleCancelResponse(
+    calloutId: number,
+    subdivisionId: number,
+    platform: 'vk' | 'telegram' | 'discord',
+    userId: string,
+    userName: string
+  ): Promise<void> {
+    logger.info('Processing cancel response', { calloutId, subdivisionId, platform, userId });
+
+    const callout = await CalloutModel.findById(calloutId);
+    if (!callout) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут #${calloutId} не найден`, 'CALLOUT_NOT_FOUND', 404);
+    }
+    if (callout.status !== CALLOUT_STATUS.ACTIVE) {
+      throw new CalloutError(`${EMOJI.ERROR} Каллаут #${callout.id} уже закрыт`, 'CALLOUT_ALREADY_CLOSED', 400);
+    }
+
+    const deleted = await CalloutResponseModel.deleteByCalloutAndSubdivision(calloutId, subdivisionId);
+    if (!deleted) {
+      throw new CalloutError(`${EMOJI.ERROR} Реагирование не найдено`, 'RESPONSE_NOT_FOUND', 404);
+    }
+
+    logger.info('Response deleted, notifying platforms', { calloutId, subdivisionId });
+
+    const subdivision = await SubdivisionModel.findById(subdivisionId);
+    if (!subdivision) {
+      logger.warn('Subdivision not found after response cancel', { subdivisionId });
+      return;
+    }
+
+    await SyncService.enqueueUpdate(calloutId, async () => {
+      await SyncService.notifyDiscordAboutResponseCancelled(callout, subdivision);
+    }).catch((error) => {
+      logger.error('Failed to notify about response cancellation', {
+        error: error instanceof Error ? error.message : error,
+        calloutId,
+      });
+    });
+  }
+
+  /**
+   * Уведомить Discord/VK/TG об отмене реагирования (восстановить клавиатуры)
+   */
+  static async notifyDiscordAboutResponseCancelled(
+    callout: Callout,
+    subdivision: Subdivision
+  ): Promise<void> {
+    if (!callout.discord_channel_id) return;
+
+    try {
+      const channel = (await discordBot.client.channels.fetch(callout.discord_channel_id)) as TextChannel;
+      if (!channel || !channel.isTextBased()) return;
+
+      const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const allSubdivisionIds = [...new Set([callout.subdivision_id, ...allResponses.map(r => r.subdivision_id)])];
+      const subdivisionsMap = await SubdivisionModel.findByIds(allSubdivisionIds);
+      const calloutSubdivision = subdivisionsMap.get(callout.subdivision_id);
+
+      // Обновить Discord embed + восстановить кнопку "Отреагировать"
+      if (callout.discord_message_id && calloutSubdivision) {
+        try {
+          const originalMessage = await channel.messages.fetch(callout.discord_message_id);
+          if (originalMessage) {
+            const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
+            addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
+
+            const respondButton = new ButtonBuilder()
+              .setCustomId(`respond_callout_${callout.id}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
+              .setStyle(ButtonStyle.Secondary);
+
+            const parsedEmoji = parseDiscordEmoji(calloutSubdivision.logo_url);
+            if (parsedEmoji) {
+              const emoji: ComponentEmojiResolvable = parsedEmoji.id
+                ? { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false }
+                : parsedEmoji.name;
+              respondButton.setEmoji(emoji);
+            }
+
+            // Убрать cancel_response и respond кнопки, добавить respond обратно
+            const updatedComponents = originalMessage.components
+              .map((row: any) => {
+                const buttons = row.components.filter(
+                  (c: any) => !c.customId?.startsWith('cancel_response_') && !c.customId?.startsWith('respond_callout_')
+                );
+                if (buttons.length === 0) return null;
+                return ActionRowBuilder.from(row).setComponents(
+                  buttons.map((b: any) => ButtonBuilder.from(b))
+                );
+              })
+              .filter(Boolean) as ActionRowBuilder<ButtonBuilder>[];
+
+            updatedComponents.unshift(
+              new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton)
+            );
+
+            await originalMessage.edit({ embeds: [updatedEmbed], components: updatedComponents });
+          }
+        } catch (embedError) {
+          logger.error('Failed to update Discord embed on response cancel', {
+            error: embedError instanceof Error ? embedError.message : embedError,
+            calloutId: callout.id,
+          });
+        }
+      }
+
+      // Восстановить клавиатуру в VK
+      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive() && subdivision?.vk_chat_id) {
+        try {
+          const { buildDetailedCalloutKeyboard: buildVkKeyboard } = await import('../vk/utils/keyboard-builder');
+          const vkMessage = formatVkActiveWithLog(callout, subdivision, allResponses, subdivisionsMap);
+          await (vkBot.getApi().api.messages.edit as any)({
+            peer_id: parseInt(subdivision.vk_chat_id),
+            cmid: parseInt(callout.vk_message_id),
+            message: vkMessage,
+            keyboard: buildVkKeyboard(callout.id, callout.subdivision_id),
+          });
+        } catch (vkError) {
+          logger.error('Failed to restore VK keyboard on response cancel', {
+            error: vkError instanceof Error ? vkError.message : vkError,
+            calloutId: callout.id,
+          });
+        }
+      }
+
+      // Восстановить клавиатуру в Telegram
+      if (callout.telegram_message_id && telegramBot.isActive() && subdivision?.telegram_chat_id) {
+        try {
+          const { buildDetailedCalloutKeyboard: buildTgKeyboard } = await import('../telegram/utils/keyboard-builder');
+          const tgMessage = formatActiveCalloutWithLog(callout, subdivision, allResponses, subdivisionsMap);
+          await editTelegramMessage(
+            telegramBot.getApi(),
+            subdivision.telegram_chat_id,
+            parseInt(callout.telegram_message_id),
+            tgMessage,
+            false,
+            buildTgKeyboard(callout.id, callout.subdivision_id)
+          );
+        } catch (tgError) {
+          logger.error('Failed to restore Telegram keyboard on response cancel', {
+            error: tgError instanceof Error ? tgError.message : tgError,
+            calloutId: callout.id,
+          });
+        }
+      }
+
+      logger.info('Platforms notified about response cancellation', { calloutId: callout.id });
+    } catch (error) {
+      logger.error('Failed to notify about response cancellation', {
+        error: error instanceof Error ? error.message : error,
+        calloutId: callout.id,
+      });
+    }
   }
 
   /**

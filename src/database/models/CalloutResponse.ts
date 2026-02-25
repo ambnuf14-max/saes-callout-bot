@@ -50,11 +50,21 @@ export class CalloutResponseModel {
   }
 
   /**
-   * Получить все ответы на каллаут
+   * Получить все ответы на каллаут (включая отменённые — для лога)
    */
   static async findByCalloutId(calloutId: number): Promise<CalloutResponse[]> {
     return await database.all<CalloutResponse>(
       'SELECT * FROM callout_responses WHERE callout_id = ? ORDER BY created_at ASC',
+      [calloutId]
+    );
+  }
+
+  /**
+   * Получить только активные (не отменённые) ответы на каллаут
+   */
+  static async findActiveByCalloutId(calloutId: number): Promise<CalloutResponse[]> {
+    return await database.all<CalloutResponse>(
+      "SELECT * FROM callout_responses WHERE callout_id = ? AND response_type = 'acknowledged' ORDER BY created_at ASC",
       [calloutId]
     );
   }
@@ -98,11 +108,11 @@ export class CalloutResponseModel {
   }
 
   /**
-   * Получить количество уникальных подразделений, ответивших на каллаут
+   * Получить количество уникальных подразделений, активно реагирующих на каллаут
    */
   static async countUniqueSubdivisions(calloutId: number): Promise<number> {
     const result = await database.get<{ count: number }>(
-      'SELECT COUNT(DISTINCT subdivision_id) as count FROM callout_responses WHERE callout_id = ?',
+      "SELECT COUNT(DISTINCT subdivision_id) as count FROM callout_responses WHERE callout_id = ? AND response_type = 'acknowledged'",
       [calloutId]
     );
     return result?.count || 0;
@@ -125,6 +135,23 @@ export class CalloutResponseModel {
   static async delete(id: number): Promise<void> {
     await database.run('DELETE FROM callout_responses WHERE id = ?', [id]);
     logger.info('Callout response deleted', { responseId: id });
+  }
+
+  /**
+   * Мягко удалить (отменить) реагирование подразделения на каллаут.
+   * Обновляет response_type = 'cancelled' вместо физического DELETE.
+   * Возвращает true если хотя бы одна запись была обновлена.
+   */
+  static async deleteByCalloutAndSubdivision(calloutId: number, subdivisionId: number): Promise<boolean> {
+    const result = await database.run(
+      "UPDATE callout_responses SET response_type = 'cancelled', cancelled_at = CURRENT_TIMESTAMP WHERE callout_id = ? AND subdivision_id = ? AND response_type = 'acknowledged'",
+      [calloutId, subdivisionId]
+    );
+    if (result.changes > 0) {
+      logger.info('Callout response cancelled (soft delete) by callout+subdivision', { calloutId, subdivisionId });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -176,7 +203,7 @@ export class CalloutResponseModel {
       `INSERT INTO callout_responses (callout_id, subdivision_id, vk_user_id, vk_user_name, platform, response_type, message)
        SELECT ?, ?, ?, ?, ?, ?, ?
        WHERE NOT EXISTS (
-         SELECT 1 FROM callout_responses WHERE callout_id = ? AND subdivision_id = ?
+         SELECT 1 FROM callout_responses WHERE callout_id = ? AND subdivision_id = ? AND response_type = 'acknowledged'
        )`,
       [
         data.callout_id,
@@ -192,7 +219,10 @@ export class CalloutResponseModel {
     );
 
     if (result.changes === 0) {
-      const existing = await this.getLastSubdivisionResponse(data.callout_id, data.subdivision_id);
+      const existing = await database.get<CalloutResponse>(
+        "SELECT * FROM callout_responses WHERE callout_id = ? AND subdivision_id = ? AND response_type = 'acknowledged' ORDER BY created_at DESC LIMIT 1",
+        [data.callout_id, data.subdivision_id]
+      );
       if (!existing) {
         throw new Error(`Duplicate response not found for callout ${data.callout_id}, subdivision ${data.subdivision_id}`);
       }

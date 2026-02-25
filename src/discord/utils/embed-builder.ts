@@ -185,42 +185,80 @@ export function addResponsesToEmbed(
   subdivisions: Map<number, Subdivision>,
   callout?: Callout
 ): EmbedBuilder {
-  const logEntries: string[] = [];
+  // Собираем все события с временной меткой для хронологической сортировки
+  const events: { ts: number; text: string }[] = [];
 
   if (callout) {
-    const time = formatMoscowTime(new Date(callout.created_at));
-    logEntries.push(`\`${time}\` - @${callout.author_name} Создал запрос поддержки.`);
+    events.push({
+      ts: new Date(callout.created_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(callout.created_at))}\` - @${callout.author_name} Создал запрос поддержки.`,
+    });
   }
 
   for (const r of responses) {
     const subdiv = subdivisions.get(r.subdivision_id);
-    const time = formatMoscowTime(new Date(r.created_at));
     const emoji = subdiv ? formatSubdivisionEmoji(subdiv) : '';
     const name = subdiv?.name || 'Unknown';
     const responderMention = r.platform === 'discord'
       ? ` (<@${r.vk_user_id.replace('discord_', '')}>)`
       : ` (${r.vk_user_name})`;
-    logEntries.push(`\`${time}\` - ${emoji}${name} отреагировало на запрос поддержки${responderMention}.`);
+    events.push({
+      ts: new Date(r.created_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(r.created_at))}\` - ${emoji}${name} отреагировало на запрос поддержки${responderMention}.`,
+    });
+    if (r.response_type === 'cancelled' && r.cancelled_at) {
+      events.push({
+        ts: new Date(r.cancelled_at).getTime(),
+        text: `\`${formatMoscowTime(new Date(r.cancelled_at))}\` - ${emoji}${name} отменило реагирование${responderMention}.`,
+      });
+    }
   }
 
-  if (callout && callout.declined_at) {
-    const time = formatMoscowTime(new Date(callout.declined_at));
+  // Прошлое отклонение (возобновлённое)
+  if (callout?.last_declined_at) {
+    const by = callout.last_declined_by_name || 'Неизвестно';
+    const reason = callout.last_decline_reason ? ` (${callout.last_decline_reason})` : '';
+    events.push({
+      ts: new Date(callout.last_declined_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(callout.last_declined_at))}\` - 🚫 ${by} отклонил запрос поддержки${reason}.`,
+    });
+  }
+
+  // Возобновление реагирования
+  if (callout?.revived_at) {
+    const by = callout.revived_by_name || 'Неизвестно';
+    events.push({
+      ts: new Date(callout.revived_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(callout.revived_at))}\` - ↩️ ${by} возобновил реагирование.`,
+    });
+  }
+
+  // Текущее отклонение (ещё не возобновлено)
+  if (callout?.declined_at) {
+    const by = callout.declined_by_name || callout.declined_by || 'Неизвестно';
     const reason = callout.decline_reason ? ` (${callout.decline_reason})` : '';
-    const by = callout.declined_by_name || (callout.declined_by ? callout.declined_by : 'Неизвестно');
-    logEntries.push(`\`${time}\` - 🚫 ${by} отклонил запрос поддержки${reason}.`);
+    events.push({
+      ts: new Date(callout.declined_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(callout.declined_at))}\` - 🚫 ${by} отклонил запрос поддержки${reason}.`,
+    });
   }
 
+  // Закрытие
   if (callout && callout.status !== CALLOUT_STATUS.ACTIVE && callout.closed_at) {
-    const time = formatMoscowTime(new Date(callout.closed_at));
     const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
-    logEntries.push(`\`${time}\` - 🔒 Инцидент закрыт${reason}.`);
+    events.push({
+      ts: new Date(callout.closed_at).getTime(),
+      text: `\`${formatMoscowTime(new Date(callout.closed_at))}\` - 🔒 Инцидент закрыт${reason}.`,
+    });
   }
 
-  if (logEntries.length === 0) {
+  if (events.length === 0) {
     return embed;
   }
 
-  let logText = logEntries.join('\n');
+  events.sort((a, b) => a.ts - b.ts);
+
+  let logText = events.map(e => e.text).join('\n');
   if (logText.length > 1024) {
     logText = logText.substring(0, 1021) + '...';
   }

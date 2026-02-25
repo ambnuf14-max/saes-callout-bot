@@ -12,6 +12,7 @@ import { sendCalloutNotification as sendTelegramCallout, formatCalloutClosedMess
 import { buildDetailedCalloutKeyboard as buildVkKeyboard, buildDeclinedCalloutKeyboard as buildVkDeclinedKeyboard } from '../vk/utils/keyboard-builder';
 import { buildDetailedCalloutKeyboard as buildTgKeyboard, buildDeclinedCalloutKeyboard as buildTgDeclinedKeyboard } from '../telegram/utils/keyboard-builder';
 import { EMOJI } from '../config/constants';
+import { logAuditEventToAllGuilds, AuditEventType, NotificationFailedData } from '../discord/utils/audit-logger';
 
 const TELEGRAM_MAX_RETRIES = 3;
 
@@ -60,6 +61,51 @@ function isRetryableTelegramError(error: unknown): boolean {
   ];
 
   return retryableMarkers.some(marker => message.includes(marker));
+}
+
+const VK_MAX_RETRIES = 3;
+const VK_RETRY_BASE_DELAY_MS = 1000;
+
+function isRetryableVkError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  const retryableMarkers = [
+    'econnreset', 'etimedout', 'eai_again', 'enotfound', 'socket hang up',
+    'too many requests', 'too many actions', 'flood control',
+    '"code":6', '"code":9', 'code 6', 'code 9',
+  ];
+  return retryableMarkers.some(marker => message.includes(marker));
+}
+
+async function runVkWithRetry<T>(
+  operation: string,
+  context: Record<string, unknown>,
+  action: () => Promise<T>
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= VK_MAX_RETRIES; attempt++) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      const shouldRetry = attempt < VK_MAX_RETRIES && isRetryableVkError(error);
+      if (!shouldRetry) throw error;
+
+      const delayMs = VK_RETRY_BASE_DELAY_MS * attempt;
+      logger.warn('VK request failed, retrying', {
+        operation,
+        attempt,
+        maxAttempts: VK_MAX_RETRIES,
+        delayMs,
+        error: getErrorMessage(error),
+        ...context,
+      });
+
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
 }
 
 async function runTelegramWithRetry<T>(
@@ -130,13 +176,11 @@ export class NotificationService {
         vkChatId: subdivision.vk_chat_id,
       });
 
-      // Отправить уведомление в VK
-      const messageId = await sendVkCallout(
-        vkBot.getApi(),
-        subdivision.vk_chat_id,
-        callout,
-        subdivision,
-        authorFactionName
+      // Отправить уведомление в VK (с ретраями при сетевых ошибках)
+      const messageId = await runVkWithRetry(
+        'send-callout',
+        { calloutId: callout.id, subdivisionId: subdivision.id, vkChatId: subdivision.vk_chat_id },
+        () => sendVkCallout(vkBot.getApi(), subdivision.vk_chat_id!, callout, subdivision, authorFactionName)
       );
 
       // Сохранить ID сообщения в БД
@@ -183,8 +227,15 @@ export class NotificationService {
         subdivisionId: subdivision.id,
       });
 
-      // Можно отправить уведомление администраторам Discord об ошибке VK
-      // TODO: Опционально
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision.name,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision.vk_chat_id || undefined,
+        chatTitle: subdivision.vk_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.VK_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 
@@ -367,6 +418,16 @@ export class NotificationService {
         calloutId: callout.id,
         subdivisionId: subdivision.id,
       });
+
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision.name,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision.telegram_chat_id || undefined,
+        chatTitle: subdivision.telegram_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.TELEGRAM_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 
@@ -494,6 +555,16 @@ export class NotificationService {
         error: error instanceof Error ? error.message : error,
         calloutId: callout.id,
       });
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id).catch(() => undefined);
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision?.name ?? `#${callout.subdivision_id}`,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision?.vk_chat_id || undefined,
+        chatTitle: subdivision?.vk_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.VK_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 
@@ -532,6 +603,16 @@ export class NotificationService {
         error: error instanceof Error ? error.message : error,
         calloutId: callout.id,
       });
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id).catch(() => undefined);
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision?.name ?? `#${callout.subdivision_id}`,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision?.telegram_chat_id || undefined,
+        chatTitle: subdivision?.telegram_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.TELEGRAM_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 
@@ -573,6 +654,16 @@ export class NotificationService {
         error: error instanceof Error ? error.message : error,
         calloutId: callout.id,
       });
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id).catch(() => undefined);
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision?.name ?? `#${callout.subdivision_id}`,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision?.vk_chat_id || undefined,
+        chatTitle: subdivision?.vk_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.VK_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 
@@ -621,6 +712,16 @@ export class NotificationService {
         error: error instanceof Error ? error.message : error,
         calloutId: callout.id,
       });
+      const subdivision = await SubdivisionModel.findById(callout.subdivision_id).catch(() => undefined);
+      const failData: NotificationFailedData = {
+        userId: 'system', userName: 'Система',
+        calloutId: callout.id,
+        subdivisionName: subdivision?.name ?? `#${callout.subdivision_id}`,
+        errorMessage: getErrorMessage(error),
+        chatId: subdivision?.telegram_chat_id || undefined,
+        chatTitle: subdivision?.telegram_chat_title || undefined,
+      };
+      logAuditEventToAllGuilds(AuditEventType.TELEGRAM_NOTIFICATION_FAILED, failData).catch(() => {});
     }
   }
 

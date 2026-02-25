@@ -52,7 +52,10 @@ export async function handleReviveCalloutButton(interaction: ButtonInteraction) 
       return;
     }
 
-    await CalloutService.cancelDecline(interaction.guild, calloutId);
+    const revivedByName = interaction.member && 'displayName' in interaction.member
+      ? (interaction.member.displayName as string)
+      : interaction.user.displayName || interaction.user.username;
+    await CalloutService.cancelDecline(interaction.guild, calloutId, revivedByName);
 
     await interaction.editReply({
       content: `${EMOJI.SUCCESS} Реагирование возобновлено.`,

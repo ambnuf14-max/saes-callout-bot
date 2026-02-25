@@ -25,6 +25,8 @@ import runChatTitlesMigration from './migrations/024_chat_titles';
 import runCalloutResponsePlatformMigration from './migrations/025_callout_response_platform';
 import runCalloutDeclineMigration from './migrations/026_callout_decline';
 import runPlatformChatMessagesMigration from './migrations/027_platform_chat_messages';
+import runCalloutReviveHistoryMigration from './migrations/028_callout_revive_history';
+import runCalloutResponseCancelledMigration from './migrations/029_callout_response_cancelled';
 
 /**
  * SQL схема для всех таблиц
@@ -198,6 +200,8 @@ export async function runMigrations(): Promise<void> {
     await runCalloutResponsePlatformMigration();
     await runCalloutDeclineMigration();
     await runPlatformChatMessagesMigration();
+    await runCalloutReviveHistoryMigration();
+    await runCalloutResponseCancelledMigration();
 
     logger.info('Database migrations completed successfully');
   } catch (error) {

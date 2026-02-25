@@ -6,7 +6,7 @@ import { MESSAGES } from '../../config/constants';
  */
 
 export interface CalloutResponsePayload {
-  action: 'respond' | 'decline' | 'revive' | 'specify_decline_reason';
+  action: 'respond' | 'decline' | 'revive' | 'specify_decline_reason' | 'cancel_decline' | 'cancel_response';
   callout_id: number;
   subdivision_id: number;
 }
@@ -25,13 +25,13 @@ export function buildDetailedCalloutKeyboard(
     .callbackButton({
       label: MESSAGES.CALLOUT.BUTTON_RESPOND_VK,
       payload: JSON.stringify(respondPayload),
-      color: Keyboard.NEGATIVE_COLOR,
+      color: Keyboard.POSITIVE_COLOR,
     })
     .row()
     .callbackButton({
       label: MESSAGES.CALLOUT.BUTTON_DECLINE_VK,
       payload: JSON.stringify(declinePayload),
-      color: Keyboard.PRIMARY_COLOR,
+      color: Keyboard.NEGATIVE_COLOR,
     })
     .inline()
     .toString();
@@ -51,6 +51,44 @@ export function buildDeclinedCalloutKeyboard(
       label: MESSAGES.CALLOUT.BUTTON_REVIVE_VK,
       payload: JSON.stringify(revivePayload),
       color: Keyboard.POSITIVE_COLOR,
+    })
+    .inline()
+    .toString();
+}
+
+/**
+ * Клавиатура для сообщения об отклонении: кнопка "← Назад"
+ */
+export function buildCancelDeclineKeyboard(
+  calloutId: number,
+  subdivisionId: number
+): string {
+  const cancelPayload: CalloutResponsePayload = { action: 'cancel_decline', callout_id: calloutId, subdivision_id: subdivisionId };
+
+  return Keyboard.builder()
+    .callbackButton({
+      label: '← Назад',
+      payload: JSON.stringify(cancelPayload),
+      color: Keyboard.SECONDARY_COLOR,
+    })
+    .inline()
+    .toString();
+}
+
+/**
+ * Клавиатура после принятия запроса: "Отменить реагирование"
+ */
+export function buildCancelResponseKeyboard(
+  calloutId: number,
+  subdivisionId: number
+): string {
+  const cancelPayload: CalloutResponsePayload = { action: 'cancel_response', callout_id: calloutId, subdivision_id: subdivisionId };
+
+  return Keyboard.builder()
+    .callbackButton({
+      label: 'Отменить реагирование',
+      payload: JSON.stringify(cancelPayload),
+      color: Keyboard.NEGATIVE_COLOR,
     })
     .inline()
     .toString();

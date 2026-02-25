@@ -724,7 +724,8 @@ export class CalloutService {
    */
   static async cancelDecline(
     guildOrNull: Guild | null,
-    calloutId: number
+    calloutId: number,
+    revivedByName: string = 'Неизвестно'
   ): Promise<Callout | undefined> {
     const callout = await CalloutModel.findById(calloutId);
 
@@ -747,8 +748,8 @@ export class CalloutService {
       CalloutService.pendingDeclineClose.delete(calloutId);
     }
 
-    // 2. Сбросить decline в БД
-    const revivedCallout = await CalloutModel.cancelDecline(calloutId);
+    // 2. Сбросить decline в БД (с сохранением снапшота для лога)
+    const revivedCallout = await CalloutModel.cancelDecline(calloutId, revivedByName);
     if (!revivedCallout) throw new Error('Failed to cancel decline in database');
 
     logger.info('Callout decline cancelled', { calloutId });

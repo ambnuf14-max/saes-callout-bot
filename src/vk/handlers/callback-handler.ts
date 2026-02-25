@@ -1,7 +1,7 @@
 import { MessageEventContext } from 'vk-io';
 import logger from '../../utils/logger';
 import SyncService from '../../services/sync.service';
-import { CalloutResponsePayload, buildSpecifyReasonKeyboard } from '../utils/keyboard-builder';
+import { CalloutResponsePayload, buildCancelDeclineKeyboard } from '../utils/keyboard-builder';
 import { handleVkError } from '../../utils/error-handler';
 import { EMOJI, DECLINE_TIMERS } from '../../config/constants';
 import vkBot from '../bot';
@@ -28,7 +28,7 @@ export async function handleCallbackEvent(
       ? JSON.parse(rawPayload)
       : rawPayload as CalloutResponsePayload;
 
-    if (!payload || !['respond', 'decline', 'revive', 'specify_decline_reason'].includes(payload.action)) {
+    if (!payload || !['respond', 'decline', 'revive', 'cancel_decline', 'cancel_response'].includes(payload.action)) {
       logger.warn('Invalid callback payload', { payload });
       await context.answer({
         type: 'show_snackbar',
@@ -106,6 +106,11 @@ export async function handleCallbackEvent(
       });
 
       await context.answer({ type: 'show_snackbar', text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!` });
+      (vkBot.getApi().api.messages.send as any)({
+        peer_ids: [context.peerId],
+        message: `✅ ${userName} принимает запрос поддержки.`,
+        random_id: Date.now() + Math.floor(Math.random() * 100000),
+      }).catch(() => {});
       return;
     }
 
@@ -123,23 +128,25 @@ export async function handleCallbackEvent(
         logger.info('VK decline reason timeout expired', { userId: context.userId, calloutId: payload.callout_id });
       }, DECLINE_TIMERS.REASON_TIMEOUT);
 
-      pendingDeclineReasonState.set(stateKey, {
+      const entry = pendingDeclineReasonState.set(stateKey, {
         calloutId: payload.callout_id,
         subdivisionId: payload.subdivision_id,
         platform: 'vk',
         chatId: context.peerId.toString(),
         timeout,
-      });
+      }).get(stateKey)!;
 
-      // Отправить follow-up сообщение
+      // Отправить follow-up сообщение и сохранить conversation_message_id
       try {
-        const reasonKeyboard = buildSpecifyReasonKeyboard(payload.callout_id, payload.subdivision_id);
-        await (vkBot.getApi().api.messages.send as any)({
+        const sendResp = await (vkBot.getApi().api.messages.send as any)({
           peer_ids: [context.peerId],
-          message: `📝 ${userName} отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат. У вас 3 минуты.\nСледующее текстовое сообщение от вас будет принято как причина.`,
-          keyboard: reasonKeyboard,
+          message: `❌ ${userName} отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат — она будет принята автоматически. У вас 3 минуты.`,
+          keyboard: buildCancelDeclineKeyboard(payload.callout_id, payload.subdivision_id),
           random_id: Date.now() + Math.floor(Math.random() * 100000),
         });
+        if (Array.isArray(sendResp) && sendResp[0]?.conversation_message_id) {
+          entry.promptMessageId = sendResp[0].conversation_message_id;
+        }
       } catch (sendError) {
         logger.error('Failed to send VK decline reason request', { error: sendError });
       }
@@ -148,16 +155,41 @@ export async function handleCallbackEvent(
       return;
     }
 
-    if (payload.action === 'specify_decline_reason') {
-      await context.answer({ type: 'show_snackbar', text: `📝 Напишите причину текстом в чат` });
+    if (payload.action === 'cancel_decline') {
+      const stateKey = `vk:${context.userId}`;
+      const pending = pendingDeclineReasonState.get(stateKey);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        pendingDeclineReasonState.delete(stateKey);
+      }
+      await context.answer({ type: 'show_snackbar', text: `Отклонение отменено.` });
       return;
     }
 
     if (payload.action === 'revive') {
-      await CalloutService.cancelDecline(null, payload.callout_id);
+      await CalloutService.cancelDecline(null, payload.callout_id, userName);
 
       logger.info('VK revive callout processed', { calloutId: payload.callout_id, userId: context.userId });
       await context.answer({ type: 'show_snackbar', text: `${EMOJI.SUCCESS} Реагирование возобновлено!` });
+      return;
+    }
+
+    if (payload.action === 'cancel_response') {
+      await SyncService.handleCancelResponse(
+        payload.callout_id,
+        payload.subdivision_id,
+        'vk',
+        context.userId.toString(),
+        userName
+      );
+
+      logger.info('VK cancel response processed', { calloutId: payload.callout_id, userId: context.userId });
+      await context.answer({ type: 'show_snackbar', text: `✅ Реагирование отменено` });
+      (vkBot.getApi().api.messages.send as any)({
+        peer_ids: [context.peerId],
+        message: `❌ ${userName} отменяет реагирование.`,
+        random_id: Date.now() + Math.floor(Math.random() * 100000),
+      }).catch(() => {});
       return;
     }
 

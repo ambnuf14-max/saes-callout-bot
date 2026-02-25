@@ -6,7 +6,7 @@ import { MESSAGES } from '../../config/constants';
  */
 
 export interface CalloutResponsePayload {
-  action: 'respond' | 'decline' | 'revive' | 'specify_decline_reason';
+  action: 'respond' | 'decline' | 'revive' | 'specify_decline_reason' | 'cancel_decline' | 'cancel_response';
   callout_id: number;
   subdivision_id: number;
 }
@@ -38,6 +38,36 @@ export function buildDeclinedCalloutKeyboard(
   return {
     inline_keyboard: [
       [{ text: MESSAGES.CALLOUT.BUTTON_REVIVE_TELEGRAM, callback_data: `rv:${calloutId}:${subdivisionId}` }],
+    ],
+  };
+}
+
+/**
+ * Клавиатура для сообщения об отклонении: кнопка "← Назад"
+ * cd: = cancel_decline
+ */
+export function buildCancelDeclineKeyboard(
+  calloutId: number,
+  subdivisionId: number
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: '← Назад', callback_data: `cd:${calloutId}:${subdivisionId}` }],
+    ],
+  };
+}
+
+/**
+ * Клавиатура после принятия запроса: "Отменить реагирование"
+ * cr: = cancel_response
+ */
+export function buildCancelResponseKeyboard(
+  calloutId: number,
+  subdivisionId: number
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: 'Отменить реагирование', callback_data: `cr:${calloutId}:${subdivisionId}` }],
     ],
   };
 }
@@ -80,6 +110,18 @@ export function parseCompactCallbackData(data: string): CalloutResponsePayload |
     const parts = data.split(':');
     if (parts.length < 3) return null;
     return { action: 'specify_decline_reason', callout_id: parseInt(parts[1], 10), subdivision_id: parseInt(parts[2], 10) };
+  }
+
+  if (data.startsWith('cd:')) {
+    const parts = data.split(':');
+    if (parts.length < 3) return null;
+    return { action: 'cancel_decline', callout_id: parseInt(parts[1], 10), subdivision_id: parseInt(parts[2], 10) };
+  }
+
+  if (data.startsWith('cr:')) {
+    const parts = data.split(':');
+    if (parts.length < 3) return null;
+    return { action: 'cancel_response', callout_id: parseInt(parts[1], 10), subdivision_id: parseInt(parts[2], 10) };
   }
 
   // JSON fallback (старые кнопки)

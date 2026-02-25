@@ -97,6 +97,11 @@ export interface Callout {
   declined_by: string | null;
   declined_by_name: string | null;
   decline_reason: string | null;
+  last_declined_at: string | null;
+  last_declined_by_name: string | null;
+  last_decline_reason: string | null;
+  revived_at: string | null;
+  revived_by_name: string | null;
 }
 
 export interface CreateCalloutDTO {
@@ -124,6 +129,11 @@ export interface UpdateCalloutDTO {
   declined_by?: string | null;
   declined_by_name?: string | null;
   decline_reason?: string | null;
+  last_declined_at?: string | null;
+  last_declined_by_name?: string | null;
+  last_decline_reason?: string | null;
+  revived_at?: string | null;
+  revived_by_name?: string | null;
 }
 
 export type ResponsePlatform = 'vk' | 'telegram' | 'discord';
@@ -135,9 +145,10 @@ export interface CalloutResponse {
   vk_user_id: string;
   vk_user_name: string;
   platform: ResponsePlatform;
-  response_type: 'acknowledged';
+  response_type: 'acknowledged' | 'cancelled';
   message: string | null;
   created_at: string;
+  cancelled_at: string | null;
 }
 
 export interface CreateCalloutResponseDTO {

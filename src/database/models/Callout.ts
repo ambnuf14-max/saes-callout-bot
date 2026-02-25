@@ -150,6 +150,26 @@ export class CalloutModel {
       updates.push('decline_reason = ?');
       params.push(data.decline_reason);
     }
+    if (data.last_declined_at !== undefined) {
+      updates.push('last_declined_at = ?');
+      params.push(data.last_declined_at);
+    }
+    if (data.last_declined_by_name !== undefined) {
+      updates.push('last_declined_by_name = ?');
+      params.push(data.last_declined_by_name);
+    }
+    if (data.last_decline_reason !== undefined) {
+      updates.push('last_decline_reason = ?');
+      params.push(data.last_decline_reason);
+    }
+    if (data.revived_at !== undefined) {
+      updates.push('revived_at = ?');
+      params.push(data.revived_at);
+    }
+    if (data.revived_by_name !== undefined) {
+      updates.push('revived_by_name = ?');
+      params.push(data.revived_by_name);
+    }
 
     if (updates.length === 0) {
       return await this.findById(id);
@@ -201,10 +221,19 @@ export class CalloutModel {
   }
 
   /**
-   * Отменить отклонение каллаута
+   * Отменить отклонение каллаута (возобновить реагирование).
+   * Снапшот decline сохраняется в last_declined_* для истории в логе.
    */
-  static async cancelDecline(id: number): Promise<Callout | undefined> {
+  static async cancelDecline(id: number, revivedByName: string): Promise<Callout | undefined> {
+    const current = await this.findById(id);
     return await this.update(id, {
+      // Сохранить снапшот для лога
+      last_declined_at: current?.declined_at ?? null,
+      last_declined_by_name: current?.declined_by_name ?? null,
+      last_decline_reason: current?.decline_reason ?? null,
+      revived_at: new Date().toISOString(),
+      revived_by_name: revivedByName,
+      // Сбросить активное отклонение
       declined_at: null,
       declined_by: null,
       declined_by_name: null,

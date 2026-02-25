@@ -42,7 +42,11 @@ export async function sendCalloutNotification(
     // peer_ids response: [{peer_id, message_id, conversation_message_id, error?}]
     let messageId = 0;
     if (Array.isArray(sendResponse) && sendResponse.length > 0) {
-      messageId = sendResponse[0].conversation_message_id || 0;
+      const item = sendResponse[0];
+      if (item.error) {
+        throw new Error(`VK delivery error for peer ${item.peer_id}: [${item.error.code}] ${item.error.description}`);
+      }
+      messageId = item.conversation_message_id || 0;
     } else if (sendResponse && typeof sendResponse === 'object') {
       messageId = (sendResponse as any).conversation_message_id || 0;
     }
@@ -208,16 +212,7 @@ export function formatActiveCalloutWithLog(
     time,
   );
 
-  const logEntries: string[] = [];
-  logEntries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
-  for (const r of responses) {
-    const subdiv = subdivisionsMap.get(r.subdivision_id);
-    const logTime = formatMoscowTime(new Date(r.created_at));
-    const emoji = subdiv ? formatSubdivisionEmojiVk(subdiv) : '';
-    const name = subdiv?.name || 'Unknown';
-    logEntries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
-  }
-
+  const logEntries = buildLogEntries(callout, responses, subdivisionsMap, false);
   if (logEntries.length > 0) {
     lines.push('', 'Лог инцидента', logEntries.join('\n'));
   }
@@ -275,26 +270,56 @@ export function formatCalloutClosedMessage(
   }
 
   // Лог инцидента
-  const logEntries: string[] = [];
-  logEntries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
-
-  for (const r of responses) {
-    const subdiv = subdivisionsMap.get(r.subdivision_id);
-    const logTime = formatMoscowTime(new Date(r.created_at));
-    const emoji = subdiv ? formatSubdivisionEmojiVk(subdiv) : '';
-    const name = subdiv?.name || 'Unknown';
-    logEntries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
-  }
-
-  if (callout.closed_at) {
-    const logTime = formatMoscowTime(new Date(callout.closed_at));
-    const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
-    logEntries.push(`${logTime} - 🔒 Инцидент закрыт${reason}.`);
-  }
-
+  const logEntries = buildLogEntries(callout, responses, subdivisionsMap, true);
   lines.push('', 'Лог инцидента', logEntries.join('\n'));
 
   return lines.join('\n');
+}
+
+function buildLogEntries(
+  callout: Callout,
+  responses: CalloutResponse[],
+  subdivisionsMap: Map<number, Subdivision>,
+  includeClosed = false
+): string[] {
+  const events: { ts: number; text: string }[] = [];
+
+  events.push({ ts: new Date(callout.created_at).getTime(), text: `${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.` });
+
+  for (const r of responses) {
+    const subdiv = subdivisionsMap.get(r.subdivision_id);
+    const emoji = subdiv ? formatSubdivisionEmojiVk(subdiv) : '';
+    const name = subdiv?.name || 'Unknown';
+    events.push({ ts: new Date(r.created_at).getTime(), text: `${formatMoscowTime(new Date(r.created_at))} - ${emoji}${name} отреагировало на запрос поддержки.` });
+    if (r.response_type === 'cancelled' && r.cancelled_at) {
+      events.push({ ts: new Date(r.cancelled_at).getTime(), text: `${formatMoscowTime(new Date(r.cancelled_at))} - ${emoji}${name} отменило реагирование.` });
+    }
+  }
+
+  if (callout.last_declined_at) {
+    const by = callout.last_declined_by_name || 'Неизвестно';
+    const reason = callout.last_decline_reason ? ` (${callout.last_decline_reason})` : '';
+    events.push({ ts: new Date(callout.last_declined_at).getTime(), text: `${formatMoscowTime(new Date(callout.last_declined_at))} - 🚫 ${by} отклонил запрос поддержки${reason}.` });
+  }
+
+  if (callout.revived_at) {
+    const by = callout.revived_by_name || 'Неизвестно';
+    events.push({ ts: new Date(callout.revived_at).getTime(), text: `${formatMoscowTime(new Date(callout.revived_at))} - ↩️ ${by} возобновил реагирование.` });
+  }
+
+  if (callout.declined_at) {
+    const by = callout.declined_by_name || callout.declined_by || 'Неизвестно';
+    const reason = callout.decline_reason ? ` (${callout.decline_reason})` : '';
+    events.push({ ts: new Date(callout.declined_at).getTime(), text: `${formatMoscowTime(new Date(callout.declined_at))} - 🚫 ${by} отклонил запрос поддержки${reason}.` });
+  }
+
+  if (includeClosed && callout.closed_at) {
+    const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
+    events.push({ ts: new Date(callout.closed_at).getTime(), text: `${formatMoscowTime(new Date(callout.closed_at))} - 🔒 Инцидент закрыт${reason}.` });
+  }
+
+  events.sort((a, b) => a.ts - b.ts);
+  return events.map(e => e.text);
 }
 
 function formatMoscowTime(date: Date): string {

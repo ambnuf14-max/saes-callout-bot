@@ -161,24 +161,44 @@ function buildLogEntries(
   subdivisionsMap: Map<number, Subdivision>,
   includeClosed = false
 ): string[] {
-  const entries: string[] = [];
-  entries.push(`${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.`);
+  const events: { ts: number; text: string }[] = [];
+
+  events.push({ ts: new Date(callout.created_at).getTime(), text: `${formatMoscowTime(new Date(callout.created_at))} - @${callout.author_name} Создал запрос поддержки.` });
 
   for (const r of responses) {
     const subdiv = subdivisionsMap.get(r.subdivision_id);
-    const logTime = formatMoscowTime(new Date(r.created_at));
     const emoji = subdiv ? formatSubdivisionEmojiTg(subdiv) : '';
     const name = subdiv?.name || 'Unknown';
-    entries.push(`${logTime} - ${emoji}${name} отреагировало на запрос поддержки.`);
+    events.push({ ts: new Date(r.created_at).getTime(), text: `${formatMoscowTime(new Date(r.created_at))} - ${emoji}${name} отреагировало на запрос поддержки.` });
+    if (r.response_type === 'cancelled' && r.cancelled_at) {
+      events.push({ ts: new Date(r.cancelled_at).getTime(), text: `${formatMoscowTime(new Date(r.cancelled_at))} - ${emoji}${name} отменило реагирование.` });
+    }
+  }
+
+  if (callout.last_declined_at) {
+    const by = callout.last_declined_by_name || 'Неизвестно';
+    const reason = callout.last_decline_reason ? ` (${callout.last_decline_reason})` : '';
+    events.push({ ts: new Date(callout.last_declined_at).getTime(), text: `${formatMoscowTime(new Date(callout.last_declined_at))} - 🚫 ${by} отклонил запрос поддержки${reason}.` });
+  }
+
+  if (callout.revived_at) {
+    const by = callout.revived_by_name || 'Неизвестно';
+    events.push({ ts: new Date(callout.revived_at).getTime(), text: `${formatMoscowTime(new Date(callout.revived_at))} - ↩️ ${by} возобновил реагирование.` });
+  }
+
+  if (callout.declined_at) {
+    const by = callout.declined_by_name || callout.declined_by || 'Неизвестно';
+    const reason = callout.decline_reason ? ` (${callout.decline_reason})` : '';
+    events.push({ ts: new Date(callout.declined_at).getTime(), text: `${formatMoscowTime(new Date(callout.declined_at))} - 🚫 ${by} отклонил запрос поддержки${reason}.` });
   }
 
   if (includeClosed && callout.closed_at) {
-    const logTime = formatMoscowTime(new Date(callout.closed_at));
     const reason = callout.closed_reason ? ` (${callout.closed_reason})` : '';
-    entries.push(`${logTime} - 🔒 Инцидент закрыт${reason}.`);
+    events.push({ ts: new Date(callout.closed_at).getTime(), text: `${formatMoscowTime(new Date(callout.closed_at))} - 🔒 Инцидент закрыт${reason}.` });
   }
 
-  return entries;
+  events.sort((a, b) => a.ts - b.ts);
+  return events.map(e => e.text);
 }
 
 export function formatActiveCalloutWithLog(
@@ -251,7 +271,8 @@ export async function editMessage(
   chatId: string,
   messageId: number,
   newText: string,
-  removeKeyboard: boolean = false
+  removeKeyboard: boolean = false,
+  replyMarkup?: TelegramBot.InlineKeyboardMarkup
 ): Promise<void> {
   try {
     const options: TelegramBot.EditMessageTextOptions = {
@@ -261,7 +282,9 @@ export async function editMessage(
       disable_web_page_preview: true,
     };
 
-    if (removeKeyboard) {
+    if (replyMarkup) {
+      options.reply_markup = replyMarkup;
+    } else if (removeKeyboard) {
       options.reply_markup = { inline_keyboard: [] };
     }
 

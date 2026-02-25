@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import config from '../config/config';
 import logger from '../utils/logger';
+import { EMOJI } from '../config/constants';
 import { handleTelegramError } from '../utils/error-handler';
 import handleCallbackQuery from './handlers/callback-handler';
 import handleVerifyCommand from './handlers/verify-command-handler';
@@ -150,11 +151,11 @@ class TelegramBotClient {
           await trackTelegramMember(msg.chat.id, msg.from);
 
           // Проверяем, ждём ли причину отклонения от этого пользователя
-          const stateKey = `telegram:${msg.from.id}`;
+          const stateKey = `telegram:${msg.from.id}:${msg.chat.id}`;
           const pending = pendingDeclineReasonState.get(stateKey);
           const text = msg.text?.trim();
           const content = extractTelegramContent(msg);
-          if (pending && text && !text.startsWith('/') && msg.chat.id.toString() === pending.chatId) {
+          if (pending && text && !text.startsWith('/')) {
             pendingDeclineReasonState.delete(stateKey);
             clearTimeout(pending.timeout);
 
@@ -171,6 +172,19 @@ class TelegramBotClient {
                 text.substring(0, 300)
               );
 
+              // Редактировать сообщение-запрос причины
+              if (pending.promptMessageId) {
+                this.bot.editMessageText(
+                  `❌ <b>${userName}</b> отклоняет запрос поддержки.\nПричина: ${text.substring(0, 300)}`,
+                  {
+                    chat_id: msg.chat.id,
+                    message_id: pending.promptMessageId,
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: [] },
+                  }
+                ).catch(() => {});
+              }
+
               logger.info('TG decline reason received and processed', {
                 userId: msg.from.id,
                 calloutId: pending.calloutId,
@@ -181,6 +195,14 @@ class TelegramBotClient {
                 userId: msg.from.id,
                 calloutId: pending.calloutId,
               });
+              try {
+                const errorMsg = error instanceof Error ? error.message : 'Неизвестная ошибка';
+                await this.bot.sendMessage(
+                  msg.chat.id,
+                  `${EMOJI.ERROR} Не удалось отклонить запрос: ${errorMsg}`,
+                  { parse_mode: 'HTML' }
+                );
+              } catch { /* не критично */ }
             }
             return;
           }

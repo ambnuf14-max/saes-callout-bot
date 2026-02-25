@@ -109,6 +109,16 @@ class VkBot {
             text.substring(0, 300)
           );
 
+          // Редактировать сообщение-запрос причины
+          if (pending.promptMessageId) {
+            (this.vk.api.messages.edit as any)({
+              peer_id: context.peerId,
+              cmid: pending.promptMessageId,
+              message: `❌ ${userName} отклоняет запрос поддержки.\nПричина: ${text.substring(0, 300)}`,
+              keyboard: JSON.stringify({ buttons: [], inline: true }),
+            }).catch(() => {});
+          }
+
           logger.info('VK decline reason received and processed', {
             userId: context.userId,
             calloutId: pending.calloutId,

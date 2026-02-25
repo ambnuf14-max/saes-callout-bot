@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import logger from '../../utils/logger';
 import SyncService from '../../services/sync.service';
-import { CalloutResponsePayload, parseCompactCallbackData, buildSpecifyReasonKeyboard } from '../utils/keyboard-builder';
+import { CalloutResponsePayload, parseCompactCallbackData, buildCancelDeclineKeyboard } from '../utils/keyboard-builder';
 import { handleTelegramError } from '../../utils/error-handler';
 import { EMOJI, DECLINE_TIMERS } from '../../config/constants';
 import { trackTelegramMember } from '../utils/member-tracker';
@@ -45,7 +45,7 @@ export async function handleCallbackQuery(
     // Парсинг payload (компактный формат r:, dl:, rv:, sr: и JSON fallback)
     const payload = parseCompactCallbackData(query.data);
 
-    if (!payload || !['respond', 'decline', 'revive', 'specify_decline_reason'].includes(payload.action)) {
+    if (!payload || !['respond', 'decline', 'revive', 'cancel_decline', 'cancel_response'].includes(payload.action)) {
       logger.warn('Invalid callback payload', { payload });
       await bot.answerCallbackQuery(query.id, {
         text: `${EMOJI.ERROR} Неверный формат данных`,
@@ -95,60 +95,108 @@ export async function handleCallbackQuery(
       const response = await SyncService.handleTelegramResponse(payload, `telegram_${userId}`, userName);
       logger.info('Telegram response processed', { responseId: response.id, calloutId: payload.callout_id });
       await bot.answerCallbackQuery(query.id, { text: `${EMOJI.SUCCESS} Ваш ответ отправлен в Discord!`, show_alert: false });
+      if (query.message?.chat.id) {
+        bot.sendMessage(
+          query.message.chat.id,
+          `✅ <b>${userName}</b> принимает запрос поддержки.`,
+          { parse_mode: 'HTML' }
+        ).catch(() => {});
+      }
       return;
     }
 
     if (payload.action === 'decline') {
-      const stateKey = `telegram:${userId}`;
-      if (pendingDeclineReasonState.has(stateKey)) {
-        await bot.answerCallbackQuery(query.id, { text: `${EMOJI.WARNING} Введите причину в чат (осталось время)`, show_alert: false });
-        return;
-      }
-
       const chatId = query.message?.chat.id;
       if (!chatId) {
         await bot.answerCallbackQuery(query.id, { text: `${EMOJI.ERROR} Ошибка: нет chat ID`, show_alert: true });
         return;
       }
 
+      const stateKey = `telegram:${userId}:${chatId}`;
+      if (pendingDeclineReasonState.has(stateKey)) {
+        await bot.answerCallbackQuery(query.id, { text: `${EMOJI.WARNING} Введите причину в чат (осталось время)`, show_alert: false });
+        return;
+      }
+
       const timeout = setTimeout(() => {
         pendingDeclineReasonState.delete(stateKey);
         logger.info('TG decline reason timeout expired', { userId, calloutId: payload.callout_id });
+        bot.sendMessage(
+          chatId,
+          `⏰ Время на ввод причины отклонения истекло. Нажмите кнопку снова, если хотите отклонить запрос.`,
+        ).catch(() => {});
       }, DECLINE_TIMERS.REASON_TIMEOUT);
 
-      pendingDeclineReasonState.set(stateKey, {
+      const entry = pendingDeclineReasonState.set(stateKey, {
         calloutId: payload.callout_id,
         subdivisionId: payload.subdivision_id,
         platform: 'telegram',
         chatId: chatId.toString(),
         timeout,
-      });
+      }).get(stateKey)!;
 
-      // Отправить follow-up сообщение
+      // Отправить follow-up сообщение и сохранить его ID
       try {
-        const reasonKeyboard = buildSpecifyReasonKeyboard(payload.callout_id, payload.subdivision_id);
-        await bot.sendMessage(
+        const sentMsg = await bot.sendMessage(
           chatId,
-          `📝 <b>${userName}</b> отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат. У вас 3 минуты.\nСледующее текстовое сообщение от вас будет принято как причина.`,
-          { parse_mode: 'HTML', reply_markup: reasonKeyboard }
+          `❌ <b>${userName}</b> отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат — она будет принята автоматически. У вас 3 минуты.`,
+          { parse_mode: 'HTML', reply_markup: buildCancelDeclineKeyboard(payload.callout_id, payload.subdivision_id) }
         );
+        entry.promptMessageId = sentMsg.message_id;
       } catch (sendError) {
+        clearTimeout(timeout);
+        pendingDeclineReasonState.delete(stateKey);
         logger.error('Failed to send TG decline reason request', { error: sendError });
+        await bot.answerCallbackQuery(query.id, {
+          text: `${EMOJI.ERROR} Не удалось отправить запрос причины. Попробуйте снова.`,
+          show_alert: true,
+        });
+        return;
       }
 
       await bot.answerCallbackQuery(query.id, { text: `📝 Введите причину отклонения в чат (3 мин.)`, show_alert: false });
       return;
     }
 
-    if (payload.action === 'specify_decline_reason') {
-      await bot.answerCallbackQuery(query.id, { text: `📝 Напишите причину текстом в чат`, show_alert: false });
+    if (payload.action === 'cancel_decline') {
+      const stateKey = `telegram:${userId}:${chatId}`;
+      const pending = pendingDeclineReasonState.get(stateKey);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        pendingDeclineReasonState.delete(stateKey);
+      }
+      // Удалить сообщение с кнопкой "Назад" из чата
+      if (query.message) {
+        bot.deleteMessage(chatId, query.message.message_id).catch(() => {});
+      }
+      await bot.answerCallbackQuery(query.id, { text: `Отклонение отменено.`, show_alert: false });
       return;
     }
 
     if (payload.action === 'revive') {
-      await CalloutService.cancelDecline(null, payload.callout_id);
+      await CalloutService.cancelDecline(null, payload.callout_id, userName);
       logger.info('TG revive callout processed', { calloutId: payload.callout_id, userId });
       await bot.answerCallbackQuery(query.id, { text: `${EMOJI.SUCCESS} Реагирование возобновлено!`, show_alert: false });
+      return;
+    }
+
+    if (payload.action === 'cancel_response') {
+      await SyncService.handleCancelResponse(
+        payload.callout_id,
+        payload.subdivision_id,
+        'telegram',
+        `telegram_${userId}`,
+        userName
+      );
+      logger.info('TG cancel response processed', { calloutId: payload.callout_id, userId });
+      await bot.answerCallbackQuery(query.id, { text: `✅ Реагирование отменено`, show_alert: false });
+      if (query.message?.chat.id) {
+        bot.sendMessage(
+          query.message.chat.id,
+          `❌ <b>${userName}</b> отменяет реагирование.`,
+          { parse_mode: 'HTML' }
+        ).catch(() => {});
+      }
       return;
     }
 
