@@ -44,7 +44,7 @@ export const MESSAGES = {
   CALLOUT: {
     BUTTON_CREATE: `New Callout`,
     BUTTON_CLOSE: `Закрыть инцидент`,
-    BUTTON_RESPOND_DISCORD: `Отреагировать на инцидент`,
+    BUTTON_RESPOND_DISCORD: `Принять запрос поддержки`,
     BUTTON_RESPOND_VK: `✅ Принять запрос поддержки`,
     BUTTON_RESPOND_TELEGRAM: `✅ Принять запрос поддержки`,
     BUTTON_DECLINE_DISCORD: `Отклонить запрос поддержки`,

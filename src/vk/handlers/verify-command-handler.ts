@@ -4,6 +4,8 @@ import { VerificationService } from '../../services/verification.service';
 import { handleVkError } from '../../utils/error-handler';
 import { EMOJI, MESSAGES } from '../../config/constants';
 import vkBot from '../bot';
+import { pendingVkVerifyState } from '../../services/vk-verify.state';
+import { buildCheckAdminRightsKeyboard } from '../utils/keyboard-builder';
 
 /**
  * Обработчик команды /verify <token> в VK беседах
@@ -45,6 +47,47 @@ export async function handleVerifyCommand(context: MessageContext): Promise<void
       }
     } catch (error) {
       logger.warn('Failed to get conversation title', { error });
+    }
+
+    // Проверить, может ли бот читать сообщения беседы (нужны права администратора сообщества)
+    let canReadMessages = false;
+    try {
+      await vkBot.getApi().api.messages.getHistory({
+        peer_id: context.peerId,
+        count: 1,
+      });
+      canReadMessages = true;
+    } catch {
+      canReadMessages = false;
+    }
+
+    if (!canReadMessages) {
+      // Сохранить состояние ожидания прав
+      pendingVkVerifyState.set(peerId, { token, chatTitle });
+
+      logger.info('VK verify pending: no admin rights', { peerId, token });
+
+      const sendResp = await (vkBot.getApi().api.messages.send as any)({
+        peer_ids: [context.peerId],
+        message:
+          `⚠️ Для работы бота необходимо выдать ему права администратора в сообществе.\n\n` +
+          `Управление сообществом → Участники → Руководители → добавьте бота как Редактора.\n\n` +
+          `Как выдадите — нажмите кнопку ниже, и мы проверим.`,
+        keyboard: buildCheckAdminRightsKeyboard(),
+        random_id: Date.now() + Math.floor(Math.random() * 100000),
+      });
+
+      // Сохранить id сообщения для редактирования после успешной проверки
+      let promptCmid = 0;
+      if (Array.isArray(sendResp) && sendResp.length > 0) {
+        promptCmid = sendResp[0].conversation_message_id || 0;
+      } else if (sendResp && typeof sendResp === 'object') {
+        promptCmid = (sendResp as any).conversation_message_id || 0;
+      }
+      if (promptCmid) {
+        pendingVkVerifyState.get(peerId)!.promptMessageId = promptCmid;
+      }
+      return;
     }
 
     // Верифицировать токен и привязать VK беседу (с сохранением названия)

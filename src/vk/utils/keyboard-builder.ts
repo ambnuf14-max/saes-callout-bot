@@ -11,6 +11,10 @@ export interface CalloutResponsePayload {
   subdivision_id: number;
 }
 
+export interface VkAdminCheckPayload {
+  action: 'check_vk_admin';
+}
+
 /**
  * Клавиатура для активного каллаута: "Отреагировать" + "Отклонить"
  */
@@ -108,6 +112,22 @@ export function buildSpecifyReasonKeyboard(
       label: MESSAGES.CALLOUT.BUTTON_SPECIFY_REASON_VK,
       payload: JSON.stringify(specifyPayload),
       color: Keyboard.SECONDARY_COLOR,
+    })
+    .inline()
+    .toString();
+}
+
+/**
+ * Клавиатура для запроса прав администратора перед верификацией
+ */
+export function buildCheckAdminRightsKeyboard(): string {
+  const payload: VkAdminCheckPayload = { action: 'check_vk_admin' };
+
+  return Keyboard.builder()
+    .callbackButton({
+      label: '✅ Я выдал права',
+      payload: JSON.stringify(payload),
+      color: Keyboard.POSITIVE_COLOR,
     })
     .inline()
     .toString();

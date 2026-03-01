@@ -1,4 +1,4 @@
-import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentEmojiResolvable, ButtonInteraction } from 'discord.js';
+import { Guild, TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
 import discordBot from '../discord/bot';
 import { CalloutModel, SubdivisionModel, ServerModel, CalloutResponseModel, CalloutMessageModel } from '../database/models';
 import { Callout, CreateCalloutDTO, Subdivision } from '../types/database.types';
@@ -8,7 +8,6 @@ import { CalloutError } from '../utils/error-handler';
 import { createIncidentChannel, deleteIncidentChannel } from '../discord/utils/channel-manager';
 import { buildCalloutEmbed, buildClosedCalloutEmbed, addResponsesToEmbed } from '../discord/utils/embed-builder';
 import { EMOJI, CALLOUT_STATUS, MESSAGES, DECLINE_TIMERS } from '../config/constants';
-import { parseDiscordEmoji } from '../discord/utils/subdivision-settings-helper';
 import NotificationService from './notification.service';
 import config from '../config/config';
 import {
@@ -146,10 +145,11 @@ export class CalloutService {
       // 2. Создать канал для инцидента
       const channel = await createIncidentChannel(guild, callout, subdivision, data.brief_description);
 
-      // 3. Создать Embed сообщение
+      // 3. Создать Embed сообщение (с начальным логом — строка о создании запроса)
       const embed = buildCalloutEmbed(callout, subdivision);
+      addResponsesToEmbed(embed, [], new Map(), callout);
 
-      // 4. Создать кнопки "Отреагировать на инцидент" и "Закрыть инцидент"
+      // 4. Создать кнопки "Принять запрос поддержки" и "Отклонить запрос поддержки" (строка 1), "Закрыть инцидент" (строка 2)
       const respondButton = new ButtonBuilder()
         .setCustomId(`respond_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
@@ -158,32 +158,21 @@ export class CalloutService {
       const declineButton = new ButtonBuilder()
         .setCustomId(`decline_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_DECLINE_DISCORD)
-        .setStyle(ButtonStyle.Primary);
+        .setStyle(ButtonStyle.Secondary);
 
       const closeButton = new ButtonBuilder()
         .setCustomId(`close_callout_${callout.id}`)
         .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
         .setStyle(ButtonStyle.Danger);
 
-      // Добавить emoji подразделения на кнопку реагирования
-      const parsedEmoji = parseDiscordEmoji(subdivision.logo_url);
-      if (parsedEmoji) {
-        let emoji: ComponentEmojiResolvable;
-        if (parsedEmoji.id) {
-          emoji = { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false };
-        } else {
-          emoji = parsedEmoji.name;
-        }
-        respondButton.setEmoji(emoji);
-      }
-
-      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, declineButton, closeButton);
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, declineButton);
+      const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton);
 
       // 5. Отправить Embed в канал с mention роли и кнопкой
       const message = await channel.send({
         content: `<@&${subdivision.discord_role_id}>`,
         embeds: [embed],
-        components: [actionRow],
+        components: [actionRow, closeRow],
       });
 
       // 6. Обновить каллаут с ID канала и сообщения одним запросом
@@ -640,7 +629,7 @@ export class CalloutService {
             const updatedEmbed = buildCalloutEmbed(declinedCallout, subdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, declinedCallout);
 
-            // Кнопка "Возобновить реагирование" + "Закрыть"
+            // Кнопка "Возобновить реагирование" (строка 1) + "Закрыть инцидент" (строка 2)
             const reviveButton = new ButtonBuilder()
               .setCustomId(`revive_callout_${calloutId}`)
               .setLabel(MESSAGES.CALLOUT.BUTTON_REVIVE_DISCORD)
@@ -651,8 +640,9 @@ export class CalloutService {
               .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
               .setStyle(ButtonStyle.Danger);
 
-            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(reviveButton, closeButton);
-            await message.edit({ embeds: [updatedEmbed], components: [actionRow] });
+            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(reviveButton);
+            const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton);
+            await message.edit({ embeds: [updatedEmbed], components: [actionRow, closeRow] });
           }
         }
       } catch (error) {
@@ -773,10 +763,15 @@ export class CalloutService {
             const updatedEmbed = buildCalloutEmbed(revivedCallout, subdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, revivedCallout);
 
-            // Возвращаем кнопки "Отреагировать" + "Закрыть"
+            // Возвращаем кнопки "Принять" + "Отклонить" (строка 1) + "Закрыть" (строка 2)
             const respondButton = new ButtonBuilder()
               .setCustomId(`respond_callout_${calloutId}`)
               .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
+              .setStyle(ButtonStyle.Secondary);
+
+            const declineButton = new ButtonBuilder()
+              .setCustomId(`decline_callout_${calloutId}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_DECLINE_DISCORD)
               .setStyle(ButtonStyle.Secondary);
 
             const closeButton = new ButtonBuilder()
@@ -784,19 +779,12 @@ export class CalloutService {
               .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
               .setStyle(ButtonStyle.Danger);
 
-            const parsedEmoji = parseDiscordEmoji(subdivision.logo_url);
-            if (parsedEmoji) {
-              let emoji: ComponentEmojiResolvable;
-              if (parsedEmoji.id) {
-                emoji = { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false };
-              } else {
-                emoji = parsedEmoji.name;
-              }
-              respondButton.setEmoji(emoji);
-            }
+            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, declineButton);
+            const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton);
+            await message.edit({ embeds: [updatedEmbed], components: [actionRow, closeRow] });
 
-            const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, closeButton);
-            await message.edit({ embeds: [updatedEmbed], components: [actionRow] });
+            // Отправить сообщение об возобновлении реагирования
+            await channel.send(`<@${revivedCallout.author_id}>, ${revivedByName} возобновил реагирование на инцидент #${calloutId}.`);
           }
         }
       } catch (error) {

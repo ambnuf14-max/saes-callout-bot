@@ -87,7 +87,7 @@ class VkBot {
       const content = extractVkContent(context as any);
 
       // Проверяем, ожидаем ли причину отклонения от этого пользователя
-      const stateKey = `vk:${context.userId}`;
+      const stateKey = `vk:${context.senderId}`;
       const pending = pendingDeclineReasonState.get(stateKey);
       if (pending && text && !text.startsWith('/') && context.peerId.toString() === pending.chatId) {
         pendingDeclineReasonState.delete(stateKey);
@@ -95,16 +95,16 @@ class VkBot {
 
         try {
           // Получить имя пользователя
-          let userName = `VK User ${context.userId}`;
+          let userName = `VK User ${context.senderId}`;
           try {
-            const [user] = await this.vk.api.users.get({ user_ids: [context.userId] });
+            const [user] = await this.vk.api.users.get({ user_ids: [context.senderId] });
             userName = `${user.first_name} ${user.last_name}`;
           } catch { /* не критично */ }
 
           await CalloutService.declineCallout(
             null,
             pending.calloutId,
-            context.userId.toString(),
+            context.senderId.toString(),
             userName,
             text.substring(0, 300)
           );
@@ -113,20 +113,26 @@ class VkBot {
           if (pending.promptMessageId) {
             (this.vk.api.messages.edit as any)({
               peer_id: context.peerId,
-              cmid: pending.promptMessageId,
+              conversation_message_id: pending.promptMessageId,
               message: `❌ ${userName} отклоняет запрос поддержки.\nПричина: ${text.substring(0, 300)}`,
               keyboard: JSON.stringify({ buttons: [], inline: true }),
-            }).catch(() => {});
+            }).catch((editErr: any) => {
+              logger.error('Failed to edit VK decline prompt message', {
+                error: editErr instanceof Error ? editErr.message : editErr,
+                promptMessageId: pending.promptMessageId,
+                peerId: context.peerId,
+              });
+            });
           }
 
           logger.info('VK decline reason received and processed', {
-            userId: context.userId,
+            userId: context.senderId,
             calloutId: pending.calloutId,
           });
         } catch (error) {
           logger.error('Failed to process VK decline reason', {
             error: error instanceof Error ? error.message : error,
-            userId: context.userId,
+            userId: context.senderId,
             calloutId: pending.calloutId,
           });
         }

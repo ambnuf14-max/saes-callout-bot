@@ -539,7 +539,12 @@ export class NotificationService {
       const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
       if (!subdivision?.vk_chat_id) return;
 
-      const message = formatVkDeclined(callout, subdivision);
+      const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+      const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
+
+      const { formatActiveCalloutWithLog } = await import('../vk/utils/message-sender');
+      const message = formatActiveCalloutWithLog(callout, subdivision, allResponses, subdivisionsMap);
       const keyboard = buildVkDeclinedKeyboard(callout.id, callout.subdivision_id);
 
       await (vkBot.getApi().api.messages.edit as any)({
@@ -578,7 +583,12 @@ export class NotificationService {
       const subdivision = await SubdivisionModel.findById(callout.subdivision_id);
       if (!subdivision?.telegram_chat_id) return;
 
-      const message = formatTelegramDeclined(callout, subdivision);
+      const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
+      const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
+
+      const { formatActiveCalloutWithLog } = await import('../telegram/utils/message-sender');
+      const message = formatActiveCalloutWithLog(callout, subdivision, allResponses, subdivisionsMap);
       const keyboard = buildTgDeclinedKeyboard(callout.id, callout.subdivision_id);
 
       await runTelegramWithRetry(
@@ -627,12 +637,13 @@ export class NotificationService {
       if (!subdivision?.vk_chat_id) return;
 
       const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const activeResponses = await CalloutResponseModel.findActiveByCalloutId(callout.id);
       const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
       const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
 
-      // Если уже есть ответы — убрать клавиатуру, иначе вернуть активную
+      // Для решения о клавиатуре используем только активные ответы (не отменённые)
       let keyboard: string;
-      if (allResponses.length > 0) {
+      if (activeResponses.length > 0) {
         keyboard = JSON.stringify({ buttons: [], inline: true });
       } else {
         keyboard = buildVkKeyboard(callout.id, callout.subdivision_id);
@@ -678,14 +689,15 @@ export class NotificationService {
       if (!subdivision?.telegram_chat_id) return;
 
       const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
+      const activeResponses = await CalloutResponseModel.findActiveByCalloutId(callout.id);
       const uniqueSubIds = [...new Set(allResponses.map(r => r.subdivision_id))];
       const subdivisionsMap = await SubdivisionModel.findByIds(uniqueSubIds);
 
       const { formatActiveCalloutWithLog } = await import('../telegram/utils/message-sender');
       const message = formatActiveCalloutWithLog(callout, subdivision, allResponses, subdivisionsMap);
 
-      // Если уже есть ответы — убрать клавиатуру, иначе вернуть активную
-      const removeKeyboard = allResponses.length > 0;
+      // Для решения о клавиатуре используем только активные ответы (не отменённые)
+      const removeKeyboard = activeResponses.length > 0;
       const replyMarkup = removeKeyboard
         ? { inline_keyboard: [] }
         : buildTgKeyboard(callout.id, callout.subdivision_id);

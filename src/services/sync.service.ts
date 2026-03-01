@@ -117,8 +117,11 @@ export class SyncService {
     });
 
     // 5. Отправить уведомление в Discord (через очередь — защита от race condition)
-    await SyncService.enqueueUpdate(callout.id, async () => {
-      await this.notifyDiscordAboutResponse(response, callout, subdivision);
+    const calloutId1 = callout.id;
+    await SyncService.enqueueUpdate(calloutId1, async () => {
+      const freshCallout = await CalloutModel.findById(calloutId1);
+      if (!freshCallout) return;
+      await this.notifyDiscordAboutResponse(response, freshCallout, subdivision);
     }).catch((error) => {
       logger.error('Failed to notify Discord about VK response', {
         error: error instanceof Error ? error.message : error,
@@ -198,8 +201,11 @@ export class SyncService {
     });
 
     // 5. Отправить уведомление в Discord (через очередь — защита от race condition)
-    await SyncService.enqueueUpdate(callout.id, async () => {
-      await this.notifyDiscordAboutResponse(response, callout, subdivision, 'telegram');
+    const calloutId2 = callout.id;
+    await SyncService.enqueueUpdate(calloutId2, async () => {
+      const freshCallout = await CalloutModel.findById(calloutId2);
+      if (!freshCallout) return;
+      await this.notifyDiscordAboutResponse(response, freshCallout, subdivision, 'telegram');
     }).catch((error) => {
       logger.error('Failed to notify Discord about Telegram response', {
         error: error instanceof Error ? error.message : error,
@@ -260,8 +266,11 @@ export class SyncService {
     });
 
     // 3. Обновить embed, уведомить VK/TG (через очередь — защита от race condition)
-    await SyncService.enqueueUpdate(callout.id, async () => {
-      await this.notifyDiscordAboutResponse(response, callout, subdivision, 'discord');
+    const calloutId3 = callout.id;
+    await SyncService.enqueueUpdate(calloutId3, async () => {
+      const freshCallout = await CalloutModel.findById(calloutId3);
+      if (!freshCallout) return;
+      await this.notifyDiscordAboutResponse(response, freshCallout, subdivision, 'discord');
     }).catch((error) => {
       logger.error('Failed to notify about Discord response', {
         error: error instanceof Error ? error.message : error,
@@ -369,31 +378,23 @@ export class SyncService {
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
-            // Убрать кнопку "Отреагировать" и добавить "Отменить реагирование"
+            // Строка 1: "Отменить реагирование". Строка 2: "Закрыть инцидент"
             const cancelResponseButton = new ButtonBuilder()
               .setCustomId(`cancel_response_${callout.id}`)
               .setLabel('Отменить реагирование')
               .setStyle(ButtonStyle.Secondary);
 
-            const updatedComponents = originalMessage.components
-              .map((row: any) => {
-                const buttons = row.components.filter(
-                  (c: any) => !c.customId?.startsWith('respond_callout_')
-                );
-                if (buttons.length === 0) return null;
-                return ActionRowBuilder.from(row).setComponents(
-                  buttons.map((b: any) => ButtonBuilder.from(b))
-                );
-              })
-              .filter(Boolean) as ActionRowBuilder<ButtonBuilder>[];
-
-            updatedComponents.push(
-              new ActionRowBuilder<ButtonBuilder>().addComponents(cancelResponseButton)
-            );
+            const closeButton = new ButtonBuilder()
+              .setCustomId(`close_callout_${callout.id}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
+              .setStyle(ButtonStyle.Danger);
 
             await originalMessage.edit({
               embeds: [updatedEmbed],
-              components: updatedComponents,
+              components: [
+                new ActionRowBuilder<ButtonBuilder>().addComponents(cancelResponseButton),
+                new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton),
+              ],
             });
           }
         } catch (embedError) {
@@ -451,6 +452,36 @@ export class SyncService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Форматировать сообщение об отмене реагирования для Discord
+   */
+  private static formatCancelResponseMessage(
+    subdivision: Subdivision,
+    callout: Callout,
+    platform: 'vk' | 'telegram' | 'discord',
+    userId: string,
+    userName: string
+  ): string {
+    const authorMention = `<@${callout.author_id}>`;
+
+    const parsed = subdivision.logo_url ? parseDiscordEmoji(subdivision.logo_url) : null;
+    let emojiStr = '';
+    if (parsed) {
+      if (parsed.id) {
+        emojiStr = parsed.animated
+          ? `<a:${parsed.name}:${parsed.id}> `
+          : `<:${parsed.name}:${parsed.id}> `;
+      } else {
+        emojiStr = `${parsed.name} `;
+      }
+    }
+
+    const responderMention = platform === 'discord'
+      ? `(<@${userId.replace('discord_', '')}>)`
+      : `(${userName})`;
+    return `${authorMention}, ${emojiStr}${subdivision.name} отменило реагирование на инцидент ${responderMention}.`;
   }
 
   /**
@@ -515,7 +546,9 @@ export class SyncService {
     }
 
     await SyncService.enqueueUpdate(calloutId, async () => {
-      await SyncService.notifyDiscordAboutResponseCancelled(callout, subdivision);
+      const freshCallout = await CalloutModel.findById(calloutId);
+      if (!freshCallout) return;
+      await SyncService.notifyDiscordAboutResponseCancelled(freshCallout, subdivision, platform, userId, userName);
     }).catch((error) => {
       logger.error('Failed to notify about response cancellation', {
         error: error instanceof Error ? error.message : error,
@@ -529,13 +562,20 @@ export class SyncService {
    */
   static async notifyDiscordAboutResponseCancelled(
     callout: Callout,
-    subdivision: Subdivision
+    subdivision: Subdivision,
+    platform: 'vk' | 'telegram' | 'discord' = 'discord',
+    userId: string = '',
+    userName: string = ''
   ): Promise<void> {
     if (!callout.discord_channel_id) return;
 
     try {
       const channel = (await discordBot.client.channels.fetch(callout.discord_channel_id)) as TextChannel;
       if (!channel || !channel.isTextBased()) return;
+
+      // Отправить сообщение об отмене (аналогично сообщению о реагировании)
+      const cancelMessage = this.formatCancelResponseMessage(subdivision, callout, platform, userId, userName);
+      await channel.send(cancelMessage);
 
       const allResponses = await CalloutResponseModel.findByCalloutId(callout.id);
       const allSubdivisionIds = [...new Set([callout.subdivision_id, ...allResponses.map(r => r.subdivision_id)])];
@@ -550,37 +590,29 @@ export class SyncService {
             const updatedEmbed = buildCalloutEmbed(callout, calloutSubdivision);
             addResponsesToEmbed(updatedEmbed, allResponses, subdivisionsMap, callout);
 
+            // Строка 1: "Принять" + "Отклонить". Строка 2: "Закрыть инцидент"
             const respondButton = new ButtonBuilder()
               .setCustomId(`respond_callout_${callout.id}`)
               .setLabel(MESSAGES.CALLOUT.BUTTON_RESPOND_DISCORD)
               .setStyle(ButtonStyle.Secondary);
 
-            const parsedEmoji = parseDiscordEmoji(calloutSubdivision.logo_url);
-            if (parsedEmoji) {
-              const emoji: ComponentEmojiResolvable = parsedEmoji.id
-                ? { id: parsedEmoji.id, name: parsedEmoji.name, animated: parsedEmoji.animated ?? false }
-                : parsedEmoji.name;
-              respondButton.setEmoji(emoji);
-            }
+            const declineButton = new ButtonBuilder()
+              .setCustomId(`decline_callout_${callout.id}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_DECLINE_DISCORD)
+              .setStyle(ButtonStyle.Secondary);
 
-            // Убрать cancel_response и respond кнопки, добавить respond обратно
-            const updatedComponents = originalMessage.components
-              .map((row: any) => {
-                const buttons = row.components.filter(
-                  (c: any) => !c.customId?.startsWith('cancel_response_') && !c.customId?.startsWith('respond_callout_')
-                );
-                if (buttons.length === 0) return null;
-                return ActionRowBuilder.from(row).setComponents(
-                  buttons.map((b: any) => ButtonBuilder.from(b))
-                );
-              })
-              .filter(Boolean) as ActionRowBuilder<ButtonBuilder>[];
+            const closeButton = new ButtonBuilder()
+              .setCustomId(`close_callout_${callout.id}`)
+              .setLabel(MESSAGES.CALLOUT.BUTTON_CLOSE)
+              .setStyle(ButtonStyle.Danger);
 
-            updatedComponents.unshift(
-              new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton)
-            );
-
-            await originalMessage.edit({ embeds: [updatedEmbed], components: updatedComponents });
+            await originalMessage.edit({
+              embeds: [updatedEmbed],
+              components: [
+                new ActionRowBuilder<ButtonBuilder>().addComponents(respondButton, declineButton),
+                new ActionRowBuilder<ButtonBuilder>().addComponents(closeButton),
+              ],
+            });
           }
         } catch (embedError) {
           logger.error('Failed to update Discord embed on response cancel', {
@@ -591,12 +623,12 @@ export class SyncService {
       }
 
       // Восстановить клавиатуру в VK
-      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive() && subdivision?.vk_chat_id) {
+      if (callout.vk_message_id && callout.vk_message_id !== '0' && vkBot.isActive() && calloutSubdivision?.vk_chat_id) {
         try {
           const { buildDetailedCalloutKeyboard: buildVkKeyboard } = await import('../vk/utils/keyboard-builder');
-          const vkMessage = formatVkActiveWithLog(callout, subdivision, allResponses, subdivisionsMap);
+          const vkMessage = formatVkActiveWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
           await (vkBot.getApi().api.messages.edit as any)({
-            peer_id: parseInt(subdivision.vk_chat_id),
+            peer_id: parseInt(calloutSubdivision.vk_chat_id),
             cmid: parseInt(callout.vk_message_id),
             message: vkMessage,
             keyboard: buildVkKeyboard(callout.id, callout.subdivision_id),
@@ -610,13 +642,13 @@ export class SyncService {
       }
 
       // Восстановить клавиатуру в Telegram
-      if (callout.telegram_message_id && telegramBot.isActive() && subdivision?.telegram_chat_id) {
+      if (callout.telegram_message_id && telegramBot.isActive() && calloutSubdivision?.telegram_chat_id) {
         try {
           const { buildDetailedCalloutKeyboard: buildTgKeyboard } = await import('../telegram/utils/keyboard-builder');
-          const tgMessage = formatActiveCalloutWithLog(callout, subdivision, allResponses, subdivisionsMap);
+          const tgMessage = formatActiveCalloutWithLog(callout, calloutSubdivision, allResponses, subdivisionsMap);
           await editTelegramMessage(
             telegramBot.getApi(),
-            subdivision.telegram_chat_id,
+            calloutSubdivision.telegram_chat_id,
             parseInt(callout.telegram_message_id),
             tgMessage,
             false,

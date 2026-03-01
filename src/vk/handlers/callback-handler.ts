@@ -1,12 +1,15 @@
 import { MessageEventContext } from 'vk-io';
 import logger from '../../utils/logger';
 import SyncService from '../../services/sync.service';
-import { CalloutResponsePayload, buildCancelDeclineKeyboard } from '../utils/keyboard-builder';
+import { CalloutResponsePayload, VkAdminCheckPayload, buildCancelDeclineKeyboard } from '../utils/keyboard-builder';
 import { handleVkError } from '../../utils/error-handler';
 import { EMOJI, DECLINE_TIMERS } from '../../config/constants';
 import vkBot from '../bot';
 import { CalloutModel, SubdivisionModel } from '../../database/models';
 import { pendingDeclineReasonState } from '../../services/decline-reason.state';
+import { pendingVkVerifyState } from '../../services/vk-verify.state';
+import { VerificationService } from '../../services/verification.service';
+import { MESSAGES } from '../../config/constants';
 import CalloutService from '../../services/callout.service';
 
 /**
@@ -24,11 +27,11 @@ export async function handleCallbackEvent(
 
     // Парсинг payload (vk-io возвращает строку, парсим вручную)
     const rawPayload = context.eventPayload;
-    const payload: CalloutResponsePayload = typeof rawPayload === 'string'
+    const payload: CalloutResponsePayload | VkAdminCheckPayload = typeof rawPayload === 'string'
       ? JSON.parse(rawPayload)
-      : rawPayload as CalloutResponsePayload;
+      : rawPayload as CalloutResponsePayload | VkAdminCheckPayload;
 
-    if (!payload || !['respond', 'decline', 'revive', 'cancel_decline', 'cancel_response'].includes(payload.action)) {
+    if (!payload || !['respond', 'decline', 'revive', 'cancel_decline', 'cancel_response', 'check_vk_admin'].includes(payload.action)) {
       logger.warn('Invalid callback payload', { payload });
       await context.answer({
         type: 'show_snackbar',
@@ -37,7 +40,82 @@ export async function handleCallbackEvent(
       return;
     }
 
-    // Валидация числовых полей payload
+    // Обработка проверки прав администратора (отдельный флоу — без callout_id/subdivision_id)
+    if (payload.action === 'check_vk_admin') {
+      const peerId = context.peerId.toString();
+      const pending = pendingVkVerifyState.get(peerId);
+
+      if (!pending) {
+        await context.answer({ type: 'show_snackbar', text: `${EMOJI.ERROR} Сессия верификации истекла. Отправьте /verify TOKEN заново.` });
+        return;
+      }
+
+      // Проверить права
+      let canRead = false;
+      try {
+        await vkBot.getApi().api.messages.getHistory({ peer_id: context.peerId, count: 1 });
+        canRead = true;
+      } catch {
+        canRead = false;
+      }
+
+      if (!canRead) {
+        await context.answer({ type: 'show_snackbar', text: `${EMOJI.ERROR} Права не обнаружены.` });
+        return;
+      }
+
+      // Права есть — верифицируем
+      pendingVkVerifyState.delete(peerId);
+
+      const result = await VerificationService.verifyToken(pending.token, peerId, 'vk', pending.chatTitle);
+
+      logger.info('VK chat linked after admin check', {
+        subdivisionId: result.subdivision.id,
+        subdivisionName: result.subdivision.name,
+        peerId,
+      });
+
+      // Отредактировать сообщение с запросом прав
+      if (pending.promptMessageId) {
+        (vkBot.getApi().api.messages.edit as any)({
+          peer_id: context.peerId,
+          conversation_message_id: pending.promptMessageId,
+          message: MESSAGES.VERIFICATION.SUCCESS_VK(result.subdivision.name),
+          keyboard: JSON.stringify({ buttons: [], inline: true }),
+        }).catch((e: any) => logger.warn('Failed to edit admin check prompt', { error: e?.message }));
+      }
+
+      await context.answer({ type: 'show_snackbar', text: `${EMOJI.SUCCESS} Беседа успешно привязана!` });
+
+      // Уведомить Discord
+      const { default: handleVerifyCommand } = await import('./verify-command-handler');
+      // Используем VerificationService напрямую — Discord-уведомление отдельно
+      try {
+        const { default: discordBot } = await import('../../discord/bot');
+        const { FactionModel, ServerModel } = await import('../../database/models');
+        const { logAuditEvent, AuditEventType, resolveLogoThumbnailUrl } = await import('../../discord/utils/audit-logger');
+        const faction = await FactionModel.findById(result.subdivision.faction_id);
+        const server = faction ? await ServerModel.findById(result.subdivision.server_id) : null;
+        const guild = server ? discordBot.client.guilds.cache.get(server.guild_id) : undefined;
+        if (guild) {
+          await logAuditEvent(guild, AuditEventType.VK_CHAT_LINKED, {
+            userId: result.token.created_by,
+            userName: 'Лидер фракции',
+            subdivisionName: result.subdivision.name,
+            factionName: faction?.name ?? '',
+            vkChatId: peerId,
+            chatTitle: pending.chatTitle,
+            thumbnailUrl: resolveLogoThumbnailUrl(result.subdivision.logo_url),
+          });
+        }
+      } catch (auditErr) {
+        logger.warn('Failed to log audit after admin check verify', { error: auditErr });
+      }
+
+      return;
+    }
+
+    // Валидация числовых полей payload (только для callout-действий)
     if (
       !Number.isFinite(payload.callout_id) || payload.callout_id <= 0 ||
       !Number.isFinite(payload.subdivision_id) || payload.subdivision_id <= 0
@@ -140,13 +218,26 @@ export async function handleCallbackEvent(
       try {
         const sendResp = await (vkBot.getApi().api.messages.send as any)({
           peer_ids: [context.peerId],
-          message: `❌ ${userName} отклоняет запрос поддержки.\n\nНапишите причину отклонения в этот чат — она будет принята автоматически. У вас 3 минуты.`,
+          message: `❌ ${userName} отклоняет запрос поддержки.\n\nСледующее ваше сообщение в этом чате будет принято как причина. У вас 3 минуты, после состояние сбросится.`,
           keyboard: buildCancelDeclineKeyboard(payload.callout_id, payload.subdivision_id),
           random_id: Date.now() + Math.floor(Math.random() * 100000),
         });
-        if (Array.isArray(sendResp) && sendResp[0]?.conversation_message_id) {
-          entry.promptMessageId = sendResp[0].conversation_message_id;
+        // Та же логика извлечения cmid, что и при отправке сообщения каллаута
+        let promptCmid = 0;
+        if (Array.isArray(sendResp) && sendResp.length > 0) {
+          const item = sendResp[0];
+          if (item.error) {
+            logger.error('VK delivery error for decline prompt', { error: item.error });
+          } else {
+            promptCmid = item.conversation_message_id || 0;
+          }
+        } else if (sendResp && typeof sendResp === 'object') {
+          promptCmid = (sendResp as any).conversation_message_id || 0;
         }
+        if (promptCmid) {
+          entry.promptMessageId = promptCmid;
+        }
+        logger.info('VK decline prompt sent', { calloutId: payload.callout_id, promptCmid });
       } catch (sendError) {
         logger.error('Failed to send VK decline reason request', { error: sendError });
       }
@@ -161,6 +252,15 @@ export async function handleCallbackEvent(
       if (pending) {
         clearTimeout(pending.timeout);
         pendingDeclineReasonState.delete(stateKey);
+      }
+      // Удалить сообщение с кнопкой "Назад" из чата
+      const promptCmid = (context as any).conversationMessageId;
+      if (promptCmid) {
+        (vkBot.getApi().api.messages.delete as any)({
+          peer_id: context.peerId,
+          cmids: [promptCmid],
+          delete_for_all: 1,
+        }).catch(() => {});
       }
       await context.answer({ type: 'show_snackbar', text: `Отклонение отменено.` });
       return;
