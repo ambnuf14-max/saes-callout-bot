@@ -26,6 +26,7 @@ import { handleAdminPanelModal, handleAuditLogModal } from '../interactions/admi
 import { handleRoleManualButton, handleRoleManualModal } from '../interactions/role-manual-input';
 import { handleBrowsePrevNext, handleBrowseRequest, handleBrowseSelect } from '../interactions/subdivision-browse';
 import { handleChatMonitorButton } from '../interactions/chat-monitor-button';
+import { handleFactionServerButton, handleFactionServerRoleSelect, handleFactionServerChannelSelect } from '../interactions/faction-server-button';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -97,6 +98,8 @@ export default async function interactionCreateHandler(
         await handleBrowsePrevNext(interaction);
       } else if (interaction.customId.startsWith('subdivision_browse_req_')) {
         await handleBrowseRequest(interaction);
+      } else if (interaction.customId.startsWith('faction_server_')) {
+        await handleFactionServerButton(interaction);
       } else if (interaction.customId.startsWith('department_') || interaction.customId.startsWith('subdivision_') || interaction.customId.startsWith('faction_')) {
         await handleFactionPanelButton(interaction);
       } else if (interaction.customId.startsWith('history_')) {
@@ -165,7 +168,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId.startsWith('admin_')) {
+      if (interaction.customId.startsWith('faction_server_role_')) {
+        await handleFactionServerRoleSelect(interaction);
+      } else if (interaction.customId.startsWith('admin_')) {
         await handleAdminRoleSelect(interaction);
       } else if (interaction.customId.startsWith('subdivision_role_')) {
         await handleFactionRoleSelect(interaction);
@@ -183,7 +188,9 @@ export default async function interactionCreateHandler(
         guildId: interaction.guildId,
       });
 
-      if (interaction.customId.startsWith('admin_')) {
+      if (interaction.customId.startsWith('faction_server_channel_')) {
+        await handleFactionServerChannelSelect(interaction);
+      } else if (interaction.customId.startsWith('admin_')) {
         await handleAdminChannelSelect(interaction);
       }
       return;

@@ -10,6 +10,8 @@ import { ServerModel } from '../../database/models';
 import { isAdministrator } from '../utils/permission-checker';
 import { EMOJI } from '../../config/constants';
 import { buildAdminMainPanel } from '../utils/admin-panel-builder';
+import { buildFactionServerMainPanel, buildFactionServerSetupPanel } from '../utils/faction-server-panel-builder';
+import { FactionModel, SubdivisionModel } from '../../database/models';
 import { logAuditEvent, AuditEventType, UnauthorizedAccessData } from '../utils/audit-logger';
 
 const settingsCommand: Command = {
@@ -54,6 +56,25 @@ const settingsCommand: Command = {
         server = await ServerModel.create({
           guild_id: interaction.guild.id,
         });
+      }
+
+      // Faction-сервер — показываем упрощённую панель
+      if (ServerModel.isFactionServer(server)) {
+        const factions = await FactionModel.findByServerId(server.id, true);
+        const localFaction = factions[0];
+        let panel;
+        if (server.faction_server_needs_setup || !localFaction) {
+          panel = buildFactionServerSetupPanel(server);
+        } else {
+          const subdivisions = await SubdivisionModel.findByFactionId(localFaction.id, false);
+          panel = await buildFactionServerMainPanel(server, localFaction, subdivisions);
+        }
+        await interaction.editReply(panel);
+        logger.info('Faction server panel opened', {
+          userId: interaction.user.id,
+          guildId: interaction.guild.id,
+        });
+        return;
       }
 
       // Показать главную админ-панель

@@ -82,6 +82,10 @@ export enum AuditEventType {
   // Статус внешних ботов
   BOT_CONNECTED = 'bot_connected',
   BOT_CONNECTION_FAILED = 'bot_connection_failed',
+
+  // Фракционные серверы
+  FACTION_SERVER_LINKED = 'faction_server_linked',
+  FACTION_SERVER_UNLINKED = 'faction_server_unlinked',
 }
 
 /**
@@ -386,6 +390,21 @@ export interface BotStatusData extends BaseAuditEventData {
   errorMessage?: string;
 }
 
+export interface FactionServerLinkedData extends BaseAuditEventData {
+  guildName: string;
+  factionName: string;
+}
+
+export interface FactionServerUnlinkedData extends BaseAuditEventData {
+  guildName: string;
+  factionName?: string;
+}
+
+// Расширение BaseAuditEventData для форвардинга с faction-сервера
+export interface ForwardedAuditEventData {
+  fromFactionServerName?: string;
+}
+
 /**
  * Объединенный тип данных события
  */
@@ -423,7 +442,9 @@ export type AuditEventData =
   | UnauthorizedAccessData
   | HistoryViewedData
   | VerificationTokenCreatedData
-  | BotStatusData;
+  | BotStatusData
+  | FactionServerLinkedData
+  | FactionServerUnlinkedData;
 
 /**
  * Главная функция для логирования события в audit log канал
@@ -611,6 +632,12 @@ export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData)
 
     case AuditEventType.BOT_CONNECTION_FAILED:
       return buildBotConnectionFailedEmbed(embed, data as BotStatusData);
+
+    case AuditEventType.FACTION_SERVER_LINKED:
+      return buildFactionServerLinkedEmbed(embed, data as FactionServerLinkedData);
+
+    case AuditEventType.FACTION_SERVER_UNLINKED:
+      return buildFactionServerUnlinkedEmbed(embed, data as FactionServerUnlinkedData);
 
     default:
       return embed.setTitle('❓ Неизвестное событие').setColor(COLORS.INFO);
@@ -1352,6 +1379,71 @@ function buildBotConnectionFailedEmbed(embed: EmbedBuilder, data: BotStatusData)
     embed.addFields({ name: 'Ошибка', value: data.errorMessage.substring(0, 512), inline: false });
   }
   return embed;
+}
+
+function buildFactionServerLinkedEmbed(embed: EmbedBuilder, data: FactionServerLinkedData): EmbedBuilder {
+  return embed
+    .setTitle(`🔗 Фракционный сервер привязан`)
+    .setColor(COLORS.ACTIVE)
+    .addFields(
+      { name: 'Сервер', value: data.guildName, inline: true },
+      { name: 'Фракция', value: data.factionName, inline: true },
+      { name: 'Привязал', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+function buildFactionServerUnlinkedEmbed(embed: EmbedBuilder, data: FactionServerUnlinkedData): EmbedBuilder {
+  return embed
+    .setTitle(`⚠️ Фракционный сервер отвязан`)
+    .setColor(COLORS.WARNING)
+    .addFields(
+      { name: 'Сервер', value: data.guildName, inline: true },
+      { name: 'Фракция', value: data.factionName ?? 'Неизвестна', inline: true },
+      { name: 'Отвязал', value: `<@${data.userId}>`, inline: true },
+    );
+}
+
+/**
+ * Логировать событие с форвардингом на главный сервер (для faction-серверов).
+ * Логирует локально (если настроен audit log) и на главный сервер.
+ */
+export async function logAuditEventWithForwarding(
+  guild: Guild,
+  eventType: AuditEventType,
+  data: AuditEventData
+): Promise<void> {
+  // Локальное логирование
+  await logAuditEvent(guild, eventType, data);
+
+  // Форвардинг на главный сервер
+  try {
+    const server = await ServerModel.findByGuildId(guild.id);
+    if (!server || server.server_type !== 'faction' || !server.linked_main_server_id) return;
+
+    const mainServer = await ServerModel.findById(server.linked_main_server_id);
+    if (!mainServer || !mainServer.audit_log_channel_id) return;
+
+    // Lazy import для избежания циклических зависимостей
+    const { default: discordBot } = await import('../bot');
+    const mainGuild = discordBot.client.guilds.cache.get(mainServer.guild_id);
+    if (!mainGuild) {
+      logger.warn('Main server guild not found in cache for audit forwarding', {
+        mainGuildId: mainServer.guild_id,
+        factionGuildId: guild.id,
+      });
+      return;
+    }
+
+    // Добавляем метку о том, что событие пришло с faction-сервера
+    const forwardedData = { ...data, fromFactionServerName: guild.name };
+    logAuditEvent(mainGuild, eventType, forwardedData as AuditEventData).catch(() => {});
+  } catch (error) {
+    logger.warn('Failed to forward audit event to main server', {
+      error: error instanceof Error ? error.message : error,
+      eventType,
+      guildId: guild.id,
+    });
+  }
 }
 
 /**

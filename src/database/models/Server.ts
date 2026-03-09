@@ -2,6 +2,7 @@ import database from '../db';
 import logger from '../../utils/logger';
 import { Server, CreateServerDTO, UpdateServerDTO } from '../../types/database.types';
 
+
 /**
  * Модель для работы с таблицей servers
  */
@@ -79,6 +80,22 @@ export class ServerModel {
       updates.push('callout_allowed_role_ids = ?');
       params.push(JSON.stringify(data.callout_allowed_role_ids));
     }
+    if (data.server_type !== undefined) {
+      updates.push('server_type = ?');
+      params.push(data.server_type);
+    }
+    if (data.linked_faction_id !== undefined) {
+      updates.push('linked_faction_id = ?');
+      params.push(data.linked_faction_id);
+    }
+    if (data.linked_main_server_id !== undefined) {
+      updates.push('linked_main_server_id = ?');
+      params.push(data.linked_main_server_id);
+    }
+    if (data.faction_server_needs_setup !== undefined) {
+      updates.push('faction_server_needs_setup = ?');
+      params.push(data.faction_server_needs_setup);
+    }
 
     if (updates.length === 0) {
       return await this.findById(id);
@@ -110,6 +127,31 @@ export class ServerModel {
    */
   static async findAll(): Promise<Server[]> {
     return await database.all<Server>('SELECT * FROM servers');
+  }
+
+  /**
+   * Проверить, является ли сервер faction-сервером
+   */
+  static isFactionServer(server: Server): boolean {
+    return server.server_type === 'faction';
+  }
+
+  /**
+   * Найти все faction-серверы, привязанные к главному серверу
+   */
+  static async findFactionServers(mainServerId: number): Promise<Server[]> {
+    return await database.all<Server>(
+      'SELECT * FROM servers WHERE linked_main_server_id = ? AND server_type = ?',
+      [mainServerId, 'faction']
+    );
+  }
+
+  /**
+   * Найти главный сервер для faction-сервера
+   */
+  static async findMainServer(factionServer: Server): Promise<Server | undefined> {
+    if (!factionServer.linked_main_server_id) return undefined;
+    return await this.findById(factionServer.linked_main_server_id);
   }
 
   /**

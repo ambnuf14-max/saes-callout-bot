@@ -13,6 +13,11 @@ export interface Server {
   callout_allowed_role_ids: string | null; // JSON string array
   bot_created_channel: number; // 0 или 1 (boolean в SQLite)
   bot_created_category: number; // 0 или 1 (boolean в SQLite)
+  // Фракционные серверы
+  server_type: 'main' | 'faction';
+  linked_faction_id: number | null;      // ID фракции на главном сервере
+  linked_main_server_id: number | null;  // ID записи главного сервера
+  faction_server_needs_setup: number;    // 0 или 1: требуется первичная настройка
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +39,11 @@ export interface UpdateServerDTO {
   callout_allowed_role_ids?: string[];
   bot_created_channel?: number;
   bot_created_category?: number;
+  // Фракционные серверы
+  server_type?: 'main' | 'faction';
+  linked_faction_id?: number | null;
+  linked_main_server_id?: number | null;
+  faction_server_needs_setup?: number;
 }
 
 export interface Faction {
@@ -537,6 +547,31 @@ export interface UpdateEmbedChangeData {
   short_description?: string | null;
   logo_url?: string | null;
   discord_role_id?: string | null;
+}
+
+// ============ FACTION LINK TOKENS ============
+
+export interface FactionLinkToken {
+  id: number;
+  main_server_id: number;
+  faction_id: number;
+  token: string;
+  created_by: string;
+  expires_at: string;
+  is_used: number; // 0 или 1
+  used_at: string | null;
+  used_by_guild_id: string | null;
+  discord_channel_id: string | null;
+  discord_message_id: string | null;
+  discord_interaction_token: string | null;
+  discord_application_id: string | null;
+  created_at: string;
+}
+
+export interface CreateFactionLinkTokenDTO {
+  main_server_id: number;
+  faction_id: number;
+  created_by: string;
 }
 
 // ============ EXTENDED TYPES FOR NEW FEATURES ============

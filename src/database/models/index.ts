@@ -10,3 +10,4 @@ export { VerificationTokenModel, VkVerificationTokenModel } from './Verification
 export { TelegramMemberModel } from './TelegramMember';
 export { CalloutMessageModel } from './CalloutMessage';
 export { PlatformChatMessageModel } from './PlatformChatMessage';
+export { FactionLinkTokenModel } from './FactionLinkToken';
