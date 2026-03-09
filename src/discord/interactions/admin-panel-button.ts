@@ -49,6 +49,7 @@ import { buildSubdivisionSettingsModal, buildSubdivisionEmbedFieldModal, handleI
 import { SubdivisionService } from '../../services/subdivision.service';
 import { FactionTypeService } from '../../services/faction-type.service';
 import { PendingChangeService } from '../../services/pending-change.service';
+import { PendingChangeModel } from '../../database/models/PendingChange';
 import { EMOJI } from '../../config/constants';
 import { CalloutError } from '../../utils/error-handler';
 import { safeParseInt } from '../../utils/validators';
@@ -321,7 +322,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const factionId = safeParseInt(customId.replace('admin_edit_faction_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.reply({
           content: `${EMOJI.ERROR} Фракция не найдена`,
           flags: MessageFlags.Ephemeral,
@@ -371,7 +372,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const factionId = safeParseInt(customId.replace('admin_delete_faction_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
@@ -389,7 +390,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const factionId = safeParseInt(customId.replace('admin_confirm_delete_fact_', ''));
       const faction = await FactionService.getFactionById(factionId);
 
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
@@ -426,7 +427,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_faction_subdivisions_')) {
       const factionId = safeParseInt(customId.replace('admin_faction_subdivisions_', ''));
       const faction = await FactionService.getFactionById(factionId);
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.editReply({ content: `${EMOJI.ERROR} Фракция не найдена`, embeds: [], components: [] });
         return;
       }
@@ -441,7 +442,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_edit_sub_settings_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_edit_sub_settings_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
@@ -454,7 +455,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_role_clear_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_sub_role_clear_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       await SubdivisionService.updateSubdivision(subdivisionId, { discord_role_id: undefined });
@@ -469,7 +470,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_other_settings_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_sub_other_settings_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const modal = buildSubdivisionSettingsModal(subdivision, `admin_modal_sub_settings_${subdivisionId}`);
@@ -480,7 +481,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_presence_asset_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_sub_presence_asset_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = await import('discord.js');
@@ -507,6 +508,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_name_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_name_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -523,6 +528,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_logo_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_logo_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -537,6 +546,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_short_desc_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_short_desc_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -551,6 +564,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_author_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_author_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -569,6 +586,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_title_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_title_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -586,6 +607,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_thumbnail_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_thumbnail_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -600,6 +625,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_description_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_description_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -614,6 +643,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_image_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_image_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -628,6 +661,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_color_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_color_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -642,6 +679,10 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_edit_footer_')) {
       const subId = safeParseInt(customId.replace('admin_sub_edit_footer_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
+      if (!subdivision || subdivision.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Подразделение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const modal = buildSubdivisionEmbedFieldModal(
@@ -660,6 +701,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('admin_sub_edit_role_', '').split('_');
       const factionId = safeParseInt(parts[0]);
       const subId = safeParseInt(parts[1]);
+      const subForCheck = await SubdivisionService.getSubdivisionById(subId);
+      if (!subForCheck || subForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
+        return;
+      }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subId);
       const draftRoleId = draft?.discord_role_id;
@@ -673,7 +719,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const factionId = safeParseInt(parts[0]);
       const subId = safeParseInt(parts[1]);
       const subdivision = await SubdivisionService.getSubdivisionById(subId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
@@ -687,6 +733,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('admin_sub_editor_role_clear_', '').split('_');
       const factionId = safeParseInt(parts[0]);
       const subId = safeParseInt(parts[1]);
+      const subForCheck = await SubdivisionService.getSubdivisionById(subId);
+      if (!subForCheck || subForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
+        return;
+      }
       const { setAdminSubDraft } = await import('./admin-panel-modal');
       setAdminSubDraft(subId, { discord_role_id: null });
       const panel = await buildAdminSubEditorRolePanel(factionId, subId, null);
@@ -698,6 +749,12 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('admin_sub_editor_save_', '').split('_');
       const factionId = safeParseInt(parts[0]);
       const subId = safeParseInt(parts[1]);
+
+      const subForCheck = await SubdivisionService.getSubdivisionById(subId);
+      if (!subForCheck || subForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
+        return;
+      }
 
       const { getAdminSubDraft, clearAdminSubDraft } = await import('./admin-panel-modal');
       const draftData = getAdminSubDraft(subId);
@@ -763,6 +820,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('template_set_role_', '').split('_');
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const { getTemplateDraft } = await import('./admin-panel-modal');
       const draft = getTemplateDraft(typeId, templateId);
       const draftRoleId = draft?.discord_role_id;
@@ -775,6 +837,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('admin_template_role_back_', '').split('_');
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const { getTemplateDraft } = await import('./admin-panel-modal');
       const draftData = getTemplateDraft(typeId, templateId);
       const panel = await buildTemplateEditorPanel(typeId, templateId, draftData || undefined);
@@ -786,6 +853,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const parts = customId.replace('admin_template_role_clear_', '').split('_');
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const { setTemplateDraft } = await import('./admin-panel-modal');
       setTemplateDraft(typeId, templateId, { discord_role_id: null });
       const panel = await buildTemplateRolePanel(typeId, templateId, null);
@@ -796,7 +868,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_faction_')) {
       const factionId = safeParseInt(customId.replace('admin_faction_', ''));
       const faction = await FactionService.getFactionById(factionId);
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.editReply({ content: `${EMOJI.ERROR} Фракция не найдена`, embeds: [], components: [] });
         return;
       }
@@ -815,6 +887,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Просмотр деталей типа фракции
     else if (customId.startsWith('admin_view_fact_type_')) {
       const typeId = safeParseInt(customId.replace('admin_view_fact_type_', ''));
+      const factionType = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionType || factionType.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const panel = await buildFactionTypeDetailPanel(typeId);
       await interaction.editReply(panel);
     }
@@ -822,6 +899,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Сохранить embed-настройки типа фракции
     else if (customId.startsWith('admin_type_embed_save_')) {
       const typeId = safeParseInt(customId.replace('admin_type_embed_save_', ''));
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const { getFactionTypeDraft, clearFactionTypeDraft } = await import('./admin-panel-modal');
       const draftData = getFactionTypeDraft(typeId);
 
@@ -914,6 +996,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Открыть редактор embed-настроек типа фракции
     else if (customId.startsWith('admin_type_embed_')) {
       const typeId = safeParseInt(customId.replace('admin_type_embed_', ''));
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const { getFactionTypeDraft } = await import('./admin-panel-modal');
       const draft = getFactionTypeDraft(typeId);
       const panel = await buildFactionTypeEmbedEditorPanel(typeId, draft);
@@ -956,7 +1043,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(customId.replace('admin_edit_fact_type_', ''));
       const factionType = await FactionTypeService.getFactionTypeById(typeId);
 
-      if (!factionType) {
+      if (!factionType || factionType.server_id !== server.id) {
         await interaction.reply({
           content: `${EMOJI.ERROR} Тип фракции не найден`,
           flags: MessageFlags.Ephemeral,
@@ -1032,6 +1119,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
 
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const panel = await buildTemplateEditorPanel(typeId, templateId);
       await interaction.editReply(panel);
     }
@@ -1041,6 +1133,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(customId.replace('admin_delete_fact_type_', ''));
 
       try {
+        const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+        if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+          return;
+        }
         await FactionTypeService.deleteFactionType(typeId);
 
         logger.info('Faction type deleted via admin panel', {
@@ -1067,6 +1164,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const templateId = safeParseInt(parts[1]);
 
       try {
+        const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+        if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+          return;
+        }
         await FactionTypeService.deleteTemplate(templateId);
 
         logger.info('Subdivision template deleted via admin panel', {
@@ -1322,8 +1424,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
 
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Тип фракции не найден`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { SubdivisionTemplateModel } = await import('../../database/models/SubdivisionTemplate');
       const template = await SubdivisionTemplateModel.findById(templateId);
+      if (!template || template.faction_type_id !== typeId) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Шаблон не найден`, flags: MessageFlags.Ephemeral });
+        return;
+      }
 
       const modal = new ModalBuilder()
         .setCustomId(`template_modal_short_desc_${typeId}_${templateId}`)
@@ -1348,8 +1459,17 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const typeId = safeParseInt(parts[0]);
       const templateId = safeParseInt(parts[1]);
 
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Тип фракции не найден`, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const { SubdivisionTemplateModel } = await import('../../database/models/SubdivisionTemplate');
       const template = await SubdivisionTemplateModel.findById(templateId);
+      if (!template || template.faction_type_id !== typeId) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Шаблон не найден`, flags: MessageFlags.Ephemeral });
+        return;
+      }
 
       const modal = new ModalBuilder()
         .setCustomId(`template_modal_logo_${typeId}_${templateId}`)
@@ -1374,6 +1494,18 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const templateId = safeParseInt(parts[1]);
 
       try {
+        const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+        if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+          return;
+        }
+        const { SubdivisionTemplateModel: StmCheck } = await import('../../database/models/SubdivisionTemplate');
+        const templateForCheck = await StmCheck.findById(templateId);
+        if (!templateForCheck || templateForCheck.faction_type_id !== typeId) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Шаблон не найден`, embeds: [], components: [] });
+          return;
+        }
+
         // Получить draft изменения (импортируем функцию из admin-panel-modal)
         const { getTemplateDraft, clearTemplateDraft } = await import('./admin-panel-modal');
         const draftData = getTemplateDraft(typeId, templateId);
@@ -1440,6 +1572,11 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Просмотр деталей конкретного изменения
     else if (customId.startsWith('admin_review_change_')) {
       const changeId = safeParseInt(customId.replace('admin_review_change_', ''));
+      const change = await PendingChangeModel.findById(changeId);
+      if (!change || change.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Изменение не найдено`, embeds: [], components: [] });
+        return;
+      }
       const panel = await buildReviewChangePanel(changeId);
       await interaction.editReply(panel);
     }
@@ -1451,6 +1588,12 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       try {
         if (!interaction.guild) {
           throw new Error('Guild not found');
+        }
+
+        const change = await PendingChangeModel.findById(changeId);
+        if (!change || change.server_id !== server.id) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Изменение не найдено`, embeds: [], components: [] });
+          return;
         }
 
         await PendingChangeService.approveChange(changeId, interaction.user.id, interaction.guild);
@@ -1476,6 +1619,12 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     // Отклонение изменения (показать modal для причины)
     else if (customId.startsWith('admin_reject_change_')) {
       const changeId = safeParseInt(customId.replace('admin_reject_change_', ''));
+
+      const change = await PendingChangeModel.findById(changeId);
+      if (!change || change.server_id !== server.id) {
+        await interaction.reply({ content: `${EMOJI.ERROR} Изменение не найдено`, flags: MessageFlags.Ephemeral });
+        return;
+      }
 
       const modal = new ModalBuilder()
         .setCustomId(`admin_modal_reject_change_${changeId}`)
@@ -1611,7 +1760,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const factionId = safeParseInt(parts[0]);
       const subdivisionId = safeParseInt(parts[1]);
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
@@ -1624,7 +1773,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_links_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_sub_links_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       await interaction.editReply(buildAdminLinksPanel(subdivision));
     }
 
@@ -1632,7 +1781,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_sub_settings_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_sub_settings_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       await interaction.editReply(buildAdminSubdivisionSettingsPanel(subdivision, subdivision.faction_id));
     }
 
@@ -1640,7 +1789,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_toggle_callouts_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_toggle_callouts_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       const newStatus = !subdivision.is_accepting_callouts;
       await SubdivisionService.toggleCallouts(subdivisionId, newStatus);
       const updated = await SubdivisionService.getSubdivisionById(subdivisionId);
@@ -1661,7 +1810,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_link_vk_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_link_vk_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       const token = await VerificationService.generateVerificationToken({
         server_id: subdivision.server_id,
         subdivision_id: subdivisionId,
@@ -1689,7 +1838,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_unlink_vk_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_unlink_vk_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       if (!subdivision.vk_chat_id) throw new CalloutError('VK беседа не привязана', 'VK_NOT_LINKED', 400);
       const vkChatId = subdivision.vk_chat_id;
       const updated = await SubdivisionService.sendVkGoodbyeAndUnlink(subdivisionId);
@@ -1712,7 +1861,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_link_telegram_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_link_telegram_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       const token = await VerificationService.generateVerificationToken({
         server_id: subdivision.server_id,
         subdivision_id: subdivisionId,
@@ -1741,7 +1890,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_unlink_telegram_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_unlink_telegram_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       if (!subdivision.telegram_chat_id) throw new CalloutError('Telegram группа не привязана', 'TELEGRAM_NOT_LINKED', 400);
       const telegramChatId = subdivision.telegram_chat_id;
       const updated = await SubdivisionService.sendTelegramGoodbyeAndUnlink(subdivisionId);
@@ -1764,7 +1913,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_delete_sub_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_delete_sub_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       await interaction.editReply(buildAdminDeleteConfirmation(subdivision));
     }
 
@@ -1772,7 +1921,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_confirm_delete_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_confirm_delete_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       const factionId = subdivision.faction_id;
       await SubdivisionService.deleteSubdivision(subdivisionId);
       const faction = await FactionService.getFactionById(factionId);
@@ -1788,7 +1937,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
     else if (customId.startsWith('admin_cancel_delete_')) {
       const subdivisionId = safeParseInt(customId.replace('admin_cancel_delete_', ''));
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
+      if (!subdivision || subdivision.server_id !== server.id) throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       await interaction.editReply(buildAdminSubdivisionSettingsPanel(subdivision, subdivision.faction_id));
     }
 
@@ -2024,6 +2173,12 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       const templateId = safeParseInt(parts[1]);
       const roleId = interaction.values[0];
 
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
+
       const { setTemplateDraft } = await import('./admin-panel-modal');
       setTemplateDraft(typeId, templateId, { discord_role_id: roleId });
 
@@ -2045,6 +2200,12 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       const subId = safeParseInt(parts[1]);
       const roleId = interaction.values[0];
 
+      const subForCheck = await SubdivisionService.getSubdivisionById(subId);
+      if (!subForCheck || subForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
+        return;
+      }
+
       const { setAdminSubDraft } = await import('./admin-panel-modal');
       setAdminSubDraft(subId, { discord_role_id: roleId });
 
@@ -2065,7 +2226,7 @@ export async function handleAdminRoleSelect(interaction: RoleSelectMenuInteracti
       const roleId = interaction.values[0];
 
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         throw new CalloutError('Подразделение не найдено', 'SUBDIVISION_NOT_FOUND', 404);
       }
 
@@ -2154,6 +2315,11 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
     // Выбор типа фракции для просмотра
     if (customId === 'admin_select_fact_type') {
       const typeId = safeParseInt(interaction.values[0]);
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const panel = await buildFactionTypeDetailPanel(typeId);
       await interaction.editReply(panel);
     }
@@ -2162,6 +2328,11 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
     else if (customId.startsWith('admin_select_template_')) {
       const typeId = safeParseInt(customId.replace('admin_select_template_', ''));
       const templateId = safeParseInt(interaction.values[0]);
+      const factionTypeForCheck = await FactionTypeService.getFactionTypeById(typeId);
+      if (!factionTypeForCheck || factionTypeForCheck.server_id !== server.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Тип фракции не найден`, embeds: [], components: [] });
+        return;
+      }
       const panel = await buildTemplateEditorPanel(typeId, templateId);
       await interaction.editReply(panel);
     }
@@ -2171,7 +2342,7 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
       const factionId = safeParseInt(customId.replace('admin_sub_select_', ''));
       const subdivisionId = safeParseInt(interaction.values[0]);
       const subdivision = await SubdivisionService.getSubdivisionById(subdivisionId);
-      if (!subdivision) {
+      if (!subdivision || subdivision.server_id !== server.id) {
         await interaction.editReply({ content: `${EMOJI.ERROR} Подразделение не найдено`, embeds: [], components: [] });
         return;
       }
@@ -2184,7 +2355,7 @@ export async function handleAdminStringSelect(interaction: StringSelectMenuInter
       const factionId = safeParseInt(interaction.values[0]);
       const faction = await FactionService.getFactionById(factionId);
 
-      if (!faction) {
+      if (!faction || faction.server_id !== server.id) {
         await interaction.editReply({
           content: `${EMOJI.ERROR} Фракция не найдена`,
           embeds: [],
@@ -2322,6 +2493,13 @@ export async function handleAuditLogButton(interaction: ButtonInteraction) {
     const changeId = safeParseInt(customId.replace('audit_approve_change_', ''));
 
     try {
+      const auditServer = await ServerModel.findByGuildId(interaction.guild.id);
+      const auditChange = await PendingChangeModel.findById(changeId);
+      if (!auditServer || !auditChange || auditChange.server_id !== auditServer.id) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Изменение не найдено`, embeds: [], components: [] });
+        return;
+      }
+
       await PendingChangeService.approveChange(changeId, interaction.user.id, interaction.guild);
 
       logger.info('Change approved from audit log', { changeId, userId: interaction.user.id });
@@ -2341,6 +2519,13 @@ export async function handleAuditLogButton(interaction: ButtonInteraction) {
 
   else if (customId.startsWith('audit_reject_change_')) {
     const changeId = safeParseInt(customId.replace('audit_reject_change_', ''));
+
+    const auditServer = await ServerModel.findByGuildId(interaction.guild.id);
+    const auditChange = await PendingChangeModel.findById(changeId);
+    if (!auditServer || !auditChange || auditChange.server_id !== auditServer.id) {
+      await interaction.reply({ content: `${EMOJI.ERROR} Изменение не найдено`, flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const modal = new ModalBuilder()
       .setCustomId(`audit_modal_reject_change_${changeId}`)
