@@ -46,16 +46,9 @@ const settingsCommand: Command = {
         return;
       }
 
-      // Проверка прав: для faction-сервера пускаем также лидеров фракции
-      const isFaction = ServerModel.isFactionServer(server);
-      const isAdmin = isAdministrator(member);
-      const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-      const isLeader = isFaction && leaderRoleIds.length > 0
-        && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
-
-      if (!isAdmin && !isLeader) {
+      if (!isAdministrator(member)) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Только администраторы${isFaction ? ' или лидеры фракции' : ''} могут использовать эту команду`,
+          content: `${EMOJI.ERROR} Только администраторы могут использовать эту команду`,
         });
         const auditData: UnauthorizedAccessData = {
           userId: interaction.user.id,
@@ -68,7 +61,7 @@ const settingsCommand: Command = {
       }
 
       // Faction-сервер — показываем упрощённую панель
-      if (isFaction) {
+      if (ServerModel.isFactionServer(server)) {
         const factions = await FactionModel.findByServerId(server.id, true);
         const localFaction = factions[0];
         let panel;

@@ -32,18 +32,7 @@ async function checkFactionServerAdmin(interaction: ButtonInteraction): Promise<
   if (!interaction.guild) return false;
   const member = interaction.guild.members.cache.get(interaction.user.id)
     ?? await interaction.guild.members.fetch(interaction.user.id);
-
-  if (isAdministrator(member)) return true;
-
-  const server = await ServerModel.findByGuildId(interaction.guild.id);
-  if (!server) return false;
-
-  const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-  if (leaderRoleIds.length > 0) {
-    return member.roles.cache.some(r => leaderRoleIds.includes(r.id));
-  }
-
-  return false;
+  return isAdministrator(member);
 }
 
 /**
@@ -269,17 +258,9 @@ export async function handleFactionServerButton(interaction: ButtonInteraction):
 export async function handleFactionServerRoleSelect(interaction: RoleSelectMenuInteraction): Promise<void> {
   if (!interaction.guild) return;
 
-  const hasAccess = await (async () => {
-    const member = interaction.guild!.members.cache.get(interaction.user.id)
-      ?? await interaction.guild!.members.fetch(interaction.user.id);
-    if (isAdministrator(member)) return true;
-    const server = await ServerModel.findByGuildId(interaction.guild!.id);
-    if (!server) return false;
-    const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-    return leaderRoleIds.length > 0 && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
-  })();
-
-  if (!hasAccess) {
+  const member = interaction.guild.members.cache.get(interaction.user.id)
+    ?? await interaction.guild.members.fetch(interaction.user.id);
+  if (!isAdministrator(member)) {
     await interaction.reply({ content: `${EMOJI.ERROR} Нет доступа`, flags: MessageFlags.Ephemeral });
     return;
   }
@@ -331,17 +312,9 @@ export async function handleFactionServerRoleSelect(interaction: RoleSelectMenuI
 export async function handleFactionServerChannelSelect(interaction: ChannelSelectMenuInteraction): Promise<void> {
   if (!interaction.guild) return;
 
-  const hasAccess = await (async () => {
-    const member = interaction.guild!.members.cache.get(interaction.user.id)
-      ?? await interaction.guild!.members.fetch(interaction.user.id);
-    if (isAdministrator(member)) return true;
-    const server = await ServerModel.findByGuildId(interaction.guild!.id);
-    if (!server) return false;
-    const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
-    return leaderRoleIds.length > 0 && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
-  })();
-
-  if (!hasAccess) {
+  const member = interaction.guild.members.cache.get(interaction.user.id)
+    ?? await interaction.guild.members.fetch(interaction.user.id);
+  if (!isAdministrator(member)) {
     await interaction.reply({ content: `${EMOJI.ERROR} Нет доступа`, flags: MessageFlags.Ephemeral });
     return;
   }
