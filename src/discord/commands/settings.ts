@@ -34,10 +34,25 @@ const settingsCommand: Command = {
     try {
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
-      // Проверка прав администратора
-      if (!isAdministrator(member)) {
+      // Получить или создать сервер в БД
+      let server = await ServerModel.findByGuildId(interaction.guild.id);
+      if (!server) {
+        server = await ServerModel.create({
+          guild_id: interaction.guild.id,
+        });
+      }
+
+      // Проверка прав: для faction-сервера пускаем также лидеров фракции
+      const isFaction = ServerModel.isFactionServer(server);
+      const isAdmin = isAdministrator(member);
+      const isLeader = isFaction && (() => {
+        const leaderRoleIds = ServerModel.getLeaderRoleIds(server!);
+        return leaderRoleIds.length > 0 && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
+      })();
+
+      if (!isAdmin && !isLeader) {
         await interaction.editReply({
-          content: `${EMOJI.ERROR} Только администраторы могут использовать эту команду`,
+          content: `${EMOJI.ERROR} Только администраторы${isFaction ? ' или лидеры фракции' : ''} могут использовать эту команду`,
         });
         const auditData: UnauthorizedAccessData = {
           userId: interaction.user.id,
@@ -49,17 +64,8 @@ const settingsCommand: Command = {
         return;
       }
 
-      // Получить или создать сервер в БД
-      let server = await ServerModel.findByGuildId(interaction.guild.id);
-      if (!server) {
-        // Если сервер не настроен — создаём запись
-        server = await ServerModel.create({
-          guild_id: interaction.guild.id,
-        });
-      }
-
       // Faction-сервер — показываем упрощённую панель
-      if (ServerModel.isFactionServer(server)) {
+      if (isFaction) {
         const factions = await FactionModel.findByServerId(server.id, true);
         const localFaction = factions[0];
         let panel;

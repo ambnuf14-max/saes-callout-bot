@@ -86,6 +86,10 @@ export enum AuditEventType {
   // Фракционные серверы
   FACTION_SERVER_LINKED = 'faction_server_linked',
   FACTION_SERVER_UNLINKED = 'faction_server_unlinked',
+
+  // Отклонение и возобновление каллаутов
+  CALLOUT_DECLINED = 'callout_declined',
+  CALLOUT_REVIVED = 'callout_revived',
 }
 
 /**
@@ -400,6 +404,19 @@ export interface FactionServerUnlinkedData extends BaseAuditEventData {
   factionName?: string;
 }
 
+export interface CalloutDeclinedData extends BaseAuditEventData {
+  calloutId: number;
+  subdivisionName: string;
+  reason: string;
+  channelId?: string;
+}
+
+export interface CalloutRevivedData extends BaseAuditEventData {
+  calloutId: number;
+  subdivisionName: string;
+  channelId?: string;
+}
+
 // Расширение BaseAuditEventData для форвардинга с faction-сервера
 export interface ForwardedAuditEventData {
   fromFactionServerName?: string;
@@ -444,7 +461,9 @@ export type AuditEventData =
   | VerificationTokenCreatedData
   | BotStatusData
   | FactionServerLinkedData
-  | FactionServerUnlinkedData;
+  | FactionServerUnlinkedData
+  | CalloutDeclinedData
+  | CalloutRevivedData;
 
 /**
  * Главная функция для логирования события в audit log канал
@@ -639,6 +658,12 @@ export function buildAuditEmbed(eventType: AuditEventType, data: AuditEventData)
     case AuditEventType.FACTION_SERVER_UNLINKED:
       return buildFactionServerUnlinkedEmbed(embed, data as FactionServerUnlinkedData);
 
+    case AuditEventType.CALLOUT_DECLINED:
+      return buildCalloutDeclinedEmbed(embed, data as CalloutDeclinedData);
+
+    case AuditEventType.CALLOUT_REVIVED:
+      return buildCalloutRevivedEmbed(embed, data as CalloutRevivedData);
+
     default:
       return embed.setTitle('❓ Неизвестное событие').setColor(COLORS.INFO);
   }
@@ -745,6 +770,54 @@ function buildCalloutAutoClosedEmbed(
 
   if (data.duration) {
     embed.addFields({ name: 'Длительность', value: data.duration, inline: true });
+  }
+
+  return embed;
+}
+
+/**
+ * Embed для отклонения каллаута
+ */
+function buildCalloutDeclinedEmbed(
+  embed: EmbedBuilder,
+  data: CalloutDeclinedData
+): EmbedBuilder {
+  embed
+    .setTitle(`${EMOJI.DECLINED} Запрос поддержки отклонён`)
+    .setColor(COLORS.WARNING)
+    .addFields([
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Отклонил', value: `<@${data.userId}>`, inline: true },
+    ]);
+
+  if (data.channelId) {
+    embed.addFields({ name: 'Канал', value: `<#${data.channelId}>`, inline: true });
+  }
+
+  embed.addFields({ name: 'Причина', value: data.reason, inline: false });
+
+  return embed;
+}
+
+/**
+ * Embed для возобновления реагирования (отмены отклонения)
+ */
+function buildCalloutRevivedEmbed(
+  embed: EmbedBuilder,
+  data: CalloutRevivedData
+): EmbedBuilder {
+  embed
+    .setTitle('↩️ Реагирование возобновлено')
+    .setColor(COLORS.ACTIVE)
+    .addFields([
+      { name: 'ID Каллаута', value: `#${data.calloutId}`, inline: true },
+      { name: 'Подразделение', value: data.subdivisionName, inline: true },
+      { name: 'Возобновил', value: `<@${data.userId}>`, inline: true },
+    ]);
+
+  if (data.channelId) {
+    embed.addFields({ name: 'Канал', value: `<#${data.channelId}>`, inline: true });
   }
 
   return embed;

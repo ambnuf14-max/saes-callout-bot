@@ -16,6 +16,8 @@ import {
   CalloutCreatedData,
   CalloutClosedData,
   CalloutAutoClosedData,
+  CalloutDeclinedData,
+  CalloutRevivedData,
   NotificationFailedData,
   resolveLogoThumbnailUrl,
   logAuditEventWithForwarding,
@@ -671,6 +673,20 @@ export class CalloutService {
       });
     }
 
+    // Логировать событие в audit log (с форвардингом на главный сервер)
+    if (guild && subdivision) {
+      const auditData: CalloutDeclinedData = {
+        userId: declinedBy,
+        userName: declinedByName,
+        calloutId,
+        subdivisionName: subdivision.name,
+        reason,
+        channelId: declinedCallout.discord_channel_id || undefined,
+        thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
+      };
+      logAuditEventWithForwarding(guild, AuditEventType.CALLOUT_DECLINED, auditData).catch(() => {});
+    }
+
     // 4. Запустить 5-минутный таймер → закрыть каллаут
     const existingTimer = CalloutService.pendingDeclineClose.get(calloutId);
     if (existingTimer) clearTimeout(existingTimer);
@@ -811,6 +827,19 @@ export class CalloutService {
       logger.error('Failed to notify Telegram about revived callout', {
         error: error instanceof Error ? error.message : error, calloutId,
       });
+    }
+
+    // Логировать событие в audit log (с форвардингом на главный сервер)
+    if (guild && subdivision) {
+      const auditData: CalloutRevivedData = {
+        userId: revivedCallout.author_id,
+        userName: revivedByName,
+        calloutId,
+        subdivisionName: subdivision.name,
+        channelId: revivedCallout.discord_channel_id || undefined,
+        thumbnailUrl: resolveLogoThumbnailUrl(subdivision.logo_url),
+      };
+      logAuditEventWithForwarding(guild, AuditEventType.CALLOUT_REVIVED, auditData).catch(() => {});
     }
 
     return revivedCallout;

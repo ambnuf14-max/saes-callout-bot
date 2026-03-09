@@ -23,7 +23,7 @@ import {
 } from '../utils/faction-server-panel-builder';
 import { FactionLinkService } from '../../services/faction-link.service';
 import { buildSetupSection } from '../utils/admin-panel-builder';
-import { logAuditEvent, AuditEventType, SettingsUpdatedData } from '../utils/audit-logger';
+import { logAuditEvent, logAuditEventWithForwarding, AuditEventType, SettingsUpdatedData, FactionServerUnlinkedData } from '../utils/audit-logger';
 
 /**
  * Проверить права администратора для faction-сервера
@@ -156,6 +156,21 @@ export async function handleFactionServerButton(interaction: ButtonInteraction):
     }
 
     else if (customId === 'faction_server_unlink_execute') {
+      // Получить имя фракции до отвязки (потом эта информация будет недоступна)
+      let linkedFactionName: string | undefined;
+      if (server.linked_faction_id) {
+        const linkedFaction = await FactionModel.findById(server.linked_faction_id);
+        linkedFactionName = linkedFaction?.name;
+      }
+
+      // Логируем до отвязки — иначе forwarding не сработает (linked_main_server_id будет очищен)
+      await logAuditEventWithForwarding(interaction.guild, AuditEventType.FACTION_SERVER_UNLINKED, {
+        userId: interaction.user.id,
+        userName: interaction.user.username,
+        guildName: interaction.guild.name,
+        factionName: linkedFactionName,
+      } as FactionServerUnlinkedData);
+
       await FactionLinkService.unlinkFactionServer(server.id);
 
       const embed = new EmbedBuilder()
@@ -164,12 +179,6 @@ export async function handleFactionServerButton(interaction: ButtonInteraction):
         .setDescription('Этот сервер больше не является фракционным сервером.');
 
       await interaction.editReply({ embeds: [embed], components: [] });
-
-      logAuditEvent(interaction.guild, AuditEventType.SETTINGS_UPDATED, {
-        userId: interaction.user.id,
-        userName: interaction.user.username,
-        changes: ['Сервер отвязан от фракции'],
-      } as SettingsUpdatedData).catch(() => {});
     }
 
     else if (customId === 'faction_server_set_leader_roles') {
