@@ -45,7 +45,12 @@ export async function handleReviveCalloutButton(interaction: ButtonInteraction) 
       return;
     }
 
-    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const member = interaction.guild.members.cache.get(interaction.user.id)
+      ?? await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member) {
+      await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось получить данные участника` });
+      return;
+    }
     const userRoles = getUserRoleIds(member);
     if (!userRoles.includes(subdivision.discord_role_id)) {
       await interaction.editReply({ content: MESSAGES.CALLOUT.ERROR_NO_RESPOND_PERMISSION });

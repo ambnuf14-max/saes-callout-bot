@@ -41,14 +41,17 @@ const settingsCommand: Command = {
           guild_id: interaction.guild.id,
         });
       }
+      if (!server) {
+        await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось инициализировать сервер` });
+        return;
+      }
 
       // Проверка прав: для faction-сервера пускаем также лидеров фракции
       const isFaction = ServerModel.isFactionServer(server);
       const isAdmin = isAdministrator(member);
-      const isLeader = isFaction && (() => {
-        const leaderRoleIds = ServerModel.getLeaderRoleIds(server!);
-        return leaderRoleIds.length > 0 && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
-      })();
+      const leaderRoleIds = ServerModel.getLeaderRoleIds(server);
+      const isLeader = isFaction && leaderRoleIds.length > 0
+        && member.roles.cache.some(r => leaderRoleIds.includes(r.id));
 
       if (!isAdmin && !isLeader) {
         await interaction.editReply({

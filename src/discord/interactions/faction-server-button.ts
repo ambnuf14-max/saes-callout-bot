@@ -295,7 +295,11 @@ export async function handleFactionServerRoleSelect(interaction: RoleSelectMenuI
   if (customId === 'faction_server_role_leader') {
     await ServerModel.update(server.id, { leader_role_ids: selectedRoleIds });
     const updatedServer = await ServerModel.findByGuildId(interaction.guild.id);
-    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer!));
+    if (!updatedServer) {
+      await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось загрузить настройки`, embeds: [], components: [] });
+      return;
+    }
+    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer));
 
     logAuditEvent(interaction.guild, AuditEventType.SETTINGS_UPDATED, {
       userId: interaction.user.id,
@@ -307,7 +311,11 @@ export async function handleFactionServerRoleSelect(interaction: RoleSelectMenuI
   else if (customId === 'faction_server_role_callout') {
     await ServerModel.update(server.id, { callout_allowed_role_ids: selectedRoleIds });
     const updatedServer = await ServerModel.findByGuildId(interaction.guild.id);
-    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer!));
+    if (!updatedServer) {
+      await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось загрузить настройки`, embeds: [], components: [] });
+      return;
+    }
+    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer));
 
     logAuditEvent(interaction.guild, AuditEventType.SETTINGS_UPDATED, {
       userId: interaction.user.id,
@@ -344,11 +352,16 @@ export async function handleFactionServerChannelSelect(interaction: ChannelSelec
   if (!server) return;
 
   const channelId = interaction.values[0];
+  if (!channelId) return;
 
   if (interaction.customId === 'faction_server_channel_audit') {
     await ServerModel.update(server.id, { audit_log_channel_id: channelId });
     const updatedServer = await ServerModel.findByGuildId(interaction.guild.id);
-    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer!));
+    if (!updatedServer) {
+      await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось загрузить настройки`, embeds: [], components: [] });
+      return;
+    }
+    await interaction.editReply(buildFactionServerSettingsPanel(updatedServer));
 
     logAuditEvent(interaction.guild, AuditEventType.AUDIT_LOG_CHANNEL_SET, {
       userId: interaction.user.id,

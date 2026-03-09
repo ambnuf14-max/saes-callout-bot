@@ -46,7 +46,12 @@ export async function handleCancelResponseButton(interaction: ButtonInteraction)
     }
 
     // Проверка прав: только роль подразделения
-    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const member = interaction.guild.members.cache.get(interaction.user.id)
+      ?? await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!member) {
+      await interaction.editReply({ content: `${EMOJI.ERROR} Не удалось получить данные участника` });
+      return;
+    }
     const hasSubdivisionRole = subdivision.discord_role_id
       ? member.roles.cache.has(subdivision.discord_role_id)
       : false;
