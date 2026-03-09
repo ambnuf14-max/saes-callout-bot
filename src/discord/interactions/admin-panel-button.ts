@@ -122,6 +122,14 @@ async function getAdminContext(interaction: ButtonInteraction | StringSelectMenu
     return null;
   }
 
+  if (ServerModel.isFactionServer(server)) {
+    await interaction.reply({
+      content: `${EMOJI.ERROR} Панель администрирования недоступна на фракционных серверах`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return null;
+  }
+
   return { member, server };
 }
 

@@ -68,6 +68,12 @@ export class FactionLinkService {
       throw new Error(validation.reason || 'Токен недействителен.');
     }
 
+    // Атомарно захватить токен — защита от race condition при одновременных /link
+    const claimed = await FactionLinkTokenModel.claimToken(token.id, guildId);
+    if (!claimed) {
+      throw new Error('Токен только что был использован или истёк. Запросите новый токен у лидера фракции.');
+    }
+
     // 2. Проверить, не привязан ли уже этот сервер
     const existingServer = await ServerModel.findByGuildId(guildId);
     if (existingServer && existingServer.server_type === 'faction') {
@@ -125,9 +131,6 @@ export class FactionLinkService {
       faction_role_id: '0',
       allow_create_subdivisions: true,
     });
-
-    // 6. Пометить токен как использованный
-    await FactionLinkTokenModel.markAsUsed(token.id, guildId);
 
     logger.info('Faction server linked successfully', {
       factionServerId: factionServer.id,

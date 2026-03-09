@@ -85,6 +85,10 @@ export async function handleFactionPanelButton(interaction: ButtonInteraction) {
           await interaction.editReply({ content: `${EMOJI.ERROR} Сервер не найден в БД` });
           return;
         }
+        if (ServerModel.isFactionServer(server)) {
+          await interaction.editReply({ content: `${EMOJI.ERROR} Токены привязки можно генерировать только на главном сервере` });
+          return;
+        }
         const token = await FactionLinkService.generateLinkToken({
           main_server_id: server.id,
           faction_id: faction.id,

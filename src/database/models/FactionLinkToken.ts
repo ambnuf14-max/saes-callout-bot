@@ -81,6 +81,27 @@ export class FactionLinkTokenModel {
   }
 
   /**
+   * Атомарно захватить токен: пометить как использованный только если он ещё валиден.
+   * Защищает от race condition при одновременных /link запросах.
+   * Возвращает true если токен успешно захвачен, false если уже использован или истёк.
+   */
+  static async claimToken(
+    id: number,
+    usedByGuildId: string
+  ): Promise<boolean> {
+    const usedAt = new Date().toISOString();
+
+    const result = await database.run(
+      `UPDATE faction_link_tokens
+       SET is_used = 1, used_at = ?, used_by_guild_id = ?, discord_interaction_token = NULL, discord_application_id = NULL
+       WHERE id = ? AND is_used = 0 AND expires_at > ?`,
+      [usedAt, usedByGuildId, id, usedAt]
+    );
+
+    return result.changes > 0;
+  }
+
+  /**
    * Пометить токен как использованный
    */
   static async markAsUsed(
