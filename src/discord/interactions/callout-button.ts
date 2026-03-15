@@ -50,7 +50,17 @@ export async function handleCreateCalloutButton(
     });
 
     const message = buildBrowseMessage(subdivisions, subdivisions[0].id);
-    await interaction.reply({ ...message, flags: MessageFlags.Ephemeral });
+    try {
+      await interaction.reply({ ...message, flags: MessageFlags.Ephemeral });
+    } catch (err: any) {
+      if (err?.message?.includes('COMPONENT_INVALID_EMOJI')) {
+        logger.warn('Custom emoji invalid in browse menu, retrying without custom emoji', { userId: interaction.user.id });
+        const safeMessage = buildBrowseMessage(subdivisions, subdivisions[0].id, true);
+        await interaction.reply({ ...safeMessage, flags: MessageFlags.Ephemeral });
+      } else {
+        throw err;
+      }
+    }
 
     logger.info('Subdivision browse shown', {
       userId: interaction.user.id,

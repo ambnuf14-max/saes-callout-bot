@@ -45,10 +45,12 @@ export async function getSortedSubdivisions(serverId: number): Promise<Subdivisi
 
 /**
  * Построить сообщение browse для подразделений
+ * @param noCustomEmoji - если true, кастомные эмодзи с id заменяются на 🏢 (fallback при COMPONENT_INVALID_EMOJI)
  */
 export function buildBrowseMessage(
   subdivisions: Subdivision[],
-  currentId: number
+  currentId: number,
+  noCustomEmoji = false
 ): { embeds: ReturnType<typeof buildSubdivisionEmbed>[]; components: ActionRowBuilder<any>[] } {
   const index = subdivisions.findIndex(s => s.id === currentId);
   const safeIndex = index === -1 ? 0 : index;
@@ -85,11 +87,10 @@ export function buildBrowseMessage(
     .addOptions(
       menuSubdivisions.map(sub => {
         const parsed = sub.logo_url ? parseDiscordEmoji(sub.logo_url) : null;
-        const validSnowflake = parsed?.id && /^\d{17,20}$/.test(parsed.id);
         const emoji = parsed
-          ? (validSnowflake
-              ? { id: parsed.id!, name: parsed.name ?? 'emoji', animated: parsed.animated ?? false }
-              : parsed.id ? { name: '🏢' } : { name: parsed.name ?? '🏢' })
+          ? (parsed.id && !noCustomEmoji
+              ? { id: parsed.id, name: parsed.name ?? 'emoji', animated: parsed.animated ?? false }
+              : { name: parsed.id ? '🏢' : (parsed.name ?? '🏢') })
           : { name: '🏢' };
         return {
           label: sub.name.slice(0, 100),
@@ -133,7 +134,16 @@ export async function handleBrowsePrevNext(interaction: ButtonInteraction): Prom
       ? Math.max(0, safeIndex - 1)
       : Math.min(subdivisions.length - 1, safeIndex + 1);
 
-    await interaction.editReply(buildBrowseMessage(subdivisions, subdivisions[newIndex].id));
+    const msg = buildBrowseMessage(subdivisions, subdivisions[newIndex].id);
+    try {
+      await interaction.editReply(msg);
+    } catch (err: any) {
+      if (err?.message?.includes('COMPONENT_INVALID_EMOJI')) {
+        await interaction.editReply(buildBrowseMessage(subdivisions, subdivisions[newIndex].id, true));
+      } else {
+        throw err;
+      }
+    }
   } catch (error) {
     logger.error('Error in subdivision browse prev/next', {
       error: error instanceof Error ? error.message : error,
@@ -205,7 +215,16 @@ export async function handleBrowseSelect(interaction: StringSelectMenuInteractio
     const subdivisions = await getSortedSubdivisions(server.id);
     if (subdivisions.length === 0) return;
 
-    await interaction.editReply(buildBrowseMessage(subdivisions, selectedId));
+    const msg = buildBrowseMessage(subdivisions, selectedId);
+    try {
+      await interaction.editReply(msg);
+    } catch (err: any) {
+      if (err?.message?.includes('COMPONENT_INVALID_EMOJI')) {
+        await interaction.editReply(buildBrowseMessage(subdivisions, selectedId, true));
+      } else {
+        throw err;
+      }
+    }
   } catch (error) {
     logger.error('Error in subdivision browse select', {
       error: error instanceof Error ? error.message : error,
