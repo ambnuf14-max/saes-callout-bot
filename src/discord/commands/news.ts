@@ -3,6 +3,7 @@ import { Command } from '../types';
 import logger from '../../utils/logger';
 import config from '../../config/config';
 import { EMOJI } from '../../config/constants';
+import { ServerModel } from '../../database/models';
 
 const newsCommand: Command = {
   data: new SlashCommandBuilder()
@@ -13,6 +14,15 @@ const newsCommand: Command = {
     if (!interaction.inGuild() || !interaction.guild) {
       await interaction.reply({
         content: `${EMOJI.ERROR} Эта команда доступна только на сервере`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const server = await ServerModel.findByGuildId(interaction.guild.id);
+    if (server && ServerModel.isFactionServer(server)) {
+      await interaction.reply({
+        content: `${EMOJI.ERROR} Эта команда недоступна на фракционном сервере.`,
         flags: MessageFlags.Ephemeral,
       });
       return;

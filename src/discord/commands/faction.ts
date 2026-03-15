@@ -37,6 +37,13 @@ const factionCommand: Command = {
         return;
       }
 
+      if (ServerModel.isFactionServer(server)) {
+        await interaction.editReply({
+          content: `${EMOJI.ERROR} Эта команда недоступна на фракционном сервере.`,
+        });
+        return;
+      }
+
       // Проверить, является ли пользователь лидером фракции
       let faction;
       try {
