@@ -68,16 +68,16 @@ export class FactionLinkService {
       throw new Error(validation.reason || 'Токен недействителен.');
     }
 
+    // 2. Проверить, не привязан ли уже этот сервер (до захвата токена, чтобы не сжечь его зря)
+    const existingServer = await ServerModel.findByGuildId(guildId);
+    if (existingServer && existingServer.server_type === 'faction') {
+      throw new Error('Этот сервер уже привязан к фракции. Отвяжите его перед повторной привязкой.');
+    }
+
     // Атомарно захватить токен — защита от race condition при одновременных /link
     const claimed = await FactionLinkTokenModel.claimToken(token.id, guildId);
     if (!claimed) {
       throw new Error('Токен только что был использован или истёк. Запросите новый токен у лидера фракции.');
-    }
-
-    // 2. Проверить, не привязан ли уже этот сервер
-    const existingServer = await ServerModel.findByGuildId(guildId);
-    if (existingServer && existingServer.server_type === 'faction') {
-      throw new Error('Этот сервер уже привязан к фракции. Отвяжите его перед повторной привязкой.');
     }
 
     // 3. Найти главный сервер и фракцию
@@ -120,17 +120,35 @@ export class FactionLinkService {
       factionServer = updated;
     }
 
-    // 5. Создать локальную фракцию на faction-сервере
-    // Используем stub-роли "0" — лидер настроит их позже
-    const localFaction = await FactionModel.create({
-      server_id: factionServer.id,
-      name: faction.name,
-      description: faction.description || undefined,
-      logo_url: faction.logo_url || undefined,
-      general_leader_role_id: '0',
-      faction_role_id: '0',
-      allow_create_subdivisions: true,
-    });
+    // 5. Найти или создать локальную фракцию на faction-сервере
+    // Если фракция уже существует (повторная привязка) — обновляем её данные, не создаём дубликат.
+    // Используем stub-роли "0" — лидер настроит их позже через панель настроек.
+    const existingLocalFactions = await FactionModel.findByServerId(factionServer.id, false);
+    let localFaction = existingLocalFactions[0];
+
+    if (localFaction) {
+      // Обновить имя и данные фракции из главного сервера
+      localFaction = (await FactionModel.update(localFaction.id, {
+        name: faction.name,
+        description: faction.description || undefined,
+        logo_url: faction.logo_url || undefined,
+      }))!;
+      logger.info('Reused existing local faction on re-link', {
+        localFactionId: localFaction.id,
+        factionServerId: factionServer.id,
+      });
+    } else {
+      // Создаём без дефолтного подразделения — admin сам создаст нужные подразделения
+      localFaction = await FactionModel.createForFactionServer({
+        server_id: factionServer.id,
+        name: faction.name,
+        description: faction.description || undefined,
+        logo_url: faction.logo_url || undefined,
+        general_leader_role_id: '0',
+        faction_role_id: '0',
+        allow_create_subdivisions: true,
+      });
+    }
 
     logger.info('Faction server linked successfully', {
       factionServerId: factionServer.id,

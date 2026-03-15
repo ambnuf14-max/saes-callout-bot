@@ -232,6 +232,41 @@ export class FactionModel {
   }
 
   /**
+   * Создать фракцию без дефолтного подразделения (для faction-серверов).
+   * Администратор сам создаст подразделения через панель настроек.
+   */
+  static async createForFactionServer(data: CreateFactionDTO): Promise<Faction> {
+    const allowCreate = data.allow_create_subdivisions !== undefined ? data.allow_create_subdivisions : true;
+
+    const result = await database.run(
+      `INSERT INTO factions (server_id, name, description, logo_url, general_leader_role_id, faction_role_id, allow_create_subdivisions)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        data.server_id,
+        data.name,
+        data.description || null,
+        data.logo_url || null,
+        data.general_leader_role_id,
+        data.faction_role_id,
+        allowCreate ? 1 : 0,
+      ]
+    );
+
+    logger.info('Faction created for faction server (no default subdivision)', {
+      factionId: result.lastID,
+      name: data.name,
+      serverId: data.server_id,
+    });
+
+    const faction = await this.findById(result.lastID);
+    if (!faction) {
+      throw new Error('Failed to retrieve created faction');
+    }
+
+    return faction;
+  }
+
+  /**
    * Создать дефолтное подразделение для standalone фракции
    */
   static async createDefaultSubdivision(faction: Faction): Promise<void> {

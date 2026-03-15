@@ -165,9 +165,18 @@ export async function handleFactionServerButton(interaction: ButtonInteraction):
       const embed = new EmbedBuilder()
         .setColor(COLORS.SUCCESS)
         .setTitle(`${EMOJI.SUCCESS} Сервер отвязан`)
-        .setDescription('Этот сервер больше не является фракционным сервером.');
+        .setDescription('Этот сервер больше не является фракционным сервером. Бот покинет сервер через несколько секунд.');
 
       await interaction.editReply({ embeds: [embed], components: [] });
+
+      setTimeout(() => {
+        interaction.guild?.leave().catch((err) => {
+          logger.error('Failed to leave guild after unlink', {
+            guildId: interaction.guild?.id,
+            error: err instanceof Error ? err.message : err,
+          });
+        });
+      }, 5000);
     }
 
     else if (customId === 'faction_server_set_leader_roles') {

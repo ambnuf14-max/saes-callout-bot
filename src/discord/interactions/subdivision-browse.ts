@@ -85,10 +85,11 @@ export function buildBrowseMessage(
     .addOptions(
       menuSubdivisions.map(sub => {
         const parsed = sub.logo_url ? parseDiscordEmoji(sub.logo_url) : null;
+        const validSnowflake = parsed?.id && /^\d{17,20}$/.test(parsed.id);
         const emoji = parsed
-          ? (parsed.id
-              ? { id: parsed.id, name: parsed.name ?? 'emoji', animated: parsed.animated ?? false }
-              : { name: parsed.name ?? '🏢' })
+          ? (validSnowflake
+              ? { id: parsed.id!, name: parsed.name ?? 'emoji', animated: parsed.animated ?? false }
+              : parsed.id ? { name: '🏢' } : { name: parsed.name ?? '🏢' })
           : { name: '🏢' };
         return {
           label: sub.name.slice(0, 100),

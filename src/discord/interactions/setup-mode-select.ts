@@ -580,6 +580,7 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
       category_id: categoryId,
       bot_created_channel: 1, // Канал создан ботом
       bot_created_category: 0, // Категория выбрана существующая
+      faction_server_needs_setup: 0,
     });
   } else {
     await ServerModel.create({
@@ -594,6 +595,7 @@ async function setupSelectCategory(interaction: StringSelectMenuInteraction) {
       await ServerModel.update(newServer.id, {
         bot_created_channel: 1,
         bot_created_category: 0,
+        faction_server_needs_setup: 0,
       });
     }
   }
@@ -648,6 +650,7 @@ async function setupSelectChannel(interaction: StringSelectMenuInteraction) {
       category_id: categoryId,
       bot_created_channel: 0, // Канал выбран существующий
       bot_created_category: 0, // Категория выбрана существующая
+      faction_server_needs_setup: 0,
     });
   } else {
     await ServerModel.create({
@@ -662,6 +665,7 @@ async function setupSelectChannel(interaction: StringSelectMenuInteraction) {
       await ServerModel.update(newServer.id, {
         bot_created_channel: 0,
         bot_created_category: 0,
+        faction_server_needs_setup: 0,
       });
     }
   }
