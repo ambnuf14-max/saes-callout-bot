@@ -47,6 +47,8 @@ export interface SubdivisionListConfig {
   showSocialLinks: boolean;
   /** Ряды кнопок (Добавить, Назад, и т.д.) — специфичны для каждого контекста */
   actionRows: ActionRowBuilder<ButtonBuilder>[];
+  /** Если true, кастомные эмодзи с id заменяются на 🏢 (fallback при COMPONENT_INVALID_EMOJI) */
+  noCustomEmoji?: boolean;
 }
 
 /**
@@ -68,14 +70,16 @@ function getDisplayEmoji(item: SubdivisionListItem): string {
 
 /**
  * Вернуть эмодзи для компонентов Discord (select menu).
+ * @param noCustomEmoji - если true, кастомные эмодзи с id заменяются на 🏢
  */
 function getComponentEmoji(
   item: SubdivisionListItem,
+  noCustomEmoji = false,
 ): string | { id?: string; name?: string; animated?: boolean } {
   if (item.logo_url) {
     const parsed = parseDiscordEmoji(item.logo_url);
     if (parsed) {
-      if (parsed.id) return { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false };
+      if (parsed.id) return noCustomEmoji ? '🏢' : { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false };
       return parsed.name;
     }
   }
@@ -142,7 +146,7 @@ export function buildSubdivisionsListPanel(
       .setLabel(item.name.substring(0, 100))
       .setValue(item.id.toString())
       .setDescription((item.short_description || item.description || 'Нет описания').substring(0, 100))
-      .setEmoji(getComponentEmoji(item)),
+      .setEmoji(getComponentEmoji(item, config.noCustomEmoji)),
   );
 
   const selectMenu = new StringSelectMenuBuilder()

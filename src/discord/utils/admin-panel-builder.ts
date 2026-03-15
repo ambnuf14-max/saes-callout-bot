@@ -1082,7 +1082,7 @@ export async function buildFactionTypeEmbedEditorPanel(
  * Панель управления подразделениями фракции (для администратора)
  * Использует StringSelectMenu для выбора подразделения
  */
-export function buildFactionSubdivisionsPanel(faction: Faction, subdivisions: Subdivision[]) {
+export function buildFactionSubdivisionsPanel(faction: Faction, subdivisions: Subdivision[], noCustomEmoji = false) {
   const parsed = parseDiscordEmoji(faction.logo_url);
   const cdnUrl = getEmojiCdnUrl(parsed);
 
@@ -1102,6 +1102,7 @@ export function buildFactionSubdivisionsPanel(faction: Faction, subdivisions: Su
     showCalloutStatus: true,
     showSocialLinks: true,
     actionRows: [backRow],
+    noCustomEmoji,
   });
 }
 

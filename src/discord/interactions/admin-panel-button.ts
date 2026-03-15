@@ -79,6 +79,28 @@ interface AddFactionState {
   createdAt: number;
 }
 
+/**
+ * Отправить панель подразделений с автоматическим retry без кастомных эмодзи
+ * при ошибке COMPONENT_INVALID_EMOJI (эмодзи удалено с сервера).
+ */
+async function replySubdivisionsPanel(
+  interaction: ButtonInteraction,
+  faction: Awaited<ReturnType<typeof FactionService.getFactionById>>,
+  nonDefault: any[],
+): Promise<void> {
+  if (!faction) return;
+  try {
+    await interaction.editReply(buildFactionSubdivisionsPanel(faction, nonDefault));
+  } catch (err: any) {
+    if (err?.message?.includes('COMPONENT_INVALID_EMOJI')) {
+      logger.warn('Custom emoji invalid in subdivisions panel, retrying without custom emoji', { factionId: faction.id });
+      await interaction.editReply(buildFactionSubdivisionsPanel(faction, nonDefault, true));
+    } else {
+      throw err;
+    }
+  }
+}
+
 const addFactionStates = new Map<string, AddFactionState>();
 const STATE_TTL = 5 * 60 * 1000; // 5 минут
 
@@ -434,8 +456,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const { SubdivisionModel } = await import('../../database/models');
       const allSubs = await SubdivisionModel.findByFactionId(factionId);
       const nonDefault = allSubs.filter((s: any) => !s.is_default);
-      const panel = buildFactionSubdivisionsPanel(faction, nonDefault);
-      await interaction.editReply(panel);
+      await replySubdivisionsPanel(interaction, faction, nonDefault);
     }
 
     // Открыть редактор подразделения (полный embed-редактор, прямое сохранение)
@@ -786,8 +807,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       const { SubdivisionModel } = await import('../../database/models');
       const allSubs = await SubdivisionModel.findByFactionId(factionId);
       const nonDefault = allSubs.filter((s: any) => !s.is_default);
-      const panel = buildFactionSubdivisionsPanel(faction, nonDefault);
-      await interaction.editReply(panel);
+      await replySubdivisionsPanel(interaction, faction, nonDefault);
 
       if (interaction.guild) {
         const updatedSub = allSubs.find((s: any) => s.id === subId);
@@ -1929,7 +1949,7 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
         const { SubdivisionModel } = await import('../../database/models');
         const allSubs = await SubdivisionModel.findByFactionId(factionId);
         const nonDefault = allSubs.filter((s: any) => !s.is_default);
-        await interaction.editReply(buildFactionSubdivisionsPanel(faction, nonDefault));
+        await replySubdivisionsPanel(interaction, faction, nonDefault);
       }
     }
 
