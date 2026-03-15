@@ -8,6 +8,7 @@ interface Config {
     token: string;
     clientId: string;
     newsRoleId: string | null;
+    mainGuildId: string;
   };
 
   // VK
@@ -48,6 +49,7 @@ function getConfig(): Config {
   const requiredEnvVars = [
     'DISCORD_TOKEN',
     'DISCORD_CLIENT_ID',
+    'MAIN_GUILD_ID',
     'VK_TOKEN',
     'VK_GROUP_ID',
     'TELEGRAM_BOT_TOKEN',
@@ -68,6 +70,7 @@ function getConfig(): Config {
       token: process.env.DISCORD_TOKEN!,
       clientId: process.env.DISCORD_CLIENT_ID!,
       newsRoleId: process.env.NEWS_ROLE_ID || null,
+      mainGuildId: process.env.MAIN_GUILD_ID!,
     },
 
     vk: {

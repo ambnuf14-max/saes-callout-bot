@@ -22,6 +22,7 @@ import linkCommand from './commands/link';
 import readyHandler from './events/ready';
 import interactionCreateHandler from './events/interactionCreate';
 import channelDeleteHandler from './events/channelDelete';
+import guildCreateHandler from './events/guildCreate';
 
 /**
  * Класс Discord бота
@@ -73,6 +74,7 @@ class DiscordBot {
 
     this.client.on('guildCreate', async (guild) => {
       await this.deployCommands([guild.id]);
+      await guildCreateHandler(guild);
     });
 
     this.client.on('interactionCreate', (interaction) =>

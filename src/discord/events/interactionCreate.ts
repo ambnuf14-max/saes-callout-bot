@@ -27,6 +27,7 @@ import { handleRoleManualButton, handleRoleManualModal } from '../interactions/r
 import { handleBrowsePrevNext, handleBrowseRequest, handleBrowseSelect } from '../interactions/subdivision-browse';
 import { handleChatMonitorButton } from '../interactions/chat-monitor-button';
 import { handleFactionServerButton, handleFactionServerRoleSelect, handleFactionServerChannelSelect } from '../interactions/faction-server-button';
+import { isAuthorizedGuild } from '../utils/guild-guard';
 
 /**
  * Обработчик всех взаимодействий (команды, кнопки, модальные окна)
@@ -36,6 +37,24 @@ export default async function interactionCreateHandler(
   commands: Collection<string, Command>
 ) {
   try {
+    // Проверка авторизации сервера
+    if (interaction.guildId) {
+      const authorized = await isAuthorizedGuild(interaction.guildId);
+      if (!authorized) {
+        // Разрешаем только /link — без него faction-сервер не сможет привязаться
+        const isLinkCommand = interaction.isChatInputCommand() && interaction.commandName === 'link';
+        if (!isLinkCommand) {
+          if ('reply' in interaction && !interaction.replied) {
+            await (interaction as any).reply({
+              content: '❌ Этот сервер не авторизован. Используйте `/link TOKEN` для привязки к фракции.',
+              flags: MessageFlags.Ephemeral,
+            }).catch(() => {});
+          }
+          return;
+        }
+      }
+    }
+
     // Обработка slash команд
     if (interaction.isChatInputCommand()) {
       const command = commands.get(interaction.commandName);
