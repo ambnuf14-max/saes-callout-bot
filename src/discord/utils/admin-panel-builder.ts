@@ -1238,7 +1238,8 @@ export function buildAdminDeleteConfirmation(subdivision: Subdivision) {
 export async function buildAdminSubdivisionEditorPanel(
   factionId: number,
   subdivision: Subdivision,
-  draftData?: Partial<Subdivision>
+  draftData?: Partial<Subdivision>,
+  noCustomEmoji = false,
 ) {
   const currentData = draftData ? { ...subdivision, ...draftData } : subdivision;
 
@@ -1265,6 +1266,7 @@ export async function buildAdminSubdivisionEditorPanel(
         .setLabel('Назад')
         .setStyle(ButtonStyle.Secondary),
     ],
+    noCustomEmoji,
   });
 }
 

@@ -80,6 +80,8 @@ export interface SubdivisionEditorConfig {
    * Передаются готовыми ButtonBuilder-ами.
    */
   actionButtons: ButtonBuilder[];
+  /** Если true, кастомные эмодзи с id заменяются на 🏢 (fallback при COMPONENT_INVALID_EMOJI) */
+  noCustomEmoji?: boolean;
 }
 
 export function isValidUrl(url: string | null | undefined): boolean {
@@ -212,6 +214,7 @@ function buildSelectPreviewRow(
   data: SubdivisionEmbedData,
   selectMenuId: string,
   placeholder: string,
+  noCustomEmoji = false,
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const label = (data.name || 'Название').substring(0, 100);
   const description = (data.short_description || data.description || 'Нет описания').substring(0, 100);
@@ -225,7 +228,7 @@ function buildSelectPreviewRow(
   if (parsed) {
     option.setEmoji(
       parsed.id
-        ? { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false }
+        ? (noCustomEmoji ? '🏢' : { id: parsed.id, name: parsed.name, animated: parsed.animated ?? false })
         : parsed.name,
     );
   } else {
@@ -262,6 +265,7 @@ export function buildSubdivisionEditorPanel(
     data,
     config.selectMenuId,
     config.selectMenuPlaceholder ?? 'Предпросмотр в списке каллаутов',
+    config.noCustomEmoji,
   );
 
   // Ряд 1: Название, Эмодзи, Краткое описание, Роль

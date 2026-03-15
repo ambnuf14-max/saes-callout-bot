@@ -1785,8 +1785,16 @@ export async function handleAdminPanelButton(interaction: ButtonInteraction) {
       }
       const { getAdminSubDraft } = await import('./admin-panel-modal');
       const draft = getAdminSubDraft(subdivisionId);
-      const panel = await buildAdminSubdivisionEditorPanel(factionId, subdivision, draft);
-      await interaction.editReply(panel);
+      try {
+        await interaction.editReply(await buildAdminSubdivisionEditorPanel(factionId, subdivision, draft));
+      } catch (err: any) {
+        if (err?.message?.includes('COMPONENT_INVALID_EMOJI')) {
+          logger.warn('Custom emoji invalid in subdivision editor, retrying without custom emoji', { subdivisionId });
+          await interaction.editReply(await buildAdminSubdivisionEditorPanel(factionId, subdivision, draft, true));
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Кнопка "Привязки" — открывает панель VK/Telegram привязок подразделения
